@@ -69,4 +69,7 @@ npm run dev
 See `/docs` folder for detailed API specs and architecture diagrams.
 
 ## Video Demo
-(https://drive.google.com/drive/folders/1skoF77F_0xYspc3UJa4LZCbRtg94HGDn)
+https://drive.google.com/drive/folders/1skoF77F_0xYspc3UJa4LZCbRtg94HGDn
+
+## Github Repo
+https://github.com/shemankubana/IncludEd-2.0.git
