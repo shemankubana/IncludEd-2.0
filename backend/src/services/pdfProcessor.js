@@ -4,41 +4,113 @@ import axios from 'axios';
 
 export async function processPDF(filePath) {
   try {
+    console.log('📖 Reading PDF file...');
+    
     // Read PDF
     const dataBuffer = fs.readFileSync(filePath);
     const pdfData = await pdf(dataBuffer);
     
-    const originalContent = pdfData.text;
-    const wordCount = originalContent.split(/\s+/).length;
+    let originalContent = pdfData.text;
+    
+    console.log(`📊 Extracted ${originalContent.length} characters from PDF`);
+    
+    // CRITICAL: Limit to 5000 characters to prevent timeout
+    if (originalContent.length > 5000) {
+      console.log(`⚠️  PDF too long (${originalContent.length} chars), limiting to 5000`);
+      originalContent = originalContent.substring(0, 5000);
+    }
+    
+    // Remove metadata and formatting junk
+    originalContent = cleanPDFText(originalContent);
+    
+    const wordCount = originalContent.split(/\s+/).filter(w => w.length > 0).length;
+    console.log(`📝 Cleaned text: ${wordCount} words`);
     
     // Send to AI service for adaptation
-    const adaptedContent = await adaptTextForAccessibility(originalContent);
+    let adaptedContent = originalContent;
+    
+    try {
+      console.log('🤖 Sending to AI service for adaptation...');
+      console.log(`🔗 AI Service URL: ${process.env.AI_SERVICE_URL || 'http://localhost:8000'}`);
+      
+      const response = await axios.post(
+        `${process.env.AI_SERVICE_URL || 'http://localhost:8000'}/adapt-text`,  // Fixed URL
+        { 
+          text: originalContent,
+          target_level: 'accessible'
+        },
+        { 
+          timeout: 15000,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+      
+      if (response.data && response.data.adaptedText) {
+        adaptedContent = response.data.adaptedText;
+        console.log('✅ AI adaptation successful');
+      } else {
+        console.log('⚠️  AI returned invalid response, using original');
+      }
+      
+    } catch (error) {
+      if (error.response) {
+        console.log(`⚠️  AI service error ${error.response.status}: ${error.response.statusText}`);
+        console.log(`Response data:`, error.response.data);
+      } else if (error.request) {
+        console.log(`⚠️  AI service not reachable (is it running on port 8000?)`);
+      } else {
+        console.log(`⚠️  AI adaptation error: ${error.message}`);
+      }
+      // Use original if AI fails
+      adaptedContent = originalContent;
+    }
     
     // Clean up uploaded file
-    fs.unlinkSync(filePath);
+    try {
+      fs.unlinkSync(filePath);
+      console.log('🗑️  Temporary file deleted');
+    } catch (e) {
+      // Ignore cleanup errors
+    }
     
     return {
       originalContent,
       adaptedContent,
       wordCount
     };
+    
   } catch (error) {
-    console.error('PDF processing error:', error);
-    throw new Error('Failed to process PDF');
+    console.error('❌ PDF processing error:', error);
+    
+    // Clean up file on error
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (e) {
+      // Ignore
+    }
+    
+    throw new Error(`Failed to process PDF: ${error.message}`);
   }
 }
 
-async function adaptTextForAccessibility(text) {
-  try {
-    const response = await axios.post(
-      process.env.AI_SERVICE_URL + '/adapt-text',
-      { text },
-      { timeout: 30000 }
-    );
-    return response.data.adaptedText;
-  } catch (error) {
-    console.error('Text adaptation error:', error);
-    // Fallback: return original if AI service fails
-    return text;
-  }
+function cleanPDFText(text) {
+  // Remove common PDF artifacts
+  text = text.replace(/\f/g, ' ');  // Form feed
+  text = text.replace(/Page \d+/gi, '');  // Page numbers
+  text = text.replace(/FTLN \d+/g, '');  // Line numbers
+  text = text.replace(/\s+/g, ' ');  // Multiple spaces
+  
+  // Remove URLs
+  text = text.replace(/https?:\/\/[^\s]+/g, '');
+  
+  // Remove email addresses
+  text = text.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '');
+  
+  // Remove common headers/footers
+  text = text.replace(/Folger Shakespeare Library/gi, '');
+  text = text.replace(/Get even more from the Folger/gi, '');
+  
+  return text.trim();
 }

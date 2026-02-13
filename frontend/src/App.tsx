@@ -3,48 +3,131 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import TeacherUpload from './pages/TeacherUpload';
 import StudentReading from './pages/StudentReading';
 import QuizInterface from './pages/QuizInterface';
+import TeacherDashboard from "./pages/TeacherUpload";
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [userRole, setUserRole] = React.useState<'teacher' | 'student' | null>(null);
+  const [userInfo, setUserInfo] = React.useState<any>(null);
 
   React.useEffect(() => {
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('userRole') as 'teacher' | 'student';
-    if (token) {
+    const info = localStorage.getItem('userInfo');
+    
+    if (token && role) {
       setIsAuthenticated(true);
       setUserRole(role);
+      if (info) {
+        try {
+          setUserInfo(JSON.parse(info));
+        } catch (e) {
+          // Ignore parse error
+        }
+      }
     }
   }, []);
 
+  const handleLogin = (role: 'teacher' | 'student', user: any) => {
+    setIsAuthenticated(true);
+    setUserRole(role);
+    setUserInfo(user);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('userInfo');
+    setIsAuthenticated(false);
+    setUserRole(null);
+    setUserInfo(null);
+    window.location.href = '/';
+  };
+
   if (!isAuthenticated) {
-    return <LoginPage onLogin={(role) => {
-      setIsAuthenticated(true);
-      setUserRole(role);
-    }} />;
+    return <LoginPage onLogin={handleLogin} />;
   }
 
   return (
     <BrowserRouter>
-      <Routes>
-        {userRole === 'teacher' ? (
-          <>
-            <Route path="/" element={<TeacherUpload />} />
-            <Route path="/analytics" element={<div>Analytics Dashboard</div>} />
-          </>
-        ) : (
-          <>
-            <Route path="/" element={<StudentReading />} />
-            <Route path="/quiz/:literatureId" element={<QuizInterface />} />
-          </>
-        )}
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+      <div>
+        {/* Header with Logout */}
+        <Header userInfo={userInfo} userRole={userRole} onLogout={handleLogout} />
+        
+        <Routes>
+          {userRole === 'teacher' ? (
+            <>
+              <Route path="/" element={<TeacherDashboard />} />
+              <Route path="/upload" element={<TeacherUpload />} />
+            </>
+          ) : (
+            <>
+              <Route path="/" element={<StudentReading />} />
+              <Route path="/quiz/:literatureId" element={<QuizInterface />} />
+            </>
+          )}
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </div>
     </BrowserRouter>
   );
 };
 
-const LoginPage: React.FC<{ onLogin: (role: 'teacher' | 'student') => void }> = ({ onLogin }) => {
+// Header Component with Logout
+const Header: React.FC<{ 
+  userInfo: any; 
+  userRole: string | null; 
+  onLogout: () => void 
+}> = ({ userInfo, userRole, onLogout }) => {
+  return (
+    <div style={{
+      background: '#667eea',
+      color: 'white',
+      padding: '1rem 2rem',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+    }}>
+      <div>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+          📚 IncludEd Literature
+        </h1>
+        <p style={{ fontSize: '0.875rem', opacity: 0.9 }}>
+          {userRole === 'teacher' ? 'Teacher Dashboard' : 'Student Portal'}
+        </p>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ textAlign: 'right' }}>
+          <p style={{ fontWeight: 600 }}>
+            {userInfo?.firstName} {userInfo?.lastName}
+          </p>
+          <p style={{ fontSize: '0.875rem', opacity: 0.9 }}>
+            {userInfo?.email}
+          </p>
+        </div>
+        <button
+          onClick={onLogout}
+          style={{
+            padding: '0.5rem 1.5rem',
+            background: 'rgba(255,255,255,0.2)',
+            border: '2px solid white',
+            borderRadius: '0.5rem',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 600,
+            fontSize: '0.875rem'
+          }}
+        >
+          Logout
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Login Page Component
+const LoginPage: React.FC<{ onLogin: (role: 'teacher' | 'student', user: any) => void }> = ({ onLogin }) => {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [loading, setLoading] = React.useState(false);
@@ -65,7 +148,8 @@ const LoginPage: React.FC<{ onLogin: (role: 'teacher' | 'student') => void }> = 
       if (response.ok) {
         localStorage.setItem('token', data.accessToken);
         localStorage.setItem('userRole', data.user.role);
-        onLogin(data.user.role);
+        localStorage.setItem('userInfo', JSON.stringify(data.user));
+        onLogin(data.user.role, data.user);
       } else {
         alert(data.error || 'Login failed');
       }
@@ -153,8 +237,9 @@ const LoginPage: React.FC<{ onLogin: (role: 'teacher' | 'student') => void }> = 
           </button>
         </form>
         <p style={{ marginTop: '1.5rem', textAlign: 'center', color: '#666', fontSize: '0.875rem' }}>
-          Demo: teacher@included.rw / Teacher123!<br />
-          Or: student@included.rw / Student123!
+          Demo Accounts:<br />
+          Teacher: teacher@included.rw / Teacher123!<br />
+          Student: student@included.rw / Student123!
         </p>
       </div>
     </div>

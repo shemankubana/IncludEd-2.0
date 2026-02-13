@@ -1,223 +1,221 @@
-import React, { useState, useCallback } from 'react';
-import { Upload, FileText, Loader, Check, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Upload, Users, BookOpen, TrendingUp, BarChart3 } from 'lucide-react';
 import axios from 'axios';
 
-interface UploadedFile {
+interface Literature {
   id: string;
   title: string;
   author: string;
-  language: 'english' | 'french';
-  status: 'processing' | 'ready' | 'error';
   wordCount: number;
   questionsGenerated: number;
+  createdAt: string;
 }
 
-const TeacherUpload: React.FC = () => {
-  const [uploading, setUploading] = useState(false);
-  const [files, setFiles] = useState<UploadedFile[]>([]);
-  const [dragActive, setDragActive] = useState(false);
+const TeacherDashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const [literature, setLiterature] = useState<Literature[]>([]);
+  const [stats, setStats] = useState({
+    totalLiterature: 0,
+    totalStudents: 0,
+    totalQuestions: 0,
+    avgProgress: 0
+  });
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    await uploadFiles(droppedFiles);
+  useEffect(() => {
+    fetchData();
   }, []);
 
-  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      await uploadFiles(Array.from(e.target.files));
+  const fetchData = async () => {
+    try {
+      const response = await axios.get('/api/literature', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setLiterature(response.data);
+      
+      // Calculate stats
+      const totalQuestions = response.data.reduce((sum: number, lit: Literature) => 
+        sum + lit.questionsGenerated, 0
+      );
+      
+      setStats({
+        totalLiterature: response.data.length,
+        totalStudents: 25, // Mock data
+        totalQuestions,
+        avgProgress: 68 // Mock data
+      });
+    } catch (error) {
+      console.error('Error fetching data:', error);
     }
-  };
-
-  const uploadFiles = async (filesToUpload: File[]) => {
-    setUploading(true);
-
-    for (const file of filesToUpload) {
-      if (file.type !== 'application/pdf') {
-        alert(`${file.name} is not a PDF. Only PDFs are supported.`);
-        continue;
-      }
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('title', file.name.replace('.pdf', ''));
-      formData.append('author', 'Unknown'); // Would be filled by teacher
-      formData.append('language', 'english');
-
-      try {
-        const response = await axios.post('/api/literature/upload', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / (progressEvent.total || 1)
-            );
-            console.log(`Upload progress: ${percentCompleted}%`);
-          }
-        });
-
-        setFiles(prev => [...prev, response.data]);
-      } catch (error) {
-        console.error('Upload error:', error);
-        alert(`Failed to upload ${file.name}`);
-      }
-    }
-
-    setUploading(false);
   };
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '2rem' }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        <header style={{ marginBottom: '3rem' }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-            📚 Upload Literature Resources
-          </h1>
-          <p style={{ color: '#64748b' }}>
-            Upload PDF files of novels, plays, and poetry. The AI will adapt the content for students with learning differences.
-          </p>
-        </header>
-
-        {/* Upload Zone */}
-        <div
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          style={{
-            border: `3px dashed ${dragActive ? '#667eea' : '#cbd5e1'}`,
-            borderRadius: '1rem',
-            padding: '4rem 2rem',
-            textAlign: 'center',
-            background: dragActive ? '#f1f5f9' : 'white',
-            marginBottom: '3rem',
-            cursor: 'pointer',
-            transition: 'all 0.3s'
-          }}
-        >
-          <Upload size={48} style={{ margin: '0 auto 1rem', color: '#667eea' }} />
-          <h3 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>
-            Drag & Drop PDF Files Here
-          </h3>
-          <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
-            or click to browse your computer
-          </p>
-          <input
-            type="file"
-            multiple
-            accept=".pdf"
-            onChange={handleFileInput}
-            style={{ display: 'none' }}
-            id="fileInput"
+      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+        
+        {/* Stats Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+          <StatCard
+            icon={<BookOpen size={32} />}
+            label="Total Literature"
+            value={stats.totalLiterature}
+            color="#667eea"
           />
-          <label
-            htmlFor="fileInput"
-            style={{
-              display: 'inline-block',
-              padding: '0.75rem 2rem',
-              background: '#667eea',
-              color: 'white',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              fontWeight: 600
-            }}
-          >
-            Select PDF Files
-          </label>
-          <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#94a3b8' }}>
-            Supported: Romeo & Juliet, Hamlet, Macbeth, novels, poetry collections
-          </p>
+          <StatCard
+            icon={<Users size={32} />}
+            label="Active Students"
+            value={stats.totalStudents}
+            color="#10b981"
+          />
+          <StatCard
+            icon={<TrendingUp size={32} />}
+            label="Questions Generated"
+            value={stats.totalQuestions}
+            color="#f59e0b"
+          />
+          <StatCard
+            icon={<BarChart3 size={32} />}
+            label="Avg Progress"
+            value={`${stats.avgProgress}%`}
+            color="#8b5cf6"
+          />
         </div>
 
-        {/* Uploaded Files List */}
-        {files.length > 0 && (
-          <div>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1.5rem' }}>
-              Uploaded Literature ({files.length})
-            </h2>
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+          <button
+            onClick={() => navigate('/upload')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              padding: '1rem 2rem',
+              background: '#667eea',
+              color: 'white',
+              border: 'none',
+              borderRadius: '0.75rem',
+              fontSize: '1rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+            }}
+          >
+            <Upload size={20} />
+            Upload Literature
+          </button>
+          
+          <button
+            onClick={() => alert('Student management coming soon!')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              padding: '1rem 2rem',
+              background: 'white',
+              color: '#667eea',
+              border: '2px solid #667eea',
+              borderRadius: '0.75rem',
+              fontSize: '1rem',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <Users size={20} />
+            Manage Students
+          </button>
+        </div>
+
+        {/* Literature List */}
+        <div style={{ background: 'white', borderRadius: '1rem', padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem' }}>
+            Uploaded Literature
+          </h2>
+          
+          {literature.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+              <BookOpen size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+              <p>No literature uploaded yet.</p>
+              <button
+                onClick={() => navigate('/upload')}
+                style={{
+                  marginTop: '1rem',
+                  padding: '0.75rem 1.5rem',
+                  background: '#667eea',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                Upload Your First Document
+              </button>
+            </div>
+          ) : (
             <div style={{ display: 'grid', gap: '1rem' }}>
-              {files.map((file) => (
+              {literature.map((lit) => (
                 <div
-                  key={file.id}
+                  key={lit.id}
                   style={{
-                    background: 'white',
                     padding: '1.5rem',
+                    border: '1px solid #e2e8f0',
                     borderRadius: '0.75rem',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '1rem'
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                   }}
                 >
-                  <FileText size={40} style={{ color: '#667eea', flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
-                      {file.title}
+                  <div>
+                    <h3 style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                      {lit.title}
                     </h3>
                     <p style={{ fontSize: '0.875rem', color: '#64748b' }}>
-                      {file.author} • {file.language} • {file.wordCount.toLocaleString()} words
+                      by {lit.author} • {lit.wordCount} words • {lit.questionsGenerated} questions
                     </p>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    {file.status === 'processing' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b' }}>
-                        <Loader size={20} className="spin" />
-                        <span>Processing...</span>
-                      </div>
-                    )}
-                    {file.status === 'ready' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981' }}>
-                        <Check size={20} />
-                        <span>{file.questionsGenerated} questions generated</span>
-                      </div>
-                    )}
-                    {file.status === 'error' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
-                        <X size={20} />
-                        <span>Processing failed</span>
-                      </div>
-                    )}
+                  <div style={{ fontSize: '0.875rem', color: '#64748b' }}>
+                    {new Date(lit.createdAt).toLocaleDateString()}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {uploading && (
-          <div style={{ textAlign: 'center', padding: '2rem', color: '#667eea' }}>
-            <Loader size={32} className="spin" style={{ margin: '0 auto 1rem' }} />
-            <p>Uploading and processing files...</p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-
-      <style>{`
-        .spin {
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };
 
-export default TeacherUpload;
+const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: number | string; color: string }> = 
+({ icon, label, value, color }) => {
+  return (
+    <div style={{
+      background: 'white',
+      padding: '2rem',
+      borderRadius: '1rem',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '1.5rem'
+    }}>
+      <div style={{
+        background: `${color}15`,
+        padding: '1rem',
+        borderRadius: '0.75rem',
+        color: color
+      }}>
+        {icon}
+      </div>
+      <div>
+        <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.25rem' }}>
+          {label}
+        </p>
+        <p style={{ fontSize: '2rem', fontWeight: 700, color: '#1e293b' }}>
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default TeacherDashboard;

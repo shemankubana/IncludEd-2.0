@@ -1,25 +1,16 @@
 import re
-import spacy
-import nltk
-from textstat import textstat
-from typing import List, Tuple
-
-# Download required NLTK data
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
+from typing import List, Dict, Optional
 
 class FreeAccessibilityAdapter:
     def __init__(self):
+        # Try to load spaCy, but work without it if needed
         try:
-            # Load spaCy model (lightweight)
+            import spacy
             self.nlp = spacy.load("en_core_web_sm")
-        except OSError:
-            print("Downloading spaCy model...")
-            import os
-            os.system("python -m spacy download en_core_web_sm")
-            self.nlp = spacy.load("en_core_web_sm")
+            print("✅ spaCy loaded")
+        except:
+            print("⚠️  spaCy not available, using basic mode")
+            self.nlp = None
         
         # Archaic word replacements for Shakespeare/classic lit
         self.archaic_replacements = {
@@ -45,12 +36,16 @@ class FreeAccessibilityAdapter:
             'demonstrate': 'show', 'indicate': 'show', 'possess': 'have',
             'sufficient': 'enough', 'assist': 'help', 'request': 'ask',
             'locate': 'find', 'observe': 'see', 'perceive': 'see',
-            'regarding': 'about', 'concerning': 'about', 'regarding': 'about',
         }
     
-    def adapt_text(self, text: str, level: str = "accessible") -> str:
+    def adapt_text(
+        self, 
+        text: str, 
+        level: str = "accessible",
+        disability_profile: Optional[Dict] = None
+    ) -> str:
         """
-        Main adaptation function using FREE rule-based methods
+        Main adaptation function - FAST and FREE
         """
         # Step 1: Clean and normalize
         text = self._normalize_text(text)
@@ -64,11 +59,24 @@ class FreeAccessibilityAdapter:
         # Step 4: Break long sentences
         text = self._break_long_sentences(text)
         
-        # Step 5: Add paragraph breaks (ADHD-friendly)
+        # Step 5: Add paragraph breaks
         text = self._add_paragraph_breaks(text)
         
-        # Step 6: Fix passive voice to active
-        text = self._improve_readability(text)
+        # Step 6: Apply disability-specific adaptations
+        if disability_profile:
+            disabilities = disability_profile.get("disabilities", [])
+            
+            # Dyslexia: Extra spacing
+            if "dyslexia" in disabilities:
+                text = self._add_extra_spacing(text)
+            
+            # ADHD: Shorter paragraphs
+            if "adhd" in disabilities:
+                text = self._shorten_paragraphs(text)
+            
+            # Visual impairment: Add scene markers
+            if "visual_impairment" in disabilities:
+                text = self._add_scene_descriptions(text)
         
         return text
     
@@ -81,6 +89,8 @@ class FreeAccessibilityAdapter:
         text = text.replace(''', "'").replace(''', "'")
         # Remove page numbers
         text = re.sub(r'Page \d+', '', text, flags=re.IGNORECASE)
+        # Remove metadata
+        text = re.sub(r'FTLN \d+', '', text)
         return text.strip()
     
     def _replace_archaic_words(self, text: str) -> str:
@@ -95,11 +105,11 @@ class FreeAccessibilityAdapter:
             if lower_word in self.archaic_replacements:
                 # Preserve capitalization
                 replacement = self.archaic_replacements[lower_word]
-                if word[0].isupper():
+                if len(word) > 0 and word[0].isupper():
                     replacement = replacement.capitalize()
                 
                 # Preserve punctuation
-                if word[-1] in '.,!?;:':
+                if len(word) > 0 and word[-1] in '.,!?;:':
                     replacement += word[-1]
                 
                 result.append(replacement)
@@ -110,68 +120,71 @@ class FreeAccessibilityAdapter:
     
     def _simplify_vocabulary(self, text: str) -> str:
         """Replace complex words with simpler alternatives"""
-        doc = self.nlp(text)
-        simplified = []
+        if self.nlp:
+            try:
+                doc = self.nlp(text[:1000])  # Limit to prevent slowdown
+                simplified = []
+                
+                for token in doc:
+                    word = token.text.lower()
+                    
+                    if word in self.simplifications:
+                        replacement = self.simplifications[word]
+                        if token.text[0].isupper():
+                            replacement = replacement.capitalize()
+                        simplified.append(replacement)
+                    else:
+                        simplified.append(token.text)
+                    
+                    if token.whitespace_:
+                        simplified.append(' ')
+                
+                return ''.join(simplified) + text[1000:]
+            except:
+                pass
         
-        for token in doc:
-            word = token.text.lower()
-            
-            if word in self.simplifications:
-                # Keep original capitalization
-                replacement = self.simplifications[word]
-                if token.text[0].isupper():
+        # Fallback without spaCy
+        words = text.split()
+        result = []
+        for word in words:
+            lower = word.lower().strip('.,!?;:')
+            if lower in self.simplifications:
+                replacement = self.simplifications[lower]
+                if word[0].isupper():
                     replacement = replacement.capitalize()
-                simplified.append(replacement)
+                if word[-1] in '.,!?;:':
+                    replacement += word[-1]
+                result.append(replacement)
             else:
-                simplified.append(token.text)
-            
-            # Add space before if needed
-            if token.whitespace_:
-                simplified.append(' ')
-        
-        return ''.join(simplified)
+                result.append(word)
+        return ' '.join(result)
     
     def _break_long_sentences(self, text: str) -> str:
-        """Break sentences longer than 20 words into shorter ones"""
-        doc = self.nlp(text)
+        """Break sentences longer than 15 words"""
+        sentences = re.split(r'(?<=[.!?])\s+', text)
         result = []
         
-        for sent in doc.sents:
-            words = sent.text.split()
-            
-            if len(words) <= 20:
-                result.append(sent.text)
+        for sent in sentences:
+            words = sent.split()
+            if len(words) > 15:
+                # Try to split at comma + and
+                if ', and ' in sent:
+                    parts = sent.split(', and ', 1)
+                    result.append(parts[0] + '.')
+                    result.append(parts[1].strip().capitalize())
+                elif '; ' in sent:
+                    parts = sent.split('; ', 1)
+                    result.append(parts[0] + '.')
+                    result.append(parts[1].strip().capitalize())
+                else:
+                    result.append(sent)
             else:
-                # Find natural breaking points (conjunctions, commas)
-                parts = self._split_sentence(sent.text)
-                result.extend(parts)
+                result.append(sent)
         
         return ' '.join(result)
     
-    def _split_sentence(self, sentence: str) -> List[str]:
-        """Split long sentence at natural break points"""
-        # Split at coordinating conjunctions
-        for conjunction in [', and ', ', but ', ', or ', ', yet ', ', so ']:
-            if conjunction in sentence:
-                parts = sentence.split(conjunction, 1)
-                if len(parts) == 2:
-                    # Capitalize second part
-                    parts[1] = parts[1].strip().capitalize()
-                    # Add period to first part
-                    if not parts[0].endswith('.'):
-                        parts[0] += '.'
-                    return [parts[0], parts[1]]
-        
-        # Split at semicolons
-        if ';' in sentence:
-            parts = [p.strip().capitalize() for p in sentence.split(';')]
-            return [p + '.' if not p.endswith('.') else p for p in parts]
-        
-        # Couldn't split naturally, return as is
-        return [sentence]
-    
     def _add_paragraph_breaks(self, text: str) -> str:
-        """Add breaks every 3-4 sentences for ADHD-friendly reading"""
+        """Add breaks every 4 sentences for better readability"""
         sentences = re.split(r'(?<=[.!?])\s+', text)
         paragraphs = []
         
@@ -181,36 +194,25 @@ class FreeAccessibilityAdapter:
         
         return '\n\n'.join(paragraphs)
     
-    def _improve_readability(self, text: str) -> str:
-        """Use spaCy to detect and fix passive voice"""
-        doc = self.nlp(text)
-        improved = []
-        
-        for sent in doc.sents:
-            # Check Flesch Reading Ease
-            score = textstat.flesch_reading_ease(sent.text)
-            
-            # If too complex (score < 60), mark for review
-            # In production, would apply transformations here
-            improved.append(sent.text)
-        
-        return ' '.join(improved)
+    def _add_extra_spacing(self, text: str) -> str:
+        """Add extra spacing for dyslexia"""
+        # Double space after periods
+        return text.replace('. ', '.  ')
     
-    def analyze_difficulty(self, text: str) -> dict:
-        """Analyze text complexity"""
-        return {
-            'flesch_reading_ease': textstat.flesch_reading_ease(text),
-            'flesch_kincaid_grade': textstat.flesch_kincaid_grade(text),
-            'gunning_fog': textstat.gunning_fog(text),
-            'word_count': len(text.split()),
-            'sentence_count': textstat.sentence_count(text),
-            'difficulty': self._categorize_difficulty(textstat.flesch_kincaid_grade(text))
-        }
+    def _shorten_paragraphs(self, text: str) -> str:
+        """Shorter paragraphs for ADHD (every 2 sentences)"""
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        paragraphs = []
+        
+        for i in range(0, len(sentences), 2):
+            paragraph = ' '.join(sentences[i:i+2])
+            paragraphs.append(paragraph)
+        
+        return '\n\n'.join(paragraphs)
     
-    def _categorize_difficulty(self, grade_level: float) -> str:
-        if grade_level < 6:
-            return "elementary"
-        elif grade_level < 9:
-            return "middle_school"
-        else:
-            return "high_school"
+    def _add_scene_descriptions(self, text: str) -> str:
+        """Add [SCENE] markers for screen readers"""
+        # Simple detection of scene changes
+        if 'Enter' in text or 'enter' in text:
+            text = "[NEW SCENE] " + text
+        return text

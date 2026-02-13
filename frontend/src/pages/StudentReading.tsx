@@ -1,339 +1,325 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Pause, Play, Settings, Palette, Type } from 'lucide-react';
+import React, { useState } from 'react';
 import axios from 'axios';
+import { CheckCircle, AlertCircle } from 'lucide-react';
 
-interface AccessibilitySettings {
-  fontSize: number;
-  fontFamily: 'OpenDyslexic' | 'Arial' | 'Georgia';
-  lineSpacing: number;
-  backgroundColor: string;
-  textColor: string;
-  colorBlindMode: 'none' | 'protanopia' | 'deuteranopia' | 'tritanopia';
-  ttsEnabled: boolean;
-  ttsVoice: 'en-GB' | 'en-US' | 'fr-FR';
-  ttsSpeed: number;
+interface DisabilityProfile {
+  disabilities: string[];
+  severity: { [key: string]: number };
+  preferences: {
+    font_size: number;
+    tts_enabled: boolean;
+    color_blind_mode: string;
+  };
 }
 
-interface Literature {
-  id: string;
-  title: string;
-  author: string;
-  adaptedContent: string;
-  originalContent: string;
-  language: 'english' | 'french';
-}
-
-const StudentReading: React.FC = () => {
-  const [literature, setLiterature] = useState<Literature | null>(null);
-  const [settings, setSettings] = useState<AccessibilitySettings>({
-    fontSize: 18,
-    fontFamily: 'OpenDyslexic',
-    lineSpacing: 1.8,
-    backgroundColor: '#FFF8E1',
-    textColor: '#2C3E50',
-    colorBlindMode: 'none',
-    ttsEnabled: false,
-    ttsVoice: 'en-GB',
-    ttsSpeed: 1.0
+const StudentOnboarding: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
+  const [step, setStep] = useState(1);
+  const [profile, setProfile] = useState<DisabilityProfile>({
+    disabilities: [],
+    severity: {},
+    preferences: {
+      font_size: 18,
+      tts_enabled: false,
+      color_blind_mode: 'none'
+    }
   });
-  const [isReading, setIsReading] = useState(false);
-  const [currentWordIndex, setCurrentWordIndex] = useState(-1);
-  const [showSettings, setShowSettings] = useState(false);
-  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  useEffect(() => {
-    fetchLiterature();
-  }, []);
+  const disabilities = [
+    { id: 'dyslexia', name: 'Dyslexia', description: 'Difficulty reading words' },
+    { id: 'adhd', name: 'ADHD', description: 'Trouble focusing for long periods' },
+    { id: 'visual_impairment', name: 'Visual Impairment', description: 'Difficulty seeing text' },
+    { id: 'color_blindness', name: 'Color Blindness', description: 'Difficulty distinguishing colors' },
+    { id: 'none', name: 'None of the above', description: 'I don\'t have these challenges' }
+  ];
 
-  const fetchLiterature = async () => {
+  const toggleDisability = (id: string) => {
+    if (id === 'none') {
+      setProfile(p => ({ ...p, disabilities: ['none'] }));
+    } else {
+      setProfile(p => ({
+        ...p,
+        disabilities: p.disabilities.includes(id)
+          ? p.disabilities.filter(d => d !== id && d !== 'none')
+          : [...p.disabilities.filter(d => d !== 'none'), id]
+      }));
+    }
+  };
+
+  const setSeverity = (disability: string, value: number) => {
+    setProfile(p => ({
+      ...p,
+      severity: { ...p.severity, [disability]: value }
+    }));
+  };
+
+  const saveProfile = async () => {
     try {
-      const response = await axios.get('/api/literature/current', {
+      await axios.post('/api/users/profile', profile, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      setLiterature(response.data);
+      onComplete();
     } catch (error) {
-      console.error('Error fetching literature:', error);
+      alert('Error saving profile');
     }
   };
-
-  const applyColorBlindFilter = (mode: string) => {
-    const filters = {
-      protanopia: 'url(#protanopia)',
-      deuteranopia: 'url(#deuteranopia)',
-      tritanopia: 'url(#tritanopia)',
-      none: 'none'
-    };
-    return filters[mode as keyof typeof filters] || 'none';
-  };
-
-  const speakText = () => {
-    if (!literature) return;
-
-    if (isReading) {
-      speechSynthesis.cancel();
-      setIsReading(false);
-      setCurrentWordIndex(-1);
-      return;
-    }
-
-    const words = literature.adaptedContent.split(' ');
-    let index = 0;
-
-    const speakNextWord = () => {
-      if (index >= words.length) {
-        setIsReading(false);
-        setCurrentWordIndex(-1);
-        return;
-      }
-
-      setCurrentWordIndex(index);
-      const utterance = new SpeechSynthesisUtterance(words[index]);
-      
-      // Set voice based on selection
-      const voices = speechSynthesis.getVoices();
-      const selectedVoice = voices.find(voice => 
-        voice.lang.startsWith(settings.ttsVoice.substring(0, 2))
-      );
-      if (selectedVoice) utterance.voice = selectedVoice;
-      
-      utterance.rate = settings.ttsSpeed;
-      utterance.onend = () => {
-        index++;
-        speakNextWord();
-      };
-      
-      speechSynthesis.speak(utterance);
-    };
-
-    setIsReading(true);
-    speakNextWord();
-  };
-
-  if (!literature) {
-    return <div style={{ padding: '2rem' }}>Loading literature...</div>;
-  }
-
-  const words = literature.adaptedContent.split(' ');
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: settings.backgroundColor,
-      color: settings.textColor,
-      transition: 'all 0.3s',
-      filter: applyColorBlindFilter(settings.colorBlindMode)
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '2rem'
     }}>
-      {/* Color Blind SVG Filters */}
-      <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-        <defs>
-          <filter id="protanopia">
-            <feColorMatrix type="matrix" values="0.567, 0.433, 0, 0, 0 0.558, 0.442, 0, 0, 0 0, 0.242, 0.758, 0, 0 0, 0, 0, 1, 0"/>
-          </filter>
-          <filter id="deuteranopia">
-            <feColorMatrix type="matrix" values="0.625, 0.375, 0, 0, 0 0.7, 0.3, 0, 0, 0 0, 0.3, 0.7, 0, 0 0, 0, 0, 1, 0"/>
-          </filter>
-          <filter id="tritanopia">
-            <feColorMatrix type="matrix" values="0.95, 0.05, 0, 0, 0 0, 0.433, 0.567, 0, 0 0, 0.475, 0.525, 0, 0 0, 0, 0, 1, 0"/>
-          </filter>
-        </defs>
-      </svg>
-
-      {/* Header Controls */}
       <div style={{
-        padding: '1.5rem',
-        background: 'rgba(255,255,255,0.95)',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        background: 'white',
+        borderRadius: '1rem',
+        padding: '3rem',
+        maxWidth: '600px',
+        width: '100%',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
       }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-            {literature.title}
-          </h1>
-          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>
-            by {literature.author}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button
-            onClick={speakText}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.75rem 1.5rem',
-              background: '#667eea',
-              color: 'white',
-              border: 'none',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              fontWeight: 600
-            }}
-          >
-            {isReading ? <Pause size={20} /> : <Play size={20} />}
-            {isReading ? 'Pause' : 'Read Aloud'}
-          </button>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            style={{
-              padding: '0.75rem',
-              background: '#f1f5f9',
-              border: 'none',
-              borderRadius: '0.5rem',
-              cursor: 'pointer'
-            }}
-          >
-            <Settings size={24} />
-          </button>
-        </div>
-      </div>
+        <h1 style={{ fontSize: '2rem', marginBottom: '1rem', textAlign: 'center' }}>
+          📚 Let's Personalize Your Learning
+        </h1>
+        <p style={{ textAlign: 'center', color: '#64748b', marginBottom: '2rem' }}>
+          Help us understand how to best support your reading journey
+        </p>
 
-      {/* Settings Panel */}
-      {showSettings && (
-        <div style={{
-          position: 'fixed',
-          top: '6rem',
-          right: '1rem',
-          width: '350px',
-          background: 'white',
-          padding: '1.5rem',
-          borderRadius: '0.75rem',
-          boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
-          zIndex: 1000
-        }}>
-          <h3 style={{ marginBottom: '1rem', fontWeight: 600 }}>Accessibility Settings</h3>
-          
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-              <Type size={16} style={{ display: 'inline', marginRight: '0.5rem' }} />
-              Font Size: {settings.fontSize}px
-            </label>
-            <input
-              type="range"
-              min="14"
-              max="32"
-              value={settings.fontSize}
-              onChange={(e) => setSettings(s => ({ ...s, fontSize: parseInt(e.target.value) }))}
-              style={{ width: '100%' }}
-            />
-          </div>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-              Font Family
-            </label>
-            <select
-              value={settings.fontFamily}
-              onChange={(e) => setSettings(s => ({ ...s, fontFamily: e.target.value as any }))}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                borderRadius: '0.375rem',
-                border: '1px solid #cbd5e1'
-              }}
-            >
-              <option value="OpenDyslexic">OpenDyslexic (Recommended)</option>
-              <option value="Arial">Arial</option>
-              <option value="Georgia">Georgia</option>
-            </select>
-          </div>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-              <Palette size={16} style={{ display: 'inline', marginRight: '0.5rem' }} />
-              Color Blind Mode
-            </label>
-            <select
-              value={settings.colorBlindMode}
-              onChange={(e) => setSettings(s => ({ ...s, colorBlindMode: e.target.value as any }))}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                borderRadius: '0.375rem',
-                border: '1px solid #cbd5e1'
-              }}
-            >
-              <option value="none">None</option>
-              <option value="protanopia">Protanopia (Red-Blind)</option>
-              <option value="deuteranopia">Deuteranopia (Green-Blind)</option>
-              <option value="tritanopia">Tritanopia (Blue-Blind)</option>
-            </select>
-          </div>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-              <Volume2 size={16} style={{ display: 'inline', marginRight: '0.5rem' }} />
-              TTS Voice
-            </label>
-            <select
-              value={settings.ttsVoice}
-              onChange={(e) => setSettings(s => ({ ...s, ttsVoice: e.target.value as any }))}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                borderRadius: '0.375rem',
-                border: '1px solid #cbd5e1'
-              }}
-            >
-              <option value="en-GB">British English</option>
-              <option value="en-US">American English</option>
-              <option value="fr-FR">French</option>
-            </select>
-          </div>
-
+        {step === 1 && (
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-              TTS Speed: {settings.ttsSpeed}x
-            </label>
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.1"
-              value={settings.ttsSpeed}
-              onChange={(e) => setSettings(s => ({ ...s, ttsSpeed: parseFloat(e.target.value) }))}
-              style={{ width: '100%' }}
-            />
-          </div>
-        </div>
-      )}
+            <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>
+              Do you experience any of these challenges?
+            </h2>
+            <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1rem' }}>
+              (Select all that apply - your information is private)
+            </p>
 
-      {/* Reading Content */}
-      <div style={{
-        maxWidth: '900px',
-        margin: '0 auto',
-        padding: '3rem 2rem'
-      }}>
-        <div style={{
-          background: 'rgba(255,255,255,0.95)',
-          padding: '3rem',
-          borderRadius: '1rem',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-          fontSize: `${settings.fontSize}px`,
-          fontFamily: settings.fontFamily,
-          lineHeight: settings.lineSpacing
-        }}>
-          {words.map((word, index) => (
-            <span
-              key={index}
+            <div style={{ display: 'grid', gap: '1rem' }}>
+              {disabilities.map(disability => (
+                <button
+                  key={disability.id}
+                  onClick={() => toggleDisability(disability.id)}
+                  style={{
+                    padding: '1.5rem',
+                    border: `3px solid ${profile.disabilities.includes(disability.id) ? '#667eea' : '#e2e8f0'}`,
+                    borderRadius: '0.75rem',
+                    background: profile.disabilities.includes(disability.id) ? '#f0f4ff' : 'white',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'start', gap: '1rem' }}>
+                    {profile.disabilities.includes(disability.id) ? (
+                      <CheckCircle size={24} style={{ color: '#667eea', flexShrink: 0 }} />
+                    ) : (
+                      <div style={{
+                        width: 24,
+                        height: 24,
+                        border: '2px solid #cbd5e1',
+                        borderRadius: '50%',
+                        flexShrink: 0
+                      }} />
+                    )}
+                    <div>
+                      <h3 style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
+                        {disability.name}
+                      </h3>
+                      <p style={{ fontSize: '0.875rem', color: '#64748b' }}>
+                        {disability.description}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setStep(2)}
+              disabled={profile.disabilities.length === 0}
               style={{
-                display: 'inline',
-                margin: '0 4px',
-                padding: '2px 4px',
-                borderRadius: '3px',
-                background: index === currentWordIndex ? '#ffd700' : 'transparent',
-                fontWeight: index === currentWordIndex ? 700 : 400,
-                transition: 'all 0.2s'
+                marginTop: '2rem',
+                width: '100%',
+                padding: '1rem',
+                background: profile.disabilities.length > 0 ? '#667eea' : '#cbd5e1',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.5rem',
+                fontSize: '1rem',
+                fontWeight: 600,
+                cursor: profile.disabilities.length > 0 ? 'pointer' : 'not-allowed'
               }}
             >
-              {word}
-            </span>
-          ))}
-        </div>
+              Next: Preferences →
+            </button>
+          </div>
+        )}
+
+        {step === 2 && !profile.disabilities.includes('none') && (
+          <div>
+            <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>
+              How severe are these challenges for you?
+            </h2>
+
+            {profile.disabilities.map(disability => (
+              <div key={disability} style={{ marginBottom: '2rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
+                  {disabilities.find(d => d.id === disability)?.name}
+                </label>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.875rem', color: '#64748b' }}>Mild</span>
+                  <input
+                    type="range"
+                    min="1"
+                    max="5"
+                    value={profile.severity[disability] || 3}
+                    onChange={(e) => setSeverity(disability, parseInt(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ fontSize: '0.875rem', color: '#64748b' }}>Severe</span>
+                  <span style={{
+                    background: '#f1f5f9',
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '0.5rem',
+                    fontWeight: 600,
+                    minWidth: '2rem',
+                    textAlign: 'center'
+                  }}>
+                    {profile.severity[disability] || 3}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button
+                onClick={() => setStep(1)}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                ← Back
+              </button>
+              <button
+                onClick={() => setStep(3)}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  background: '#667eea',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                Next: Preferences →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div>
+            <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>
+              Initial Preferences
+            </h2>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
+                Text Size
+              </label>
+              <input
+                type="range"
+                min="14"
+                max="32"
+                value={profile.preferences.font_size}
+                onChange={(e) => setProfile(p => ({
+                  ...p,
+                  preferences: { ...p.preferences, font_size: parseInt(e.target.value) }
+                }))}
+                style={{ width: '100%' }}
+              />
+              <p style={{ fontSize: `${profile.preferences.font_size}px`, marginTop: '0.5rem' }}>
+                Sample text at {profile.preferences.font_size}px
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={profile.preferences.tts_enabled}
+                  onChange={(e) => setProfile(p => ({
+                    ...p,
+                    preferences: { ...p.preferences, tts_enabled: e.target.checked }
+                  }))}
+                  style={{ width: 20, height: 20 }}
+                />
+                <span style={{ fontWeight: 600 }}>
+                  Enable Text-to-Speech (read text aloud)
+                </span>
+              </label>
+            </div>
+
+            <div style={{
+              padding: '1rem',
+              background: '#f0f9ff',
+              borderRadius: '0.5rem',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              gap: '0.75rem'
+            }}>
+              <AlertCircle size={20} style={{ color: '#0ea5e9', flexShrink: 0 }} />
+              <p style={{ fontSize: '0.875rem', color: '#0c4a6e' }}>
+                Don't worry! You can change all these settings anytime while reading.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button
+                onClick={() => setStep(2)}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                ← Back
+              </button>
+              <button
+                onClick={saveProfile}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  background: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                Start Learning! ✨
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default StudentReading;
+export default StudentOnboarding;
