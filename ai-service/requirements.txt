@@ -1,8 +1,12 @@
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 python-dotenv==1.0.0
-openai==1.10.0
-anthropic==0.18.1
 pydantic==2.5.3
 pymupdf==1.23.8
 numpy==1.26.3
+transformers==4.36.2
+torch>=2.2.0
+sentence-transformers==2.3.1
+spacy==3.7.2
+nltk==3.8.1
+textstat==0.7.3
