@@ -52,7 +52,7 @@ npm run dev
 ### Access
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:3000
-- AI Service: http://localhost:8000
+- AI Service: http://localhost:8080
 
 ## Technology Stack
 - **Frontend**: React + TypeScript + Vite
@@ -68,5 +68,5 @@ npm run dev
 ## Documentation
 See `/docs` folder for detailed API specs and architecture diagrams.
 
-## License
-Educational use - ALU Capstone Project 2026
+## Video Demo
+(https://drive.google.com/drive/folders/1skoF77F_0xYspc3UJa4LZCbRtg94HGDn)
