@@ -2,13 +2,13 @@
 # Core FastAPI framework
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
-pydantic==2.5.3
+pydantic>=2.8.2
 python-multipart==0.0.6
 
 # Reinforcement Learning
 stable-baselines3==2.2.1
 gymnasium==0.29.1
-torch==2.1.2
+torch==2.2.0
 tensorboard==2.15.1
 
 # Data processing
@@ -30,3 +30,9 @@ pytest-cov==4.1.0
 # Monitoring
 sentry-sdk==1.39.2
 prometheus-client==0.19.0
+
+# Visualization
+matplotlib==3.8.2
+seaborn==0.13.1
+tensorboard==2.15.1
+jupyter==1.0.0

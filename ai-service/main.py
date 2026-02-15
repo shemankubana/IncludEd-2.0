@@ -1,18 +1,21 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 import os
 from dotenv import load_dotenv
 
-# FIXED IMPORTS - use the free versions
+# Existing Imports
 from services.question_generator import FreeQuestionGenerator
 from services.accessibility_adapter import FreeAccessibilityAdapter
+# NEW IMPORT
+from services.rl_agent_service import RLAgentService
 
 load_dotenv()
 
-app = FastAPI(title="IncludEd AI Service (FREE)")
+app = FastAPI(title="IncludEd AI Service (RL-Powered)")
 
+# Middleware setup (Keep existing)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,14 +24,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize FREE services
+# Initialize services
 question_gen = FreeQuestionGenerator()
 accessibility_adapter = FreeAccessibilityAdapter()
+rl_agent = RLAgentService()  # NEW
 
 class TextAdaptRequest(BaseModel):
     text: str
     target_level: Optional[str] = "accessible"
-    disability_profile: Optional[dict] = None  # NEW
+    disability_profile: Optional[Dict] = None
 
 class QuestionGenRequest(BaseModel):
     content: str
@@ -37,73 +41,75 @@ class QuestionGenRequest(BaseModel):
 @app.get("/")
 async def root():
     return {
-        "service": "IncludEd AI Service (FREE)",
+        "service": "IncludEd AI Service",
         "status": "healthy",
-        "ai_provider": "spaCy + NLTK (100% FREE)",
-        "cost": "$0.00",
-        "endpoints": ["/adapt-text", "/generate-questions"]
+        "model_status": "RL Agent Loaded" if rl_agent.model else "Running rule-based fallback"
     }
 
 @app.post("/adapt-text")
 async def adapt_text(request: TextAdaptRequest):
     """
-    Adapt literary text using FREE local models
-    - Uses rule-based simplification + spaCy
-    - No API costs
-    - Runs offline
+    Adapt text using Reinforcement Learning to decide the strategy
     """
     try:
         print(f"📝 Adapting {len(request.text)} characters...")
         
-        # Limit text to prevent slowdown
-        text_chunk = request.text[:5000]
-        
-        # Adapt with disability profile
-        adapted = accessibility_adapter.adapt_text(
-            text_chunk,
-            request.target_level or "accessible",
+        # 1. Use RL Agent to decide STRATEGY
+        # In a real app, we would get difficulty/focus from request. Using mocks for demo.
+        action_id, action_desc = rl_agent.predict_action(
+            text_difficulty=0.7, 
+            student_focus=0.6,
             disability_profile=request.disability_profile
         )
         
-        print(f"✅ Adaptation complete: {len(adapted)} characters")
+        print(f"🤖 RL Decision: {action_desc} (Action {action_id})")
         
-        return {"adaptedText": adapted}
+        # 2. Execute Strategy using existing Adapter
+        text_chunk = request.text[:5000]
+        
+        # Map RL actions to Adapter parameters
+        adapter_level = "accessible"
+        if action_id == 2:
+            adapter_level = "very_accessible" # Heavier simplification
+        elif action_id == 0:
+            return {
+                "adaptedText": text_chunk, 
+                "strategy": action_desc,
+                "note": "AI decided original text was best."
+            }
+
+        # Perform Rule-Based Adaptation based on RL decision
+        adapted = accessibility_adapter.adapt_text(
+            text_chunk,
+            adapter_level,
+            disability_profile=request.disability_profile
+        )
+        
+        # If RL suggested TTS/Visuals (Action 3), append a marker
+        if action_id == 3:
+            adapted = "[AI SUGGESTION: ENABLE TTS]\n" + adapted
+        
+        return {
+            "adaptedText": adapted,
+            "strategy": action_desc
+        }
     
     except Exception as e:
         print(f"❌ Error: {e}")
-        # Fallback: return original
-        return {"adaptedText": request.text[:5000]}
+        return {"adaptedText": request.text[:5000], "error": str(e)}
 
+# ... (Keep the rest of generate-questions endpoint as is) ...
 @app.post("/generate-questions")
 async def generate_questions(request: QuestionGenRequest):
-    """
-    Generate questions using FREE NLP methods
-    - spaCy Named Entity Recognition
-    - Rule-based templates
-    - No AI API costs
-    """
+    # Keep existing implementation
     try:
-        print(f"❓ Generating {request.count} questions...")
-        
         # Limit content to prevent slowdown
         content_chunk = request.content[:3000]
-        
-        # Generate questions
         questions = question_gen.generate(content_chunk, request.count)
-        
-        print(f"✅ Generated {len(questions)} questions")
-        
         return {"questions": questions}
-    
     except Exception as e:
-        print(f"❌ Error: {e}")
-        # Fallback
-        return {
-            "questions": question_gen.generate_fallback(request.content[:1000], request.count)
-        }
+        return {"questions": question_gen.generate_fallback(request.content[:1000], request.count)}
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Starting FREE AI Service on http://localhost:8080")
-    print("💰 Cost: $0.00 (No API keys needed!)")
-    uvicorn.run(app, host="0.0.0.0", port=8080)  # FIXED PORT
+    uvicorn.run(app, host="0.0.0.0", port=8080)

@@ -44,6 +44,13 @@ const App: React.FC = () => {
     window.location.href = '/';
   };
 
+  // Placeholder for onComplete in StudentReading
+  const handleStudentReadingComplete = () => {
+    console.log('student reading complete!');
+    // in a real app, you might navigate to the quiz here
+    // e.g., navigate('/quiz/:literatureId');
+  };
+
   if (!isAuthenticated) {
     return <LoginPage onLogin={handleLogin} />;
   }
@@ -62,7 +69,7 @@ const App: React.FC = () => {
             </>
           ) : (
             <>
-              <Route path="/" element={<StudentReading />} />
+              <Route path="/" element={<StudentReading onComplete={handleStudentReadingComplete} />} />
               <Route path="/quiz/:literatureId" element={<QuizInterface />} />
             </>
           )}
