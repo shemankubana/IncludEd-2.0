@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+@theme {
+  --font-opendyslexic: "OpenDyslexic", sans-serif;
+  --font-comic: "Comic Sans MS", sans-serif;
+}
