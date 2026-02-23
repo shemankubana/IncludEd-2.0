@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { AccessibilityProvider } from './context/AccessibilityContext';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { useBackgroundSync } from './hooks/useBackgroundSync';
 import './App.css';
 
@@ -13,15 +13,14 @@ import ReadingSession from './components/ReadingSession';
 import TeacherDashboard from './components/TeacherDashboard';
 import TeacherAnalytics from './components/TeacherAnalytics';
 import AdminDashboard from './components/AdminDashboard';
+import Auth from './components/Auth';
 
 /* ─────────── Welcome / Login Screen ─────────── */
 const Login: React.FC = () => {
-  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = (role: 'student' | 'teacher' | 'admin') => {
-    login(role);
-    navigate(`/${role}/dashboard`);
+    navigate(`/auth?role=${role}`);
   };
 
   const roles = [
@@ -133,6 +132,7 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/" element={<Login />} />
+      <Route path="/auth" element={<Auth />} />
       <Route element={<Layout />}>
         {/* Student Routes */}
         <Route path="/student/dashboard" element={<StudentDashboard />} />
