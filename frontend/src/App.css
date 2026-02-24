@@ -1,6 +1,0 @@
-/* ─── App-level resets (replace Vite defaults) ─── */
-#root {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
