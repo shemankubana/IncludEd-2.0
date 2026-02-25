@@ -121,7 +121,8 @@ class IncludEdEnv(gym.Env):
         self._reset_state()
         return self._get_obs(), {}
 
-    def step(self, action: int):
+    def step(self, action):
+        action = int(np.asarray(action).item())   # handles scalar, 0-d array, or list
         self.current_step += 1
         reward = self._compute_reward(action)
         self._update_state(action, reward)
