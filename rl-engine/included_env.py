@@ -44,7 +44,7 @@ class IncludEdEnv(gym.Env):
     def _normalize_action(self, action: Union[int, np.ndarray]) -> int:
         """Ensure action is a Python int (SB3-safe)."""
         if isinstance(action, np.ndarray):
-            return int(action[0])
+            return int(np.asarray(action).item())
         return int(action)
 
     # ── Internal state ───────────────────────────────────────────────────────
