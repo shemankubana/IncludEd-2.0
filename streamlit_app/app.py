@@ -126,6 +126,92 @@ def service_status_badge(url: str, label: str):
     except:
         st.error(f"❌ {label} — unreachable at {url}")
 
+def render_synchronized_tts(audio_base64: str, timestamps: list, text: str):
+    """
+    Renders an HTML component with synchronized word-level highlighting.
+    """
+    # Prepare word spans
+    words = text.split()
+    word_spans = []
+    
+    # Simple check to match words with timestamps (assuming standard split)
+    # in production this should be more robust
+    for i, word in enumerate(words):
+        word_spans.append(f'<span id="word-{i}" class="word">{word}</span>')
+    
+    html_content = f"""
+    <style>
+        .reading-box {{
+            line-height: 2.2;
+            font-size: 1.25rem;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 12px;
+            color: #1e293b;
+            font-family: 'Inter', sans-serif;
+        }}
+        .word {{
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: background 0.1s ease;
+        }}
+        .highlight {{
+            background-color: #fde047;
+            color: #000;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .audio-container {{
+            margin-bottom: 20px;
+        }}
+        audio {{
+            width: 100%;
+            height: 40px;
+        }}
+    </style>
+    
+    <div class="audio-container">
+        <audio id="audio-player" controls>
+            <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
+        </audio>
+    </div>
+    
+    <div id="text-container" class="reading-box">
+        {' '.join(word_spans)}
+    </div>
+    
+    <script>
+        const audio = document.getElementById('audio-player');
+        const timestamps = {json.dumps(timestamps)};
+        
+        audio.addEventListener('timeupdate', () => {{
+            const currentTime = audio.currentTime;
+            
+            // Find current word
+            let activeIndex = -1;
+            for (let i = 0; i < timestamps.length; i++) {{
+                if (currentTime >= timestamps[i].start && currentTime <= (timestamps[i].start + timestamps[i].duration + 0.1)) {{
+                    activeIndex = i;
+                    break;
+                }}
+            }}
+            
+            // Update highlights
+            document.querySelectorAll('.word').forEach((el, idx) => {{
+                if (idx === activeIndex) {{
+                    el.classList.add('highlight');
+                    // Scroll into view if needed
+                    // el.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
+                }} else {{
+                    el.classList.remove('highlight');
+                }}
+            }});
+        }});
+    </script>
+    """
+    import streamlit.components.v1 as components
+    components.html(html_content, height=400, scrolling=True)
+
 # ── Page setup ────────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -311,7 +397,25 @@ if page == "🎓 Student Session":
         if st.session_state.adapted_text:
             st.divider()
             st.markdown("### 4  Adapted Text Preview")
-            st.text_area("Current Adaptation", value=st.session_state.adapted_text, height=200)
+            
+            # Check if we should show sync TTS
+            is_tts = "[AI: ENABLE TTS + HIGHLIGHTS]" in st.session_state.adapted_text
+            
+            if is_tts:
+                if st.button("🔊 Generate TTS & Start Listening"):
+                    with st.spinner("Generating synthesized voice..."):
+                        clean_text = st.session_state.adapted_text.replace("[AI: ENABLE TTS + HIGHLIGHTS]\n", "")
+                        tts_data = ai_post("/tts/generate", {"text": clean_text})
+                        if "audio_base64" in tts_data:
+                            render_synchronized_tts(
+                                tts_data["audio_base64"], 
+                                tts_data["timestamps"],
+                                clean_text
+                            )
+                        else:
+                            st.error("Failed to generate TTS.")
+            else:
+                st.text_area("Current Adaptation", value=st.session_state.adapted_text, height=200)
 
         # Session log
         if st.session_state.session_log:
@@ -564,6 +668,49 @@ elif page == "📊 Teacher Dashboard":
             dis_data = class_data.get("byDisabilityType", [])
             if dis_data:
                 st.dataframe(pd.DataFrame(dis_data), use_container_width=True, hide_index=True)
+
+    # Video Captioning Tool
+    st.divider()
+    st.markdown("### 🎥 Video Processing & Captioning")
+    st.caption("Upload a video or audio file to generate WebVTT captions using AI transcription.")
+    
+    uploaded_video = st.file_uploader("Upload Video/Audio", type=["mp4", "mp3", "wav", "m4a", "mov"])
+    
+    if uploaded_video:
+        if st.button("📝 Transcribe & Generate Captions", type="primary"):
+            with st.spinner("Transcribing video... This may take a moment depending on length."):
+                # Prepare file for upload
+                files = {"file": (uploaded_video.name, uploaded_video.getvalue())}
+                try:
+                    r = requests.post(f"{AI_SERVICE_URL}/video/transcribe", files=files, timeout=300)
+                    transcription = r.json()
+                    
+                    if "vtt" in transcription:
+                        st.success("✅ Transcription complete!")
+                        
+                        vtt_content = transcription["vtt"]
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("#### Preview Captions")
+                            st.text_area("WebVTT Content", value=vtt_content, height=300)
+                            st.download_button(
+                                "📥 Download .vtt File",
+                                vtt_content,
+                                file_name=f"{uploaded_video.name.split('.')[0]}.vtt",
+                                mime="text/vtt"
+                            )
+                        
+                        with col2:
+                            st.markdown("#### Video Preview")
+                            # Note: Native Streamlit st.video doesn't support caption tracks easily
+                            # We'd need custom HTML for that, but we can show the video here.
+                            st.video(uploaded_video)
+                            st.info("The downloaded .vtt file can be used in your preferred video player (e.g., VLC, YouTube) to provide accessible captions.")
+                    else:
+                        st.error(f"Transcription failed: {transcription.get('error', 'Unknown error')}")
+                except Exception as e:
+                    st.error(f"Error connecting to AI Service: {str(e)}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

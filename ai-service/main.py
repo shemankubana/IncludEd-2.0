@@ -14,7 +14,7 @@ Endpoints:
   GET  /analytics/summary         — aggregate performance for teacher dashboard
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -28,6 +28,8 @@ from services.accessibility_adapter import FreeAccessibilityAdapter
 from services.rl_agent_service    import RLAgentService
 from services.attention_monitor   import AttentionMonitor
 from services.session_manager     import SessionManager
+from services.tts_service         import TTSService
+from services.video_service       import VideoService
 
 load_dotenv()
 
@@ -53,6 +55,8 @@ question_gen        = FreeQuestionGenerator()
 accessibility_adapter = FreeAccessibilityAdapter()
 rl_agent            = RLAgentService()
 session_manager     = SessionManager()
+tts_service         = TTSService()
+video_service       = VideoService()
 
 # Simple in-memory analytics store (per session summary for teacher dashboard)
 # In production this would be replaced by calls to the Node.js backend's DB
@@ -67,6 +71,11 @@ class TextAdaptRequest(BaseModel):
     disability_profile: Optional[Dict] = None
     student_focus: Optional[float] = Field(default=0.6, ge=0.0, le=1.0)
     text_difficulty: Optional[float] = Field(default=0.5, ge=0.0, le=1.0)
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: Optional[str] = "en-KE-AsminaNeural"
+    rate: Optional[str] = "+0%"
 
 class QuestionGenRequest(BaseModel):
     content: str
@@ -161,6 +170,20 @@ async def adapt_text(request: TextAdaptRequest):
         return {"adaptedText": request.text[:5000], "error": str(e)}
 
 
+@app.post("/tts/generate")
+async def generate_tts(request: TTSRequest):
+    """Generate TTS audio with word-level timestamps."""
+    try:
+        result = await tts_service.generate_with_timestamps(
+            text=request.text,
+            voice=request.voice,
+            rate=request.rate
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS Generation failed: {str(e)}")
+
+
 # ── Question generation ───────────────────────────────────────────────────────
 
 @app.post("/generate-questions")
@@ -171,6 +194,29 @@ async def generate_questions(request: QuestionGenRequest):
         return {"questions": questions}
     except Exception as e:
         return {"questions": question_gen.generate_fallback(request.content[:1000], request.count)}
+
+
+@app.post("/video/transcribe")
+async def transcribe_video(file: UploadFile = File(...)):
+    """Transcribe an uploaded video/audio file and return VTT captions."""
+    try:
+        # Save uploaded file to a temporary location
+        suffix = os.path.splitext(file.filename)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
+            content = await file.read()
+            temp.write(content)
+            temp_path = temp.name
+            
+        try:
+            vtt_content = video_service.transcribe_to_vtt(temp_path)
+            return {"vtt": vtt_content, "filename": file.filename}
+        finally:
+            # Always ensure temp file is removed
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+                
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
 
 # ── Reading session endpoints ─────────────────────────────────────────────────

@@ -13,3 +13,6 @@ textstat==0.7.3
 stable-baselines3==2.2.1
 gymnasium==0.29.1
 shimmy>=0.2.1
+edge-tts==6.1.9
+openai-whisper==20231117
+aiofiles==23.2.1
