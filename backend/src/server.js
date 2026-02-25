@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import literatureRoutes from './routes/literature.js';
 import quizRoutes from './routes/quiz.js';
+import sessionsRoutes from './routes/sessions.js';
+import analyticsRoutes from './routes/analytics.js';
 import { sequelize } from './config/database.js';
 
 dotenv.config();
@@ -28,11 +30,13 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/literature', literatureRoutes);
 app.use('/api/quiz', quizRoutes);
+app.use('/api/sessions', sessionsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
+  res.json({
+    status: 'healthy',
     timestamp: new Date().toISOString(),
     database: 'connected'
   });
@@ -49,10 +53,10 @@ const startServer = async () => {
   try {
     await sequelize.authenticate();
     console.log('✅ Database connected');
-    
+
     await sequelize.sync({ alter: true });
     console.log('✅ Database synced');
-    
+
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📖 Upload PDFs at http://localhost:${PORT}/api/literature/upload`);
