@@ -56,7 +56,19 @@ class RLAgentService:
             if os.path.exists(path):
                 try:
                     from stable_baselines3 import PPO
-                    self.model      = PPO.load(path)
+                    model = PPO.load(path)
+
+                    # Validate the observation space matches our 8-dim state
+                    obs_dim = model.observation_space.shape[0]
+                    if obs_dim != 8:
+                        print(
+                            f"⚠️  RL Agent: skipping {path} — observation space is "
+                            f"{obs_dim}-dim, expected 8-dim. Train a new model with "
+                            f"rl-engine/train_model.py to enable ML predictions."
+                        )
+                        continue
+
+                    self.model      = model
                     self.model_path = path
                     self.model_ready = True
                     print(f"✅ RL Agent: loaded model from {path}")
@@ -64,7 +76,7 @@ class RLAgentService:
                 except Exception as e:
                     print(f"⚠️  RL Agent: failed to load {path}: {e}")
 
-        print("⚠️  RL Agent: no trained model found — using rule-based fallback.")
+        print("⚠️  RL Agent: no compatible model found — using rule-based fallback.")
 
     def reload_model(self):
         """Hot-reload the model (e.g., after a new training run)."""
