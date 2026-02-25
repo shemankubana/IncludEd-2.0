@@ -1,114 +1,84 @@
-# IncludEd 2.0 - Adaptive Learning Platform
+# IncludEd 2.0 - AI-Powered Adaptive Learning Platform
 
-## Overview
-An AI-powered platform for teaching literature and adapting educational materials for primary school students with learning differences in Rwanda (P3-P6). It uses Reinforcement Learning (PPO) to automatically adapt text (simplification, syllable breaks, TTS) for students with Dyslexia and ADHD based on their attention and reading behaviour.
+IncludEd 2.0 is a specialized educational ecosystem designed to support primary school students (P3-P6) in Rwanda who have learning differences such as **Dyslexia** and **ADHD**. 
 
-## Architecture
-The platform is composed of three main services:
-- **Node.js Backend (Port 3000)**: Express API with PostgreSQL for managing user accounts, student profiles, reading sessions, and persisting RL training data.
-- **Python AI Service (Port 8080)**: FastAPI service hosting the PPO Agent, Attention Monitor, and Text Adaptation engine based on spaCy and rule-based heuristics.
-- **Python Streamlit UI (Port 8501)**: A multi-page testing UI for simulating student sessions, monitoring attention, viewing teacher analytics, and inspecting the RL agent policy.
+The platform uses **Reinforcement Learning (RL)** to dynamically adapt educational content (text simplifications, syllable breaks, TTS, and focus prompts) based on real-time student interaction telemetry.
+
+## 🏗️ System Architecture
+
+The platform follows a distributed microservices pattern to separate concerns between business logic, AI processing, and testing interfaces.
+
+```mermaid
+graph TD
+    A[React Frontend / Streamlit] -- Telemetry --> B(Node.js Backend)
+    B -- Sessions/Profiles --> C{PostgreSQL}
+    A -- Adaptive Requests --> D[FastAPI AI Service]
+    D -- RL Policy --> E(PPO Model)
+    D -- Text Utils --> F(spaCy / edge-TTS)
+    D -- Vision/Audio --> G(Whisper / OpenCV)
+    B -- Analytics Sync --> D
+```
+
+### Core Services
+1.  **Node.js Backend (Port 3000)**: Manages users, student profiles, reading session history, and provides the main API for the React frontend.
+2.  **Python AI Service (Port 8080)**: The "Brain" of the project. Built with FastAPI, it hosts the PPO (Proximal Policy Optimization) agent and all accessibility tools (TTS, Transcription, Simplification).
+3.  **Streamlit Portal (Port 8501)**: A dedicated testing and monitoring UI used for simulating sessions, inspecting the RL agent's behavior, and verifying accessibility features.
 
 ---
 
-## Quick Start (Local Demo)
+## 🧠 AI & Reinforcement Learning Logic
 
-Follow these steps to set up and run the different components.
+The core innovation is the **Closed-Loop Adaptation Engine**.
+
+### 1. The State Vector (8 Dimensions)
+The AI perceives the student's state through a normalized vector:
+- `[reading_speed, mouse_dwell, scroll_hesitation, backtrack_freq, attention_score, disability_type, text_difficulty, session_fatigue]`
+
+### 2. Action Space (Pedagogical Interventions)
+Based on the state, the RL agent selects one of 6 actions:
+- `0: Keep Original`
+- `1: Light Simplification`
+- `2: Heavy Simplification`
+- `3: TTS + Synchronized Highlights`
+- `4: Syllable Break Adaptation`
+- `5: Mandatory Attention Break`
+
+### 3. Reward Function
+The agent is trained to maximize a reward based on **Attention Stability** and **Quiz Performance**. It is penalized for causing high "fatigue" (over-adapting) or allowing "attention lapses".
+
+---
+
+## 🚀 API Reference (AI Service)
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/adapt-text` | `POST` | Takes text and disability profile; returns adapted text + chosen RL strategy. |
+| `/tts/generate` | `POST` | Generates MP3 audio + **word-level timestamps** for synchronized highlighting. |
+| `/video/transcribe` | `POST` | Transcribes video/audio to `.vtt` format for accessible captions. |
+| `/session/telemetry` | `POST` | Receives live telemetry; returns the next RL-recommended intervention. |
+
+---
+
+## 🛠️ Setup & Development
 
 ### 1. Prerequisites
-Ensure you have the following installed:
-- Node.js (v18+)
-- Python 3.11+
-- PostgreSQL (or Docker to run it via `docker-compose`)
+- Node.js (v18+) & Python 3.11+
+- `ffmpeg` (required for video transcription)
 
-### 2. Database Setup
-Start the PostgreSQL database. If using Docker:
-```bash
-docker-compose up -d
-```
-> **Note**: This will start a Postgres instance on port 5432. Ensure the `DATABASE_URL` in `backend/.env` points to this instance.
-
-### 3. Start the Node.js Backend API
-The backend stores users, profiles, and reading sessions.
-
-```bash
-cd backend
-npm install
-
-# Make sure you have the .env file configured properly
-# cp .env.example .env (if applicable)
-
-# Run database migrations (using Sequelize)
-# Note: IncludEd auto-syncs models on startup locally, 
-# but migrations should be run in prod.
-
-# Start the development server
-npm run dev
-```
-*The backend should now be running on `http://localhost:3000`.*
-
-### 4. Start the Python AI Service
-The AI service needs to be running for text adaptation and RL predictions.
-
-```bash
-cd ai-service
-
-# Create and activate a virtual environment
-python3.11 -m venv venv
-source venv/bin/activate
-
-# Install requirements
-pip install -r requirements.txt
-
-# Start the FastAPI server
-python main.py
-```
-*The AI Service should now be running on `http://localhost:8080`.*
-
-### 5. Start the Streamlit Testing UI
-The Streamlit app is the main way to interact with the simulated backend and AI features right now.
-
-```bash
-cd streamlit_app
-
-# Activate the virtual environment
-# (You can reuse the one from ai-service or create a new one)
-python3.11 -m venv venv
-source venv/bin/activate
-
-# Install requirements
-pip install -r requirements.txt
-
-# Run the app
-streamlit run app.py
-```
-*The UI will open automatically in your browser at `http://localhost:8501`.*
+### 2. Startup Sequence
+1.  **Database**: `docker-compose up -d` (Postgres on 5432)
+2.  **Backend**: `cd backend && npm install && npm run dev`
+3.  **AI Service**: 
+    ```bash
+    cd ai-service
+    pip install -r requirements.txt
+    python main.py
+    ```
+4.  **Testing UI**: `cd streamlit_app && streamlit run app.py`
 
 ---
 
-## Exploring the Streamlit Demo
+## 📜 Research Context
+This project serves as the technical implementation for the **ALU BSc. Software Engineering Capstone (2026)**. It focuses on solving the achievement gap for neurodivergent learners in the Rwandan context.
 
-Once the Streamlit app is open, you can explore four different pages from the sidebar:
-
-1. **🎓 Student Session**: Simulate a full reading session. Select a student profile (e.g., Dyslexia, ADHD), start the session, and adjust the telemetry sliders (e.g., Reading Speed, Mouse Dwell) to see the Reinforcement Learning agent dynamically change its pedagogical action (like switching from "Keep Original" to "Syllable Break" or "Attention Break").
-2. **🧠 Attention Monitor**: Play around with raw telemetry values to see how they are converted into a composite "Focus Score" between 0 and 1, understanding the reward logic.
-3. **📊 Teacher Dashboard**: View dummy class analytics, average attention scores by disability type, and a scatter plot of Quiz Scores vs. Attention Spans based on the simulated sessions you've run.
-4. **🤖 RL Inspector**: Probe the RL Policy directly. Force specific 8-dim state vectors (e.g., High Fatigue, ADHD, Low Attention) to see exactly what the model predicts.
-
-## Retraining the RL Model
-If you want to modify the environment or retrain the PPO model from scratch:
-```bash
-cd rl-engine
-source ../ai-service/venv/bin/activate
-pip install gymnasium stable-baselines3 torch
-
-# Train the model (takes a few minutes)
-python train_model.py
-
-# Evaluate the model
-python evaluate_model.py
-```
-This will overwrite `ppo_included_agent.zip` in the `ai-service/services` folder. Restart the AI Service to load the new model.
-
-## License
-Educational use - ALU Capstone Project 2026.
+**Lead Developer**: Ivan Shema
