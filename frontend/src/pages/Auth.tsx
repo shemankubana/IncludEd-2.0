@@ -5,12 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { assignRole, type AppRole } from "@/lib/supabase-helpers";
+import { auth } from "@/lib/firebase";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile
+} from "firebase/auth";
 import { useNavigate, Link } from "react-router-dom";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
 
-const roles: { value: AppRole; label: string; description: string; icon: string }[] = [
+const roles: { value: string; label: string; description: string; icon: string }[] = [
   { value: "student", label: "Student", description: "Access adaptive lessons & track progress", icon: "📚" },
   { value: "teacher", label: "Teacher", description: "Manage classes & view student analytics", icon: "👩‍🏫" },
   { value: "parent", label: "Parent", description: "Monitor your child's learning journey", icon: "👨‍👩‍👧" },
@@ -18,55 +24,116 @@ const roles: { value: AppRole; label: string; description: string; icon: string 
 ];
 
 const Auth = () => {
+  const { user } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [selectedRole, setSelectedRole] = useState<AppRole>("student");
+  const [selectedRole, setSelectedRole] = useState("student");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (user) {
+      const fetchRoleAndRedirect = async () => {
+        try {
+          const idToken = await user.getIdToken();
+          const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me`, {
+            headers: { "Authorization": `Bearer ${idToken}` }
+          });
+          if (response.ok) {
+            const userData = await response.json();
+            if (userData.role === "teacher") navigate("/teacher/dashboard");
+            else navigate("/student/dashboard");
+          }
+        } catch (err) {
+          console.error("Auto-redirect check failed:", err);
+        }
+      };
+      fetchRoleAndRedirect();
+    }
+  }, [user, navigate]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const idToken = await userCredential.user.getIdToken();
+
+      // Fetch user profile to get role
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me`, {
+        headers: {
+          "Authorization": `Bearer ${idToken}`
+        }
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        toast({ title: "Welcome back!", description: `Successfully logged in as ${userData.role}.` });
+
+        if (userData.role === "teacher") {
+          navigate("/teacher/dashboard");
+        } else {
+          navigate("/student/dashboard");
+        }
+      } else {
+        // Fallback if sync fails but login succeeded
+        navigate("/");
+      }
+    } catch (error: any) {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
-    } else {
-      navigate("/");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: window.location.origin,
-      },
-    });
-    if (error) {
-      setLoading(false);
-      toast({ title: "Signup failed", description: error.message, variant: "destructive" });
-      return;
-    }
-    if (data.user) {
-      try {
-        await assignRole(data.user.id, selectedRole);
-      } catch (roleError: any) {
-        console.error("Role assignment error:", roleError);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+      // Update display name
+      if (userCredential.user) {
+        const idToken = await userCredential.user.getIdToken();
+        await updateProfile(userCredential.user, {
+          displayName: fullName
+        });
+
+        // Sync with backend
+        const names = fullName.split(" ");
+        await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            email,
+            firstName: names[0] || "",
+            lastName: names.slice(1).join(" ") || "",
+            role: selectedRole
+          })
+        });
+
+        toast({
+          title: "Account created!",
+          description: "Welcome to IncludEd. You have been registered as a " + selectedRole,
+        });
+
+        if (selectedRole === "teacher") {
+          navigate("/teacher/dashboard");
+        } else {
+          navigate("/student/dashboard");
+        }
       }
+    } catch (error: any) {
+      toast({ title: "Signup failed", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    toast({
-      title: "Check your email",
-      description: "We sent you a confirmation link. Please verify your email to continue.",
-    });
   };
 
   return (
@@ -88,11 +155,8 @@ const Auth = () => {
         className="w-full max-w-md"
       >
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2.5 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="text-2xl font-bold text-foreground font-space tracking-tight">IncludEd</span>
+        <div className="flex items-center justify-center mb-8">
+          <img src="/logo.png" alt="IncludEd Logo" className="w-48 h-auto" />
         </div>
 
         <div className="bg-card rounded-2xl border border-border p-8 shadow-lg">
@@ -100,17 +164,15 @@ const Auth = () => {
           <div className="flex bg-secondary rounded-xl p-1 mb-6">
             <button
               onClick={() => setMode("login")}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
-                mode === "login" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
-              }`}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === "login" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
             >
               Log In
             </button>
             <button
               onClick={() => setMode("signup")}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
-                mode === "signup" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
-              }`}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === "signup" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
             >
               Sign Up
             </button>
@@ -211,11 +273,10 @@ const Auth = () => {
                         key={role.value}
                         type="button"
                         onClick={() => setSelectedRole(role.value)}
-                        className={`p-3 rounded-xl border text-left transition-all ${
-                          selectedRole === role.value
-                            ? "border-primary bg-primary/5 ring-1 ring-primary"
-                            : "border-border hover:border-primary/30"
-                        }`}
+                        className={`p-3 rounded-xl border text-left transition-all ${selectedRole === role.value
+                          ? "border-primary bg-primary/5 ring-1 ring-primary"
+                          : "border-border hover:border-primary/30"
+                          }`}
                       >
                         <div className="text-lg mb-1">{role.icon}</div>
                         <div className="text-sm font-semibold text-foreground">{role.label}</div>

@@ -15,9 +15,10 @@ import {
     SidebarTrigger
 } from "@/components/ui/sidebar";
 import { BookOpen, Home, BookHeadphones, LayoutDashboard, Settings, LogOut, Bell, User } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItem {
     title: string;
@@ -32,6 +33,17 @@ interface DashboardLayoutProps {
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => {
     const location = useLocation();
+    const navigate = useNavigate();
+    const { user, logout } = useAuth();
+
+    const handleLogout = async () => {
+        try {
+            await logout();
+            navigate("/auth");
+        } catch (error) {
+            console.error("Logout error:", error);
+        }
+    };
 
     const studentNav: NavItem[] = [
         { title: "Home", url: "/student/dashboard", icon: <Home className="w-5 h-5" /> },
@@ -52,11 +64,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
             <div className="flex min-h-screen w-full bg-background">
                 <Sidebar className="border-r border-border shadow-sm">
                     <SidebarHeader className="p-6">
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-                                <BookOpen className="w-5 h-5 text-primary-foreground" />
-                            </div>
-                            <span className="text-xl font-bold text-foreground font-space tracking-tight">IncludEd</span>
+                        <div className="flex items-center justify-center">
+                            <img src="/logo.png" alt="IncludEd Logo" className="w-32 h-auto" />
                         </div>
                     </SidebarHeader>
 
@@ -93,11 +102,16 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                                     <User className="w-4 h-4" />
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                    <p className="text-xs font-bold truncate">Ivan Shema</p>
+                                    <p className="text-xs font-bold truncate">{user?.displayName || "User"}</p>
                                     <p className="text-[10px] text-muted-foreground truncate capitalize">{role}</p>
                                 </div>
                             </div>
-                            <Button variant="ghost" size="sm" className="w-full justify-start gap-2 h-8 text-xs font-semibold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start gap-2 h-8 text-xs font-semibold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                                onClick={handleLogout}
+                            >
                                 <LogOut className="w-3.5 h-3.5" /> Log Out
                             </Button>
                         </div>

@@ -3,9 +3,30 @@ import { BookOpen, Sparkles, ArrowRight, ShieldCheck, Heart } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
 
 const Welcome = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
+
+    useEffect(() => {
+        if (user) {
+            // Fetch profile to redirect to correct dashboard
+            const fetchRoleAndRedirect = async () => {
+                const idToken = await user.getIdToken();
+                const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me`, {
+                    headers: { "Authorization": `Bearer ${idToken}` }
+                });
+                if (response.ok) {
+                    const userData = await response.json();
+                    if (userData.role === "teacher") navigate("/teacher/dashboard");
+                    else navigate("/student/dashboard");
+                }
+            };
+            fetchRoleAndRedirect();
+        }
+    }, [user, navigate]);
 
     const steps = [
         {
@@ -29,11 +50,8 @@ const Welcome = () => {
         <div className="min-h-screen bg-background bg-grid flex flex-col overflow-hidden">
             {/* Header */}
             <header className="container mx-auto px-6 h-20 flex items-center justify-between z-10">
-                <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-                        <BookOpen className="w-5 h-5 text-primary-foreground" />
-                    </div>
-                    <span className="text-2xl font-bold text-foreground font-space tracking-tight">IncludEd</span>
+                <div className="flex items-center">
+                    <img src="/logo.png" alt="IncludEd Logo" className="h-10 w-auto" />
                 </div>
                 <ThemeToggle />
             </header>
