@@ -75,6 +75,7 @@ The agent is trained to maximize a reward based on **Attention Stability** and *
     python main.py
     ```
 4.  **Testing UI**: `cd streamlit_app && streamlit run app.py`
+5.  **Frontend**: `cd frontend && npm install && npm run dev`
 
 ---
 
