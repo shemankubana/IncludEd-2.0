@@ -54,7 +54,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
     const teacherNav: NavItem[] = [
         { title: "Overview", url: "/teacher/dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
         { title: "Live Classes", url: "/teacher/classes", icon: <Bell className="w-5 h-5" /> },
-        { title: "Manage Content", url: "/teacher/create", icon: <Settings className="w-5 h-5" /> },
+        { title: "Upload Content", url: "/teacher/create", icon: <Settings className="w-5 h-5" /> },
+        { title: "My Content", url: "/teacher/my-content", icon: <BookOpen className="w-5 h-5" /> },
     ];
 
     const navItems = role === "student" ? studentNav : teacherNav;

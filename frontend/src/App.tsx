@@ -14,6 +14,7 @@ import ComprehensionQuiz from "./pages/student/Quiz";
 import AchievementHall from "./pages/student/Achievements";
 import TeacherDashboard from "./pages/teacher/Dashboard";
 import CreateContent from "./pages/teacher/CreateContent";
+import MyContent from "./pages/teacher/MyContent";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/student/achievements" element={<AchievementHall />} />
               <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
               <Route path="/teacher/create" element={<CreateContent />} />
+              <Route path="/teacher/my-content" element={<MyContent />} />
               <Route path="/onboarding" element={<Onboarding />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

@@ -153,7 +153,37 @@ What's in a name? A rose by any other name would smell just as sweet.`,
   }
 });
 
-// Get specific literature by ID
+// List only THIS teacher's uploaded content  ← must come BEFORE /:id
+router.get('/my-content', authenticateToken, async (req, res) => {
+  try {
+    console.log(`📚 Fetching content for teacher: ${req.user.userId}`);
+    const literature = await Literature.findAll({
+      where: { uploadedBy: req.user.userId },
+      order: [['createdAt', 'DESC']],
+      attributes: ['id', 'title', 'author', 'subject', 'language', 'wordCount', 'questionsGenerated', 'status', 'imageUrl', 'createdAt']
+    });
+    console.log(`✅ Found ${literature.length} items`);
+    res.json(literature);
+  } catch (error) {
+    console.error('❌ My content error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List all literature (for teacher dashboard)
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    const literature = await Literature.findAll({
+      order: [['createdAt', 'DESC']],
+      limit: 50
+    });
+    res.json(literature);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get specific literature by ID  ← dynamic route LAST
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const literature = await Literature.findByPk(req.params.id);
@@ -168,16 +198,29 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// List all literature (for teacher dashboard)
-router.get('/', authenticateToken, async (req, res) => {
+// Delete a literature entry (only the uploader can delete)
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
-    const literature = await Literature.findAll({
-      order: [['createdAt', 'DESC']],
-      limit: 50
-    });
+    const literature = await Literature.findByPk(req.params.id);
 
-    res.json(literature);
+    if (!literature) {
+      return res.status(404).json({ error: 'Literature not found' });
+    }
+
+    if (literature.uploadedBy !== req.user.userId) {
+      return res.status(403).json({ error: 'You do not have permission to delete this content' });
+    }
+
+    // Delete associated quiz questions first
+    const { Quiz } = await import('../models/Quiz.js');
+    await Quiz.destroy({ where: { literatureId: req.params.id } });
+
+    await literature.destroy();
+    console.log(`🗑️  Deleted: ${literature.title}`);
+
+    res.json({ success: true, message: 'Content deleted successfully' });
   } catch (error) {
+    console.error('❌ Delete error:', error);
     res.status(500).json({ error: error.message });
   }
 });
