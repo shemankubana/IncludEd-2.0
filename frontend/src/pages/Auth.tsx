@@ -9,7 +9,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
-  signInWithPopup
+  signInWithPopup,
+  sendPasswordResetEmail
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { useNavigate, Link } from "react-router-dom";
@@ -26,12 +27,13 @@ const roles: { value: string; label: string; description: string; icon: string }
 
 const Auth = () => {
   const { user } = useAuth();
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [selectedRole, setSelectedRole] = useState("student");
   const [loading, setLoading] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -134,6 +136,23 @@ const Auth = () => {
       }
     } catch (error: any) {
       toast({ title: "Signup failed", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, forgotEmail);
+      toast({
+        title: "Reset Email Sent!",
+        description: `Check your inbox at ${forgotEmail} for a password reset link.`,
+      });
+      setMode("login");
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -272,6 +291,15 @@ const Auth = () => {
                     required
                   />
                 </div>
+                <div className="flex justify-end -mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setMode("forgot")}
+                    className="text-xs text-primary font-medium hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <Button type="submit" className="w-full rounded-lg font-semibold" disabled={loading}>
                   {loading ? "Signing in..." : "Sign In"}
                 </Button>
@@ -279,6 +307,43 @@ const Auth = () => {
                   Don't have an account?{" "}
                   <button type="button" onClick={() => setMode("signup")} className="text-primary font-medium hover:underline">
                     Sign up
+                  </button>
+                </p>
+              </motion.form>
+            ) : mode === "forgot" ? (
+              <motion.form
+                key="forgot"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                onSubmit={handleForgotPassword}
+                className="space-y-4"
+              >
+                <div className="text-center mb-4">
+                  <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <BookOpen className="w-6 h-6 text-primary" />
+                  </div>
+                  <h2 className="text-lg font-black">Reset Password</h2>
+                  <p className="text-xs text-muted-foreground">Enter your email and we'll send you a reset link.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="forgot-email">Email Address</Label>
+                  <Input
+                    id="forgot-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full rounded-lg font-semibold" disabled={loading}>
+                  {loading ? "Sending..." : "Send Reset Link"}
+                </Button>
+                <p className="text-xs text-center text-muted-foreground">
+                  Remember your password?{" "}
+                  <button type="button" onClick={() => setMode("login")} className="text-primary font-medium hover:underline">
+                    Back to Log In
                   </button>
                 </p>
               </motion.form>

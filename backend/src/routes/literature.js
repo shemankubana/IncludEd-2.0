@@ -3,6 +3,7 @@ import { upload } from '../config/upload.js';  // ✅ FIXED IMPORT
 import { Literature } from '../models/Literature.js';
 import { processPDF } from '../services/pdfProcessor.js';
 import { generateQuestions } from '../services/questionGenerator.js';
+import { splitIntoChapters } from '../services/chapterSplitter.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -37,6 +38,9 @@ router.post('/upload', authenticateToken, upload.fields([
     }
 
     // Create literature record
+    const sections = splitIntoChapters(originalContent);
+    console.log(`📚 Detected ${sections.length} sections/chapters`);
+
     const literature = await Literature.create({
       title: title || (pdfFile ? pdfFile.originalname.replace('.pdf', '') : 'New Lesson'),
       author: author || 'Unknown',
@@ -46,6 +50,7 @@ router.post('/upload', authenticateToken, upload.fields([
       originalContent,
       adaptedContent,
       wordCount,
+      sections,
       uploadedBy: req.user.userId,
       status: 'ready',
       questionsGenerated: 0

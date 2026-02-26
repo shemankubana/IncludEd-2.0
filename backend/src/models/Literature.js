@@ -50,5 +50,11 @@ export const Literature = sequelize.define('Literature', {
   imageUrl: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  sections: {
+    type: DataTypes.JSONB,
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Array of {title, content} chapter/scene/act sections detected from content'
   }
 });
