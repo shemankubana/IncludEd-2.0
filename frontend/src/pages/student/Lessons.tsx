@@ -1,76 +1,72 @@
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, BookOpen, Clock, Star } from "lucide-react";
+import { Search, Filter, BookOpen, Clock, Star, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/contexts/AuthContext";
+import { motion } from "framer-motion";
 
 const LessonLibrary = () => {
-    const categories = ["All", "Literature", "Science", "Math", "History"];
+    const { user } = useAuth();
+    const [loading, setLoading] = useState(true);
+    const [lessons, setLessons] = useState<any[]>([]);
+    const [selectedCategory, setSelectedCategory] = useState("All");
+    const categories = ["All", "Literature", "Math", "Science", "History", "General"];
 
-    const lessons = [
-        {
-            id: 1,
-            title: "The Old Man and the Sea",
-            subject: "Literature",
-            duration: "45m",
-            difficulty: "Advanced",
-            rating: 4.8,
-            image: "bg-amber/10 text-amber",
-            xp: 500
-        },
-        {
-            id: 2,
-            title: "Introduction to Photosynthesis",
-            subject: "Science",
-            duration: "30m",
-            difficulty: "Beginner",
-            rating: 4.5,
-            image: "bg-cyan/10 text-cyan",
-            xp: 350
-        },
-        {
-            id: 3,
-            title: "Fractions & Decimals Part 1",
-            subject: "Math",
-            duration: "25m",
-            difficulty: "Intermediate",
-            rating: 4.2,
-            image: "bg-primary/10 text-primary",
-            xp: 400
-        },
-        {
-            id: 4,
-            title: "Rwanda's Geography",
-            subject: "History",
-            duration: "35m",
-            difficulty: "Beginner",
-            rating: 4.9,
-            image: "bg-rose/10 text-rose",
-            xp: 450
-        },
-        {
-            id: 5,
-            title: "The Great Gatsby: Chapter 1",
-            subject: "Literature",
-            duration: "50m",
-            difficulty: "Advanced",
-            rating: 4.7,
-            image: "bg-amber/10 text-amber",
-            xp: 600
-        },
-        {
-            id: 6,
-            title: "Solar System Explorers",
-            subject: "Science",
-            duration: "20m",
-            difficulty: "Beginner",
-            rating: 4.6,
-            image: "bg-cyan/10 text-cyan",
-            xp: 300
-        },
-    ];
+    useEffect(() => {
+        const fetchLessons = async () => {
+            if (!user) return;
+            try {
+                const idToken = await user.getIdToken();
+                const headers = { "Authorization": `Bearer ${idToken}` };
+                const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+                const response = await fetch(`${baseUrl}/api/literature`, { headers });
+                const data = await response.json();
+
+                if (Array.isArray(data)) {
+                    setLessons(data.map((item: any) => ({
+                        id: item.id,
+                        title: item.title,
+                        subject: item.subject || "General",
+                        duration: item.estimatedTime || "15m",
+                        difficulty: item.difficulty || "Beginner",
+                        rating: 4.8,
+                        image: item.imageUrl
+                            ? `${baseUrl}${item.imageUrl}`
+                            : null,
+                        xp: 500
+                    })));
+                } else {
+                    console.warn("Literature API did not return an array:", data);
+                }
+
+            } catch (error) {
+                console.error("Failed to fetch lessons:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchLessons();
+    }, [user]);
+
+    const filteredLessons = selectedCategory === "All"
+        ? lessons
+        : lessons.filter(l => l.subject === selectedCategory);
+
+    if (loading) {
+        return (
+            <DashboardLayout role="student">
+                <div className="h-[60vh] flex items-center justify-center">
+                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                </div>
+            </DashboardLayout>
+        );
+    }
 
     return (
         <DashboardLayout role="student">
@@ -80,7 +76,7 @@ const LessonLibrary = () => {
                 <section className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-secondary/30 p-8 rounded-[40px] border border-border/50">
                     <div className="space-y-2">
                         <h1 className="text-3xl font-bold tracking-tight">Lesson Library</h1>
-                        <p className="text-muted-foreground font-medium">Explore over 200 interactive and adaptive lessons.</p>
+                        <p className="text-muted-foreground font-medium">Explore interactive and adaptive lessons.</p>
                     </div>
 
                     <div className="relative w-full md:w-96 group">
@@ -100,8 +96,9 @@ const LessonLibrary = () => {
                     {categories.map((cat) => (
                         <Button
                             key={cat}
-                            variant={cat === "All" ? "default" : "secondary"}
-                            className={`rounded-xl h-10 px-6 font-bold text-xs transition-all ${cat === "All" ? "shadow-lg glow-lime" : "bg-background border border-border"}`}
+                            variant={selectedCategory === cat ? "default" : "secondary"}
+                            onClick={() => setSelectedCategory(cat)}
+                            className={`rounded-xl h-10 px-6 font-bold text-xs transition-all ${selectedCategory === cat ? "shadow-lg glow-lime" : "bg-background border border-border"}`}
                         >
                             {cat}
                         </Button>
@@ -110,7 +107,7 @@ const LessonLibrary = () => {
 
                 {/* Lesson Grid */}
                 <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {lessons.map((lesson, idx) => (
+                    {filteredLessons.map((lesson, idx) => (
                         <motion.div
                             key={lesson.id}
                             initial={{ opacity: 0, y: 20 }}
@@ -118,39 +115,48 @@ const LessonLibrary = () => {
                             transition={{ delay: idx * 0.05 }}
                         >
                             <Card className="rounded-[32px] border border-border overflow-hidden h-full flex flex-col group hover:scale-[1.02] transition-all cursor-pointer shadow-none hover:shadow-2xl hover:border-primary/20 bg-card/50 backdrop-blur-sm">
-                                <div className={`aspect-[4/3] w-full flex items-center justify-center p-8 transition-colors ${lesson.image}`}>
-                                    <BookOpen className="w-20 h-20 opacity-40 group-hover:scale-110 transition-transform duration-500" />
-                                </div>
-
-                                <CardHeader className="flex-1">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <Badge variant="secondary" className="rounded-lg font-black text-[10px] uppercase tracking-wider px-2.5 py-1">
-                                            {lesson.subject}
-                                        </Badge>
-                                        <div className="flex items-center gap-1 text-amber text-xs font-bold">
-                                            <Star className="w-3.5 h-3.5 fill-current" /> {lesson.rating}
+                                <Link to={`/student/reader/${lesson.id}`} className="h-full">
+                                    <div className="aspect-[4/3] w-full flex items-center justify-center relative transition-colors bg-secondary/20">
+                                        {lesson.image ? (
+                                            <img src={lesson.image} alt={lesson.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                        ) : (
+                                            <BookOpen className="w-20 h-20 opacity-40 group-hover:scale-110 transition-transform duration-500" />
+                                        )}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-6">
+                                            <span className="text-white font-black text-xs uppercase tracking-widest">Start Reading</span>
                                         </div>
                                     </div>
-                                    <CardTitle className="text-xl font-bold leading-snug group-hover:text-primary transition-colors">
-                                        {lesson.title}
-                                    </CardTitle>
-                                </CardHeader>
 
-                                <CardContent>
-                                    <div className="pt-4 border-t border-border/50 flex items-center justify-between">
-                                        <div className="flex gap-4">
-                                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-bold">
-                                                <Clock className="w-3.5 h-3.5" /> {lesson.duration}
-                                            </div>
-                                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-bold">
-                                                <Star className="w-3.5 h-3.5" /> {lesson.difficulty}
+                                    <CardHeader className="flex-1">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <Badge variant="secondary" className="rounded-lg font-black text-[10px] uppercase tracking-wider px-2.5 py-1">
+                                                {lesson.subject}
+                                            </Badge>
+                                            <div className="flex items-center gap-1 text-amber text-xs font-bold">
+                                                <Star className="w-3.5 h-3.5 fill-current" /> {lesson.rating}
                                             </div>
                                         </div>
-                                        <div className="text-sm font-black text-primary">
-                                            +{lesson.xp} XP
+                                        <CardTitle className="text-xl font-bold leading-snug group-hover:text-primary transition-colors">
+                                            {lesson.title}
+                                        </CardTitle>
+                                    </CardHeader>
+
+                                    <CardContent>
+                                        <div className="pt-4 border-t border-border/50 flex items-center justify-between">
+                                            <div className="flex gap-4">
+                                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-bold">
+                                                    <Clock className="w-3.5 h-3.5" /> {lesson.duration}
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-bold">
+                                                    <Star className="w-3.5 h-3.5" /> {lesson.difficulty}
+                                                </div>
+                                            </div>
+                                            <div className="text-sm font-black text-primary">
+                                                +{lesson.xp} XP
+                                            </div>
                                         </div>
-                                    </div>
-                                </CardContent>
+                                    </CardContent>
+                                </Link>
                             </Card>
                         </motion.div>
                     ))}

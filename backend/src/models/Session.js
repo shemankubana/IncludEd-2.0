@@ -12,7 +12,7 @@ export const Session = sequelize.define('Session', {
         primaryKey: true
     },
     studentId: {
-        type: DataTypes.UUID,
+        type: DataTypes.STRING,
         allowNull: false
     },
     literatureId: {

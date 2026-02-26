@@ -12,7 +12,7 @@ export const StudentProfile = sequelize.define('StudentProfile', {
         primaryKey: true
     },
     userId: {
-        type: DataTypes.UUID,
+        type: DataTypes.STRING,
         allowNull: false,
         unique: true
     },

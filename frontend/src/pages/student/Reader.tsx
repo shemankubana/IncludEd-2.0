@@ -14,29 +14,56 @@ import {
     EyeOff,
     ArrowLeft,
     CheckCircle2,
-    AlertCircle
+    AlertCircle,
+    BrainCircuit,
+    Loader2
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/contexts/AuthContext";
 
 const AdaptiveReader = () => {
     const navigate = useNavigate();
     const { id } = useParams();
+    const { user } = useAuth();
     const [isPlaying, setIsPlaying] = useState(false);
     const [focusMode, setFocusMode] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [activeWordIndex, setActiveWordIndex] = useState(-1);
+    const [loading, setLoading] = useState(true);
+    const [lesson, setLesson] = useState<any>(null);
+    const [showQuizPrompt, setShowQuizPrompt] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Mock data for the lesson
-    const lesson = {
-        title: "The Old Man and the Sea",
-        author: "Ernest Hemingway",
-        content: "He was an old man who fished alone in a skiff in the Gulf Stream and he had gone eighty-four days now without taking a fish.",
-        difficulty: "Advanced",
-    };
+    // Fetch real content
+    useEffect(() => {
+        const fetchLesson = async () => {
+            if (!user || !id) return;
+            try {
+                const idToken = await user.getIdToken();
+                const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/${id}`, {
+                    headers: {
+                        "Authorization": `Bearer ${idToken}`
+                    }
+                });
+                const data = await response.json();
+                setLesson({
+                    title: data.title,
+                    author: data.author,
+                    content: data.adaptedContent || data.originalContent,
+                    difficulty: "Adaptive"
+                });
+            } catch (error) {
+                console.error("Failed to fetch lesson:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
 
-    // Mock timestamps for the first sentence
+        fetchLesson();
+    }, [id, user]);
+
+    // Mock timestamps for the demo (in real app, these would come from the backend or TTS engine)
     const timestamps = [
         { word: "He", start: 0, duration: 0.3 },
         { word: "was", start: 0.3, duration: 0.2 },
@@ -48,28 +75,27 @@ const AdaptiveReader = () => {
         { word: "alone", start: 1.9, duration: 0.4 },
         { word: "in", start: 2.3, duration: 0.2 },
         { word: "a", start: 2.5, duration: 0.1 },
-        { word: "skiff", start: 2.6, duration: 0.3 },
-        { word: "in", start: 2.9, duration: 0.2 },
-        { word: "the", start: 3.1, duration: 0.2 },
-        { word: "Gulf", start: 3.3, duration: 0.4 },
-        { word: "Stream", start: 3.7, duration: 0.5 },
     ];
 
-    const words = lesson.content.split(" ");
+    const words = lesson?.content?.split(" ") || [];
 
     useEffect(() => {
         let interval: NodeJS.Timeout;
-        if (isPlaying) {
+        if (isPlaying && lesson) {
             interval = setInterval(() => {
                 setCurrentTime((prev) => {
                     const nextTime = prev + 0.1;
-                    // Loop or stop check
+
+                    // Trigger quiz prompt at ~80% mock progress or specific point
+                    if (nextTime > 4 && !showQuizPrompt) {
+                        setShowQuizPrompt(true);
+                    }
+
                     if (nextTime > 5) {
                         setIsPlaying(false);
                         return 0;
                     }
 
-                    // Update active word
                     const wordIndex = timestamps.findIndex(
                         (t) => nextTime >= t.start && nextTime <= t.start + t.duration
                     );
@@ -80,7 +106,18 @@ const AdaptiveReader = () => {
             }, 100);
         }
         return () => clearInterval(interval);
-    }, [isPlaying]);
+    }, [isPlaying, lesson, showQuizPrompt]);
+
+    if (loading) {
+        return (
+            <DashboardLayout role="student">
+                <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
+                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                    <p className="font-bold text-muted-foreground uppercase tracking-widest text-xs">Preparing your adaptive lesson...</p>
+                </div>
+            </DashboardLayout>
+        );
+    }
 
     return (
         <DashboardLayout role="student">
@@ -137,7 +174,7 @@ const AdaptiveReader = () => {
 
                     <CardContent className="p-12 md:p-20">
                         <div className="reading-area leading-[2.5] text-2xl md:text-3xl font-medium tracking-tight text-foreground/90 select-none">
-                            {words.map((word, idx) => (
+                            {words.map((word: string, idx: number) => (
                                 <motion.span
                                     key={idx}
                                     animate={{
@@ -186,8 +223,11 @@ const AdaptiveReader = () => {
                                     </div>
                                 </div>
                                 <div className="h-8 w-px bg-border" />
-                                <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full">
-                                    <Settings2 className="w-5 h-5" />
+                                <Button
+                                    className="rounded-xl font-bold gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                                    onClick={() => navigate(`/student/quiz/${id}`)}
+                                >
+                                    <BrainCircuit className="w-4 h-4" /> Take Quiz
                                 </Button>
                             </div>
 
@@ -195,27 +235,38 @@ const AdaptiveReader = () => {
                     </div>
                 </Card>
 
-                {/* AI Suggestions Floating Box */}
+                {/* Quiz Engagement Prompt */}
                 <AnimatePresence>
-                    {!focusMode && (
+                    {showQuizPrompt && !focusMode && (
                         <motion.div
-                            initial={{ opacity: 0, x: 50 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 50 }}
-                            className="fixed bottom-10 right-10 w-80 p-6 rounded-[32px] bg-primary text-primary-foreground shadow-2xl z-50 border-4 border-white dark:border-primary-foreground/20"
+                            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+                            className="fixed bottom-10 left-1/2 -translate-x-1/2 w-[400px] p-6 rounded-[32px] bg-accent text-accent-foreground shadow-2xl z-50 border-4 border-white dark:border-primary-foreground/20"
                         >
                             <div className="flex items-start gap-4 mb-4">
-                                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-                                    <AlertCircle className="w-6 h-6" />
+                                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                                    <BrainCircuit className="w-7 h-7" />
                                 </div>
                                 <div>
-                                    <h4 className="font-black text-xs uppercase tracking-widest mb-1 leading-none">AI Insight</h4>
-                                    <p className="text-sm font-medium leading-tight">I noticed you're reading carefully. Would you like me to simplify this part?</p>
+                                    <h4 className="font-black text-sm uppercase tracking-widest mb-1 leading-none">Checkpoint!</h4>
+                                    <p className="text-md font-bold leading-tight">Ready for a quick knowledge check? You can earn +200 XP!</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <Button variant="secondary" size="sm" className="rounded-xl font-bold h-9 text-xs">Yes, please!</Button>
-                                <Button variant="ghost" size="sm" className="rounded-xl font-bold h-9 text-xs text-white hover:bg-white/10">I'm okay</Button>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Button
+                                    className="rounded-xl font-black h-12 bg-white text-accent hover:bg-white/90 shadow-lg"
+                                    onClick={() => navigate(`/student/quiz/${id}`)}
+                                >
+                                    Let's Go!
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    className="rounded-xl font-bold h-12 text-white hover:bg-white/10"
+                                    onClick={() => setShowQuizPrompt(false)}
+                                >
+                                    Later
+                                </Button>
                             </div>
                         </motion.div>
                     )}

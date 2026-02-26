@@ -14,6 +14,7 @@ import ComprehensionQuiz from "./pages/student/Quiz";
 import AchievementHall from "./pages/student/Achievements";
 import TeacherDashboard from "./pages/teacher/Dashboard";
 import CreateContent from "./pages/teacher/CreateContent";
+import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 
 import { AuthProvider } from "./contexts/AuthContext";
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="/student/achievements" element={<AchievementHall />} />
               <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
               <Route path="/teacher/create" element={<CreateContent />} />
+              <Route path="/onboarding" element={<Onboarding />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

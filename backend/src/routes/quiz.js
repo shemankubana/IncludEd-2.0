@@ -1,6 +1,7 @@
 import express from 'express';
 import { Quiz } from '../models/Quiz.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { sequelize } from '../config/database.js';
 
 const router = express.Router();
 
@@ -11,7 +12,7 @@ router.get('/:literatureId', authenticateToken, async (req, res) => {
       limit: 10,
       order: sequelize.random()
     });
-    
+
     res.json(questions.map(q => ({
       id: q.id,
       question: q.question,

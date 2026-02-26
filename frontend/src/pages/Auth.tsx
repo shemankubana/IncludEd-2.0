@@ -126,8 +126,10 @@ const Auth = () => {
 
         if (selectedRole === "teacher") {
           navigate("/teacher/dashboard");
+        } else if (selectedRole === "student") {
+          navigate("/onboarding");
         } else {
-          navigate("/student/dashboard");
+          navigate("/");
         }
       }
     } catch (error: any) {
@@ -152,6 +154,9 @@ const Auth = () => {
       if (checkRes.status === 404) {
         // First time Google user, sync with selectedRole
         const nameParts = (user.displayName || "").split(" ");
+        const firstName = nameParts[0] || "";
+        const lastName = nameParts.slice(1).join(" ") || "";
+
         await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/sync`, {
           method: "POST",
           headers: {
@@ -160,17 +165,32 @@ const Auth = () => {
           },
           body: JSON.stringify({
             email: user.email,
-            firstName: nameParts[0] || user.displayName || "Google User",
-            lastName: nameParts.slice(1).join(" ") || "",
+            firstName,
+            lastName,
             role: selectedRole
           })
         });
+
         toast({ title: "Welcome!", description: `Account created for ${user.email} as ${selectedRole}.` });
+
+        if (selectedRole === "student") {
+          navigate("/onboarding");
+        } else if (selectedRole === "teacher") {
+          navigate("/teacher/dashboard");
+        }
       } else if (checkRes.ok) {
         const userData = await checkRes.json();
         toast({ title: "Welcome back!", description: `Logged in as ${userData.email}.` });
+
+        if (userData.role === "teacher") {
+          navigate("/teacher/dashboard");
+        } else if (userData.role === "student") {
+          // Check if student profile exists (onboarding complete)
+          // For now, let's assume if they have a user record but no profile, we send them to onboarding
+          // We can refine this by fetching a 'status' or checking for profile fields
+          navigate("/student/dashboard");
+        }
       }
-      // Redirection is handled by the useEffect above
     } catch (error: any) {
       toast({ title: "Google Auth Failed", description: error.message, variant: "destructive" });
     } finally {

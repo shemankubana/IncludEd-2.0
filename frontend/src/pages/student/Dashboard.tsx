@@ -1,25 +1,79 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Trophy, Zap, Clock, ArrowRight } from "lucide-react";
+import { BookOpen, Trophy, Zap, Clock, ArrowRight, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const StudentDashboard = () => {
-    // Mock data for student progress
-    const student = {
-        name: "Ivan",
-        xp: 2450,
-        nextLevelXp: 3000,
-        streak: 5,
-        lessonsCompleted: 12,
-        timeSpent: "8h 15m",
-    };
+    const { user } = useAuth();
+    const [loading, setLoading] = useState(true);
+    const [studentData, setStudentData] = useState<any>(null);
+    const [recentLessons, setRecentLessons] = useState<any[]>([]);
 
-    const recentLessons = [
-        { id: 1, title: "English: The Old Man and the Sea", progress: 65, subject: "Literature", color: "bg-amber" },
-        { id: 2, title: "Science: Human Anatomy 101", progress: 20, subject: "Biology", color: "bg-cyan" },
-    ];
+    useEffect(() => {
+        const fetchDashboardData = async () => {
+            if (!user) return;
+            try {
+                const idToken = await user.getIdToken();
+                const headers = { "Authorization": `Bearer ${idToken}` };
+                const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+                // Fetch student stats
+                const profileRes = await fetch(`${baseUrl}/api/auth/me`, { headers });
+                const profileData = await profileRes.json();
+
+                // Fetch recent sessions
+                const sessionsRes = await fetch(`${baseUrl}/api/sessions/my`, { headers });
+                const sessionsData = await sessionsRes.json();
+
+                setStudentData({
+                    name: profileData.firstName || "Explorer",
+                    xp: profileData.xp || 0,
+                    nextLevelXp: 3000,
+                    streak: profileData.streak || 0,
+                    lessonsCompleted: profileData.totalSessions || 0,
+                    timeSpent: "2h 45m", // Placeholder for derived calc if not in backend
+                });
+
+                setRecentLessons(sessionsData.map((s: any) => ({
+                    id: s.Literature?.id || s.id,
+                    title: s.Literature?.title || "Unknown Lesson",
+                    progress: Math.round(s.quizScore * 100 || 0),
+                    subject: s.Literature?.subject || "General",
+                    color: "bg-primary"
+                })));
+
+            } catch (error) {
+                console.error("Failed to fetch dashboard data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchDashboardData();
+    }, [user]);
+
+    if (loading) {
+        return (
+            <DashboardLayout role="student">
+                <div className="h-[60vh] flex items-center justify-center">
+                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                </div>
+            </DashboardLayout>
+        );
+    }
+
+    const student = studentData || {
+        name: "Explorer",
+        xp: 0,
+        nextLevelXp: 3000,
+        streak: 0,
+        lessonsCompleted: 0,
+        timeSpent: "0m",
+    };
 
     return (
         <DashboardLayout role="student">

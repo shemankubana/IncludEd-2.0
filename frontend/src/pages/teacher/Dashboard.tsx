@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,26 +10,69 @@ import {
     ArrowUpRight,
     MoreVertical,
     Search,
-    Filter
+    Filter,
+    Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
+import { motion } from "framer-motion";
 
 const TeacherDashboard = () => {
-    const stats = [
-        { label: "Active Students", value: "28", icon: <Users className="w-5 h-5" />, trend: "+2 this week" },
-        { label: "Average Progress", value: "72%", icon: <TrendingUp className="w-5 h-5" />, trend: "+5% vs last month" },
-        { label: "Needs Support", value: "4", icon: <AlertCircle className="w-5 h-5 text-rose-500" />, trend: "Focus on these students" },
-        { label: "Lessons Created", value: "15", icon: <FileText className="w-5 h-5" />, trend: "3 awaiting review" },
-    ];
+    const { user } = useAuth();
+    const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState<any[]>([]);
+    const [students, setStudents] = useState<any[]>([]);
 
-    const students = [
-        { name: "John Doe", lastActive: "2h ago", progress: 85, status: "Expanding", color: "bg-primary" },
-        { name: "Sarah Smith", lastActive: "5h ago", progress: 40, status: "Needs Support", color: "bg-rose-500" },
-        { name: "Alice Gisa", lastActive: "1d ago", progress: 92, status: "Mastered", color: "bg-accent" },
-        { name: "Bob Nduu", lastActive: "3h ago", progress: 65, status: "On Track", color: "bg-primary" },
-    ];
+    useEffect(() => {
+        const fetchAnalytics = async () => {
+            if (!user) return;
+            try {
+                const idToken = await user.getIdToken();
+                const headers = { "Authorization": `Bearer ${idToken}` };
+                const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+                const response = await fetch(`${baseUrl}/api/analytics/class`, { headers });
+                const data = await response.json();
+
+                setStats([
+                    { label: "Active Students", value: data.overview?.totalStudents || "0", icon: <Users className="w-5 h-5" />, trend: "Total enrolled" },
+                    { label: "Average Progress", value: `${Math.round(data.overview?.avgQuizScore * 100 || 0)}%`, icon: <TrendingUp className="w-5 h-5" />, trend: "Quiz mastery" },
+                    { label: "Attention Level", value: `${Math.round(data.overview?.avgAttention * 100 || 0)}%`, icon: <AlertCircle className="w-5 h-5" />, trend: "Engagement" },
+                    { label: "Lessons Used", value: data.overview?.totalLessons || "0", icon: <FileText className="w-5 h-5" />, trend: "Activity" },
+                ]);
+
+                // Fetching student roster from the backend response
+                if (data.recentSessions) {
+                    setStudents(data.recentSessions.map((s: any) => ({
+                        name: s.student ? `${s.student.firstName} ${s.student.lastName}` : "Unknown Student",
+                        lastActive: s.endedAt ? "Completed" : "Active",
+                        progress: Math.round(s.quizScore * 100 || 0),
+                        status: s.quizScore > 0.7 ? "Mastered" : "On Track",
+                        color: "bg-primary"
+                    })));
+                }
+
+            } catch (error) {
+                console.error("Failed to fetch analytics:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchAnalytics();
+    }, [user]);
+
+    if (loading) {
+        return (
+            <DashboardLayout role="teacher">
+                <div className="h-[60vh] flex items-center justify-center">
+                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                </div>
+            </DashboardLayout>
+        );
+    }
 
     return (
         <DashboardLayout role="teacher">

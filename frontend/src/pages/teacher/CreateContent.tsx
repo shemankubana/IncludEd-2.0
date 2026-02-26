@@ -17,22 +17,88 @@ import {
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { useRef } from "react";
+
 const CreateContent = () => {
+    const { user } = useAuth();
+    const { toast } = useToast();
     const [isProcessing, setIsProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [activeTab, setActiveTab] = useState<"text" | "video">("text");
 
-    const handleProcess = () => {
+    // Form state
+    const [title, setTitle] = useState("");
+    const [content, setContent] = useState("");
+    const [subject, setSubject] = useState("Literature");
+    const [file, setFile] = useState<File | null>(null);
+    const [image, setImage] = useState<File | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const imageInputRef = useRef<HTMLInputElement>(null);
+
+    const handleProcess = async () => {
+        if (!title) {
+            toast({ title: "Missing Title", description: "Please enter a title for the lesson.", variant: "destructive" });
+            return;
+        }
+
+        if (activeTab === "text" && !content && !file) {
+            toast({ title: "No Content", description: "Please enter text or upload a PDF.", variant: "destructive" });
+            return;
+        }
+
         setIsProcessing(true);
-        let p = 0;
-        const interval = setInterval(() => {
-            p += 5;
-            setUploadProgress(p);
-            if (p >= 100) {
-                clearInterval(interval);
-                setIsProcessing(false);
+        setUploadProgress(10);
+
+        try {
+            const idToken = await user?.getIdToken();
+            const formData = new FormData();
+            formData.append("title", title);
+            formData.append("subject", subject);
+            formData.append("language", "english");
+
+            if (file) {
+                formData.append("file", file);
+            } else {
+                formData.append("content", content);
             }
-        }, 100);
+
+            if (image) {
+                formData.append("image", image);
+            }
+
+            setUploadProgress(40);
+
+            const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/upload`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${idToken}`
+                },
+                body: formData
+            });
+
+            setUploadProgress(80);
+
+            if (response.ok) {
+                setUploadProgress(100);
+                toast({ title: "Success!", description: "Lesson generated and added to library." });
+                // Reset form
+                setTitle("");
+                setContent("");
+                setFile(null);
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Failed to upload content");
+            }
+        } catch (error: any) {
+            toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
+        } finally {
+            setTimeout(() => {
+                setIsProcessing(false);
+                setUploadProgress(0);
+            }, 1000);
+        }
     };
 
     return (
@@ -82,16 +148,93 @@ const CreateContent = () => {
                             <CardContent className="p-8 space-y-6">
                                 {activeTab === "text" ? (
                                     <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Lesson Title</label>
-                                            <Input placeholder="e.g. Introduction to Rwandan History" className="h-12 rounded-xl border-2" />
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Lesson Title</label>
+                                                <Input
+                                                    value={title}
+                                                    onChange={(e) => setTitle(e.target.value)}
+                                                    placeholder="e.g. Introduction to Rwandan History"
+                                                    className="h-12 rounded-xl border-2"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Subject Category</label>
+                                                <select
+                                                    value={subject}
+                                                    onChange={(e) => setSubject(e.target.value)}
+                                                    className="w-full h-12 rounded-xl border-2 px-3 bg-background font-medium focus:border-primary outline-none"
+                                                >
+                                                    <option>Literature</option>
+                                                    <option>Math</option>
+                                                    <option>Science</option>
+                                                    <option>History</option>
+                                                    <option>General</option>
+                                                </select>
+                                            </div>
                                         </div>
+
                                         <div className="space-y-2">
-                                            <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Source Content</label>
+                                            <div className="flex justify-between items-end">
+                                                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Source Content</label>
+                                                <button
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+                                                >
+                                                    <Upload className="w-3 h-3" /> {file ? file.name : "Or upload PDF"}
+                                                </button>
+                                                <input
+                                                    type="file"
+                                                    ref={fileInputRef}
+                                                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                                                    className="hidden"
+                                                    accept=".pdf"
+                                                />
+                                            </div>
                                             <Textarea
+                                                value={content}
+                                                onChange={(e) => setContent(e.target.value)}
                                                 placeholder="Paste your source material here..."
                                                 className="min-h-[250px] rounded-2xl border-2 p-6 leading-relaxed"
+                                                disabled={!!file}
                                             />
+                                            {file && (
+                                                <p className="text-xs font-medium text-muted-foreground">
+                                                    PDF selected: <span className="text-primary">{file.name}</span>. Content field disabled.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-2 pt-4 border-t border-border/50">
+                                            <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cover Image (Optional)</label>
+                                            <div
+                                                onClick={() => imageInputRef.current?.click()}
+                                                className="h-24 rounded-2xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer flex items-center justify-center gap-3 overflow-hidden"
+                                            >
+                                                {image ? (
+                                                    <div className="flex items-center gap-3 p-4 w-full">
+                                                        <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                                                            <Upload className="w-6 h-6 text-primary" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-bold truncate">{image.name}</p>
+                                                            <p className="text-[10px] text-muted-foreground uppercase font-black">Click to change cover</p>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center">
+                                                        <p className="font-bold text-sm">Select Lesson Cover</p>
+                                                        <p className="text-[10px] text-muted-foreground uppercase font-black">JPG, PNG, WebP</p>
+                                                    </div>
+                                                )}
+                                                <input
+                                                    type="file"
+                                                    ref={imageInputRef}
+                                                    onChange={(e) => setImage(e.target.files?.[0] || null)}
+                                                    className="hidden"
+                                                    accept="image/*"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 ) : (

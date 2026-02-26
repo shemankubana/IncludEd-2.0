@@ -8,27 +8,41 @@ import { authenticateToken } from '../middleware/auth.js';
 const router = express.Router();
 
 // Upload PDF endpoint
-router.post('/upload', authenticateToken, upload.single('file'), async (req, res) => {
+// Upload PDF and Image endpoint
+router.post('/upload', authenticateToken, upload.fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'image', maxCount: 1 }
+]), async (req, res) => {
   try {
-    const { title, author, language } = req.body;
-    const file = req.file;
-    
-    if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+    const { title, author, language, subject, content } = req.body;
+    const files = req.files;
+    const pdfFile = files?.file?.[0];
+    const imageFile = files?.image?.[0];
+
+    let originalContent, adaptedContent, wordCount;
+
+    if (pdfFile) {
+      console.log(`📄 Processing PDF: ${pdfFile.originalname}`);
+      const processed = await processPDF(pdfFile.path);
+      originalContent = processed.originalContent;
+      adaptedContent = processed.adaptedContent;
+      wordCount = processed.wordCount;
+    } else if (content) {
+      console.log(`✍️ Processing raw text input`);
+      originalContent = content;
+      adaptedContent = content;
+      wordCount = content.split(/\s+/).length;
+    } else {
+      return res.status(400).json({ error: 'No file or content provided' });
     }
-    
-    console.log(`📄 Processing PDF: ${file.originalname}`);
-    
-    // Process PDF (limits to 5000 chars to prevent timeout)
-    const { originalContent, adaptedContent, wordCount } = await processPDF(file.path);
-    
-    console.log(`✅ PDF processed: ${wordCount} words`);
-    
+
     // Create literature record
     const literature = await Literature.create({
-      title: title || file.originalname.replace('.pdf', ''),
+      title: title || (pdfFile ? pdfFile.originalname.replace('.pdf', '') : 'New Lesson'),
       author: author || 'Unknown',
       language: language || 'english',
+      subject: subject || 'General',
+      imageUrl: imageFile ? `/uploads/${imageFile.filename}` : null,
       originalContent,
       adaptedContent,
       wordCount,
@@ -36,9 +50,9 @@ router.post('/upload', authenticateToken, upload.single('file'), async (req, res
       status: 'ready',
       questionsGenerated: 0
     });
-    
+
     console.log(`💾 Saved to database: ${literature.id}`);
-    
+
     // Generate questions in background (don't wait)
     setImmediate(async () => {
       try {
@@ -50,7 +64,7 @@ router.post('/upload', authenticateToken, upload.single('file'), async (req, res
         console.error('❌ Question generation failed:', err.message);
       }
     });
-    
+
     res.json({
       id: literature.id,
       title: literature.title,
@@ -60,7 +74,7 @@ router.post('/upload', authenticateToken, upload.single('file'), async (req, res
       wordCount: literature.wordCount,
       questionsGenerated: 0
     });
-    
+
   } catch (error) {
     console.error('❌ Upload error:', error);
     res.status(500).json({ error: error.message });
@@ -74,11 +88,11 @@ router.get('/current', authenticateToken, async (req, res) => {
       where: { status: 'ready' },
       order: [['createdAt', 'DESC']]
     });
-    
+
     // If no literature exists, create a demo
     if (!literature) {
       console.log('📝 No literature found, creating demo...');
-      
+
       literature = await Literature.create({
         title: "Romeo and Juliet - Act 2, Scene 2 (Demo)",
         author: "William Shakespeare",
@@ -119,14 +133,15 @@ What's in a name? A rose by any other name would smell just as sweet.`,
         wordCount: 150,
         uploadedBy: req.user.userId,
         status: 'ready',
+        subject: 'Literature',
         questionsGenerated: 5
       });
-      
+
       console.log('✅ Demo literature created');
     }
-    
+
     res.json(literature);
-    
+
   } catch (error) {
     console.error('❌ Error fetching literature:', error);
     res.status(500).json({ error: error.message });
@@ -137,11 +152,11 @@ What's in a name? A rose by any other name would smell just as sweet.`,
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const literature = await Literature.findByPk(req.params.id);
-    
+
     if (!literature) {
       return res.status(404).json({ error: 'Literature not found' });
     }
-    
+
     res.json(literature);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -155,7 +170,7 @@ router.get('/', authenticateToken, async (req, res) => {
       order: [['createdAt', 'DESC']],
       limit: 50
     });
-    
+
     res.json(literature);
   } catch (error) {
     res.status(500).json({ error: error.message });

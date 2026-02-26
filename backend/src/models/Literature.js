@@ -19,6 +19,10 @@ export const Literature = sequelize.define('Literature', {
     type: DataTypes.ENUM('english', 'french'),
     defaultValue: 'english'
   },
+  subject: {
+    type: DataTypes.ENUM('Literature', 'Math', 'Science', 'History', 'General'),
+    defaultValue: 'General'
+  },
   originalContent: {
     type: DataTypes.TEXT,
     allowNull: false
@@ -32,7 +36,7 @@ export const Literature = sequelize.define('Literature', {
     defaultValue: 0
   },
   uploadedBy: {
-    type: DataTypes.UUID,
+    type: DataTypes.STRING,
     allowNull: false
   },
   status: {
@@ -42,5 +46,9 @@ export const Literature = sequelize.define('Literature', {
   questionsGenerated: {
     type: DataTypes.INTEGER,
     defaultValue: 0
+  },
+  imageUrl: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 });

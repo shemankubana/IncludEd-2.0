@@ -8,6 +8,7 @@ import literatureRoutes from './routes/literature.js';
 import quizRoutes from './routes/quiz.js';
 import sessionsRoutes from './routes/sessions.js';
 import analyticsRoutes from './routes/analytics.js';
+import onboardingRoutes from './routes/onboarding.js';
 import { sequelize } from './config/database.js';
 
 dotenv.config();
@@ -24,6 +25,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
+app.use('/uploads', express.static('uploads'));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Routes
@@ -32,6 +34,7 @@ app.use('/api/literature', literatureRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/sessions', sessionsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/onboarding', onboardingRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
