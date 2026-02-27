@@ -32,6 +32,10 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [selectedRole, setSelectedRole] = useState("student");
+  const [loginRole, setLoginRole] = useState("student");
+  const [schoolCode, setSchoolCode] = useState("");
+  const [classLevel, setClassLevel] = useState("P4");
+  const [term, setTerm] = useState("Term 1");
   const [loading, setLoading] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const { toast } = useToast();
@@ -47,8 +51,14 @@ const Auth = () => {
           });
           if (response.ok) {
             const userData = await response.json();
+            if (userData.status === "pending_approval") {
+              navigate("/teacher/pending");
+              return;
+            }
             if (userData.role === "teacher") navigate("/teacher/dashboard");
-            else navigate("/student/dashboard");
+            else if (userData.role === "admin") navigate("/admin/dashboard");
+            else if (userData.role === "student") navigate("/student/dashboard");
+            else navigate("/"); // Fallback
           }
         } catch (err) {
           console.error("Auto-redirect check failed:", err);
@@ -65,25 +75,38 @@ const Auth = () => {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const idToken = await userCredential.user.getIdToken();
 
-      // Fetch user profile to get role
-      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me`, {
-        headers: {
-          "Authorization": `Bearer ${idToken}`
-        }
-      });
+      // Fetch user profile with role check
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me?expectedRole=${loginRole}`,
+        { headers: { "Authorization": `Bearer ${idToken}` } }
+      );
+
+      const data = await response.json();
 
       if (response.ok) {
-        const userData = await response.json();
-        toast({ title: "Welcome back!", description: `Successfully logged in as ${userData.role}.` });
-
-        if (userData.role === "teacher") {
-          navigate("/teacher/dashboard");
-        } else {
-          navigate("/student/dashboard");
-        }
+        toast({ title: "Welcome back!", description: `Successfully logged in as ${data.role}.` });
+        if (data.role === "teacher") navigate("/teacher/dashboard");
+        else if (data.role === "admin") navigate("/admin/dashboard");
+        else if (data.role === "student") navigate("/student/dashboard");
+        else navigate("/");
       } else {
-        // Fallback if sync fails but login succeeded
-        navigate("/");
+        // Handle specific errors like ROLE_MISMATCH or PENDING_APPROVAL
+        if (data.code === "ROLE_MISMATCH") {
+          toast({
+            title: "Access Denied",
+            description: data.error,
+            variant: "destructive"
+          });
+          await auth.signOut(); // Log them out if role mismatch
+        } else if (data.code === "PENDING_APPROVAL") {
+          toast({
+            title: "Account Pending",
+            description: data.error,
+          });
+          await auth.signOut();
+        } else {
+          toast({ title: "Login Error", description: data.error || "Unknown error", variant: "destructive" });
+        }
       }
     } catch (error: any) {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
@@ -95,19 +118,22 @@ const Auth = () => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    // Validate school code first? (Optional, but good UX)
     try {
+      const schoolRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/schools/by-code/${schoolCode}`);
+      if (!schoolRes.ok) {
+        throw new Error("Invalid school code. Please verify with your school.");
+      }
+
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 
-      // Update display name
       if (userCredential.user) {
         const idToken = await userCredential.user.getIdToken();
-        await updateProfile(userCredential.user, {
-          displayName: fullName
-        });
+        await updateProfile(userCredential.user, { displayName: fullName });
 
-        // Sync with backend
         const names = fullName.split(" ");
-        await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/sync`, {
+        const syncRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/sync`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -117,19 +143,31 @@ const Auth = () => {
             email,
             firstName: names[0] || "",
             lastName: names.slice(1).join(" ") || "",
-            role: selectedRole
+            role: selectedRole,
+            schoolCode,
+            classLevel: selectedRole === "student" ? classLevel : null,
+            term: selectedRole === "student" ? term : null,
+            yearEnrolled: new Date().getFullYear()
           })
         });
 
+        const syncData = await syncRes.json();
+        if (!syncRes.ok) throw new Error(syncData.error);
+
         toast({
           title: "Account created!",
-          description: "Welcome to IncludEd. You have been registered as a " + selectedRole,
+          description: selectedRole === "teacher"
+            ? "Your account is pending admin approval."
+            : "Welcome to IncludEd!",
         });
 
         if (selectedRole === "teacher") {
-          navigate("/teacher/dashboard");
+          setMode("login"); // Teachers must wait for approval
+          await auth.signOut();
         } else if (selectedRole === "student") {
           navigate("/onboarding");
+        } else if (selectedRole === "admin") {
+          navigate("/admin/dashboard");
         } else {
           navigate("/");
         }
@@ -148,7 +186,7 @@ const Auth = () => {
       await sendPasswordResetEmail(auth, forgotEmail);
       toast({
         title: "Reset Email Sent!",
-        description: `Check your inbox at ${forgotEmail} for a password reset link.`,
+        description: `Check your inbox for a password reset link.`,
       });
       setMode("login");
     } catch (error: any) {
@@ -160,22 +198,26 @@ const Auth = () => {
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
+    // Note: Google sign-in is harder with mandatory school codes. 
+    // We should probably redirect to a "Complete Profile" page if schoolId is missing.
+    // For now, let's just use the selectedRole/schoolCode from inputs.
     try {
+      if (mode === "signup" && !schoolCode) {
+        throw new Error("Please enter your school code first.");
+      }
+
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       const idToken = await user.getIdToken();
 
-      // Check if user exists in backend
       const checkRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me`, {
         headers: { "Authorization": `Bearer ${idToken}` }
       });
 
       if (checkRes.status === 404) {
-        // First time Google user, sync with selectedRole
-        const nameParts = (user.displayName || "").split(" ");
-        const firstName = nameParts[0] || "";
-        const lastName = nameParts.slice(1).join(" ") || "";
+        if (mode === "login") throw new Error("Account not found. Please sign up first.");
 
+        const nameParts = (user.displayName || "").split(" ");
         await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/sync`, {
           method: "POST",
           headers: {
@@ -184,34 +226,40 @@ const Auth = () => {
           },
           body: JSON.stringify({
             email: user.email,
-            firstName,
-            lastName,
-            role: selectedRole
+            firstName: nameParts[0] || "",
+            lastName: nameParts.slice(1).join(" ") || "",
+            role: selectedRole,
+            schoolCode,
+            classLevel: selectedRole === "student" ? classLevel : null,
+            term: selectedRole === "student" ? term : null
           })
         });
 
-        toast({ title: "Welcome!", description: `Account created for ${user.email} as ${selectedRole}.` });
-
-        if (selectedRole === "student") {
-          navigate("/onboarding");
-        } else if (selectedRole === "teacher") {
-          navigate("/teacher/dashboard");
-        }
+        toast({ title: "Welcome!", description: `Account created!` });
+        if (selectedRole === "student") navigate("/onboarding");
+        else if (selectedRole === "teacher") { setMode("login"); await auth.signOut(); }
       } else if (checkRes.ok) {
         const userData = await checkRes.json();
-        toast({ title: "Welcome back!", description: `Logged in as ${userData.email}.` });
 
-        if (userData.role === "teacher") {
-          navigate("/teacher/dashboard");
-        } else if (userData.role === "student") {
-          // Check if student profile exists (onboarding complete)
-          // For now, let's assume if they have a user record but no profile, we send them to onboarding
-          // We can refine this by fetching a 'status' or checking for profile fields
-          navigate("/student/dashboard");
+        // Check role mismatch for login
+        if (mode === "login" && userData.role !== loginRole) {
+          toast({ title: "Access Denied", description: `This account is ${userData.role}, not ${loginRole}`, variant: "destructive" });
+          await auth.signOut();
+          return;
         }
+
+        if (userData.role === "teacher" && userData.status === "pending_approval") {
+          toast({ title: "Pending", description: "Account waiting for admin approval" });
+          await auth.signOut();
+          return;
+        }
+
+        if (userData.role === "teacher") navigate("/teacher/dashboard");
+        else if (userData.role === "admin") navigate("/admin/dashboard");
+        else navigate("/student/dashboard");
       }
     } catch (error: any) {
-      toast({ title: "Google Auth Failed", description: error.message, variant: "destructive" });
+      toast({ title: "Auth Failed", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -240,20 +288,18 @@ const Auth = () => {
           <img src="/logo.png" alt="IncludEd Logo" className="w-48 h-auto" />
         </div>
 
-        <div className="bg-card rounded-2xl border border-border p-8 shadow-lg">
+        <div className="bg-card rounded-2xl border border-border p-8 shadow-lg overflow-y-auto max-h-[85vh] scrollbar-hide">
           {/* Tab switcher */}
           <div className="flex bg-secondary rounded-xl p-1 mb-6">
             <button
               onClick={() => setMode("login")}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === "login" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
-                }`}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === "login" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
             >
               Log In
             </button>
             <button
               onClick={() => setMode("signup")}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === "signup" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
-                }`}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === "signup" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
             >
               Sign Up
             </button>
@@ -269,6 +315,19 @@ const Auth = () => {
                 onSubmit={handleLogin}
                 className="space-y-4"
               >
+                <div className="p-1 bg-secondary rounded-lg grid grid-cols-3 gap-1 mb-2">
+                  {["student", "teacher", "admin"].map(r => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setLoginRole(r)}
+                      className={`py-1.5 text-[10px] uppercase tracking-widest font-black rounded-md transition-all ${loginRole === r ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-secondary/80"}`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="login-email">Email</Label>
                   <Input
@@ -301,7 +360,7 @@ const Auth = () => {
                   </button>
                 </div>
                 <Button type="submit" className="w-full rounded-lg font-semibold" disabled={loading}>
-                  {loading ? "Signing in..." : "Sign In"}
+                  {loading ? "Signing in..." : `Sign In as ${loginRole}`}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
                   Don't have an account?{" "}
@@ -324,18 +383,11 @@ const Auth = () => {
                     <BookOpen className="w-6 h-6 text-primary" />
                   </div>
                   <h2 className="text-lg font-black">Reset Password</h2>
-                  <p className="text-xs text-muted-foreground">Enter your email and we'll send you a reset link.</p>
+                  <p className="text-xs text-muted-foreground">We'll send you a reset link.</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="forgot-email">Email Address</Label>
-                  <Input
-                    id="forgot-email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={forgotEmail}
-                    onChange={(e) => setForgotEmail(e.target.value)}
-                    required
-                  />
+                  <Input id="forgot-email" type="email" placeholder="you@example.com" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} required />
                 </div>
                 <Button type="submit" className="w-full rounded-lg font-semibold" disabled={loading}>
                   {loading ? "Sending..." : "Send Reset Link"}
@@ -358,63 +410,80 @@ const Auth = () => {
               >
                 <div className="space-y-2">
                   <Label htmlFor="signup-name">Full Name</Label>
-                  <Input
-                    id="signup-name"
-                    type="text"
-                    placeholder="Your full name"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    required
-                  />
+                  <Input id="signup-name" type="text" placeholder="Your full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    placeholder="Min 6 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={6}
-                  />
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-email">Email</Label>
+                    <Input id="signup-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password">Password</Label>
+                    <Input id="signup-password" type="password" placeholder="Min 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+                  </div>
                 </div>
 
-                {/* Role selection */}
                 <div className="space-y-2">
-                  <Label>I am a...</Label>
+                  <Label htmlFor="school-code">School Code</Label>
+                  <Input
+                    id="school-code"
+                    placeholder="e.g. KPS2024"
+                    value={schoolCode}
+                    onChange={(e) => setSchoolCode(e.target.value.toUpperCase())}
+                    required
+                    className="border-primary/50 text-center font-black tracking-widest uppercase"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Ask your school for the code.</p>
+                </div>
+
+                {selectedRole === "student" && (
                   <div className="grid grid-cols-2 gap-2">
-                    {roles.map((role) => (
+                    <div className="space-y-2">
+                      <Label>Grade Level</Label>
+                      <select
+                        value={classLevel}
+                        onChange={e => setClassLevel(e.target.value)}
+                        className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        {["P1", "P2", "P3", "P4", "P5", "P6", "S1", "S2", "S3", "S4", "S5", "S6"].map(g => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Term</Label>
+                      <select
+                        value={term}
+                        onChange={e => setTerm(e.target.value)}
+                        className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        {["Term 1", "Term 2", "Term 3"].map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>Register as...</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {roles.filter(r => r.value !== 'parent').map((role) => (
                       <button
                         key={role.value}
                         type="button"
                         onClick={() => setSelectedRole(role.value)}
-                        className={`p-3 rounded-xl border text-left transition-all ${selectedRole === role.value
-                          ? "border-primary bg-primary/5 ring-1 ring-primary"
-                          : "border-border hover:border-primary/30"
-                          }`}
+                        className={`p-2 rounded-xl border flex flex-col items-center justify-center transition-all ${selectedRole === role.value ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"}`}
                       >
-                        <div className="text-lg mb-1">{role.icon}</div>
-                        <div className="text-sm font-semibold text-foreground">{role.label}</div>
-                        <div className="text-xs text-muted-foreground leading-tight">{role.description}</div>
+                        <div className="text-xl mb-1">{role.icon}</div>
+                        <div className="text-[10px] font-black uppercase tracking-widest">{role.label}</div>
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <Button type="submit" className="w-full rounded-lg font-semibold" disabled={loading}>
-                  {loading ? "Creating account..." : "Create Account"}
+                  {loading ? "Creating account..." : "Sign Up"}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
                   Already have an account?{" "}
@@ -430,38 +499,25 @@ const Auth = () => {
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground font-medium">Or continue with</span>
+            <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest bg-card px-2 text-muted-foreground">
+              Or
             </div>
           </div>
 
           <Button
             variant="outline"
             type="button"
-            className="w-full rounded-lg font-semibold gap-3"
+            className="w-full rounded-lg font-semibold gap-3 h-12"
             onClick={handleGoogleSignIn}
             disabled={loading}
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                fill="#4285F4"
-              />
-              <path
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1.01.68-2.31 1.05-3.71 1.05-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                fill="#34A853"
-              />
-              <path
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                fill="#FBBC05"
-              />
-              <path
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                fill="#EA4335"
-              />
-              <path d="M1 1h22v22H1z" fill="none" />
+            <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1.01.68-2.31 1.05-3.71 1.05-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
             </svg>
-            Google
+            Sign in with Google
           </Button>
         </div>
 

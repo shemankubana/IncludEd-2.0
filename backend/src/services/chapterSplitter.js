@@ -1,12 +1,34 @@
+import axios from 'axios';
+
 /**
  * splitIntoChapters(text)
  * 
  * Intelligently splits book/play text into named chapters, acts, or scenes.
- * Works entirely locally - no external AI call needed.
+ * Now uses Ollama via AI Service for "smart" splitting, with regex fallback.
  * 
  * Returns an array of: [{ title: string, content: string }]
  */
-export function splitIntoChapters(text) {
+export async function splitIntoChapters(text) {
+    // Try Smart Splitting via AI Service first
+    try {
+        const aiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8082';
+        console.log(`🧠 Requesting smart structuring from AI Service...`);
+
+        const response = await axios.post(`${aiUrl}/structure-content`, {
+            content: text.slice(0, 50000) // Limit to 50k chars for structuring
+        }, { timeout: 15000 });
+
+        if (response.data && response.data.units && response.data.units.length > 0) {
+            console.log(`✅ Smart structuring successful: ${response.data.units.length} units detected.`);
+            return response.data.units.map(unit => ({
+                title: unit.title || 'Untitled Section',
+                content: unit.content || ''
+            }));
+        }
+    } catch (err) {
+        console.log(`⚠️ Smart structuring failed or timed out: ${err.message}. Falling back to Regex.`);
+    }
+
     // Patterns to detect structural headings (case insensitive)
     const headingPatterns = [
         // Shakespeare / plays: ACT I, Act 2, ACT ONE, SCENE 1, SCENE II

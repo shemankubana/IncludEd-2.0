@@ -14,7 +14,7 @@ import {
     SidebarInset,
     SidebarTrigger
 } from "@/components/ui/sidebar";
-import { BookOpen, Home, BookHeadphones, LayoutDashboard, Settings, LogOut, Bell, User } from "lucide-react";
+import { BookOpen, Home, BookHeadphones, LayoutDashboard, Settings, LogOut, Bell, User, Users, ShieldCheck, GraduationCap } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,8 @@ interface DashboardLayoutProps {
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { user, logout } = useAuth();
+    const { user, profile, logout, previewMode, setPreviewMode } = useAuth();
+    const effectiveRole = previewMode ? "student" : role;
 
     const handleLogout = async () => {
         try {
@@ -53,20 +54,40 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
 
     const teacherNav: NavItem[] = [
         { title: "Overview", url: "/teacher/dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
-        { title: "Live Classes", url: "/teacher/classes", icon: <Bell className="w-5 h-5" /> },
         { title: "Upload Content", url: "/teacher/create", icon: <Settings className="w-5 h-5" /> },
         { title: "My Content", url: "/teacher/my-content", icon: <BookOpen className="w-5 h-5" /> },
     ];
 
-    const navItems = role === "student" ? studentNav : teacherNav;
+    const adminNav: NavItem[] = [
+        { title: "Dashboard", url: "/admin/dashboard", icon: <ShieldCheck className="w-5 h-5" /> },
+        { title: "User Roster", url: "/admin/users", icon: <Users className="w-5 h-5" /> },
+        { title: "School Profile", url: "/admin/profile", icon: <GraduationCap className="w-5 h-5" /> },
+    ];
+
+    const navItems = effectiveRole === "student" ? studentNav : effectiveRole === "admin" ? adminNav : teacherNav;
 
     return (
         <SidebarProvider>
             <div className="flex min-h-screen w-full bg-background">
                 <Sidebar className="border-r border-border shadow-sm">
                     <SidebarHeader className="p-6">
-                        <div className="flex items-center justify-center">
-                            <img src="/logo.png" alt="IncludEd Logo" className="w-32 h-auto" />
+                        <div className="flex flex-col items-center justify-center gap-2">
+                            {profile?.school?.logoUrl ? (
+                                <div className="w-20 h-20 rounded-2xl bg-white border border-border shadow-sm flex items-center justify-center overflow-hidden">
+                                    <img
+                                        src={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}${profile.school.logoUrl}`}
+                                        alt={profile.school.name}
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                            ) : (
+                                <img src="/logo.png" alt="IncludEd Logo" className="w-28 h-auto" />
+                            )}
+                            {profile?.school && (
+                                <p className="text-[10px] font-black uppercase text-primary tracking-widest text-center px-4 leading-tight">
+                                    {profile.school.name}
+                                </p>
+                            )}
                         </div>
                     </SidebarHeader>
 
@@ -99,14 +120,29 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                     <SidebarFooter className="p-4 mt-auto">
                         <div className="p-4 rounded-2xl bg-secondary/50 border border-border flex flex-col gap-3">
                             <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                                    <User className="w-4 h-4" />
+                                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary border border-primary/30">
+                                    {profile?.firstName?.[0] || user?.email?.[0] || 'U'}
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                    <p className="text-xs font-bold truncate">{user?.displayName || "User"}</p>
-                                    <p className="text-[10px] text-muted-foreground truncate capitalize">{role}</p>
+                                    <p className="text-xs font-bold truncate">{profile?.firstName || user?.displayName || "User"}</p>
+                                    <p className="text-[10px] text-muted-foreground truncate capitalize">
+                                        {effectiveRole} {previewMode && "(Preview)"}
+                                    </p>
                                 </div>
                             </div>
+
+                            {role === "teacher" && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full justify-start gap-2 h-8 text-[10px] font-bold uppercase tracking-wider"
+                                    onClick={() => setPreviewMode(!previewMode)}
+                                >
+                                    <User className="w-3.5 h-3.5" />
+                                    {previewMode ? "Back to Teacher" : "Preview as Student"}
+                                </Button>
+                            )}
+
                             <Button
                                 variant="ghost"
                                 size="sm"
@@ -124,16 +160,18 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                         <div className="flex items-center gap-4">
                             <SidebarTrigger className="md:hidden" />
                             <div className="h-4 w-px bg-border hidden md:block" />
-                            <h2 className="text-sm font-bold tracking-tight text-muted-foreground">
-                                Dashboard
+                            <h2 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                                {location.pathname.split('/').pop()?.replace('-', ' ')}
                             </h2>
                         </div>
                         <div className="flex items-center gap-3">
                             <ThemeToggle />
-                            <div className="p-1 px-3 rounded-full bg-accent/10 border border-accent/20 text-accent text-[10px] font-bold flex items-center gap-1.5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                                AI Active
-                            </div>
+                            {effectiveRole !== "student" && (
+                                <div className="p-1 px-3 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold flex items-center gap-1.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                                    AI Active
+                                </div>
+                            )}
                         </div>
                     </header>
 

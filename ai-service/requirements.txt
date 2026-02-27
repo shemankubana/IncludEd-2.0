@@ -16,3 +16,4 @@ shimmy>=0.2.1
 edge-tts==6.1.9
 openai-whisper==20231117
 aiofiles==23.2.1
+requests==2.31.0

@@ -39,6 +39,10 @@ export const Literature = sequelize.define('Literature', {
     type: DataTypes.STRING,
     allowNull: false
   },
+  schoolId: {
+    type: DataTypes.UUID,
+    allowNull: true
+  },
   status: {
     type: DataTypes.ENUM('processing', 'ready', 'error'),
     defaultValue: 'processing'
@@ -56,5 +60,13 @@ export const Literature = sequelize.define('Literature', {
     allowNull: true,
     defaultValue: null,
     comment: 'Array of {title, content} chapter/scene/act sections detected from content'
+  },
+  generateAudio: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  audioUrl: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 });

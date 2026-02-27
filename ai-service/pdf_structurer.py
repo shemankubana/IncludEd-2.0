@@ -28,6 +28,7 @@ import re
 import sys
 import textwrap
 import uuid
+import requests
 from typing import Any, Dict, List, Optional
 
 # ── PDF parsing ────────────────────────────────────────────────────────────────
@@ -118,25 +119,64 @@ def clean_text(raw: str) -> str:
 # 2. AI ANALYSIS — ALL GPT CALLS ISOLATED HERE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def call_llm(system_prompt: str, user_content: str, use_ollama: bool = True) -> Dict:
+    """
+    Gateway for LLM calls (OpenAI or Ollama).
+    """
+    if use_ollama:
+        return call_ollama(system_prompt, user_content)
+    else:
+        # Fallback to OpenAI if configured
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        return call_gpt(client, system_prompt, user_content)
+
+def call_ollama(system_prompt: str, user_content: str) -> Dict:
+    """
+    Calls local Ollama instance.
+    """
+    url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+    model = os.environ.get("OLLAMA_MODEL", "llama3")
+    
+    payload = {
+        "model": model,
+        "prompt": user_content,
+        "system": system_prompt,
+        "format": "json",
+        "stream": False,
+        "options": {"temperature": 0.2}
+    }
+    
+    try:
+        response = requests.post(f"{url}/api/generate", json=payload, timeout=120)
+        response.raise_for_status()
+        result = response.json()
+        return json.loads(result.get("response", "{}"))
+    except Exception as e:
+        print(f"❌ Ollama request failed: {e}")
+        return {}
+
 def call_gpt(client: OpenAI, system_prompt: str, user_content: str, model: str = "gpt-4o") -> Dict:
     """
     Single gateway for all OpenAI calls.
     Forces JSON-only output. Raises on failure.
     """
-    response = client.chat.completions.create(
-        model=model,
-        response_format={"type": "json_object"},
-        temperature=0.1,  # Low temperature = deterministic, consistent JSON
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_content},
-        ],
-    )
-    raw_json = response.choices[0].message.content
-    return json.loads(raw_json)
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        print(f"❌ OpenAI request failed: {e}")
+        return {}
 
 
-def detect_document_type_and_title(client: OpenAI, sample_text: str) -> Dict[str, str]:
+def detect_document_type_and_title(text: str, use_ollama: bool = True) -> Dict[str, str]:
     """
     Step 1: Classify the document and extract its title.
     Returns {"document_type": "play|novel|generic", "title": "..."}
@@ -158,7 +198,7 @@ def detect_document_type_and_title(client: OpenAI, sample_text: str) -> Dict[str
         }
     """).strip()
 
-    result = call_gpt(client, system, f"TEXT SAMPLE:\n\n{sample_text[:3000]}")
+    result = call_llm(system, f"TEXT SAMPLE:\n\n{text[:3000]}", use_ollama=use_ollama)
 
     # Validate
     if result.get("document_type") not in ("play", "novel", "generic"):
@@ -169,7 +209,7 @@ def detect_document_type_and_title(client: OpenAI, sample_text: str) -> Dict[str
     return result
 
 
-def structure_play(client: OpenAI, text: str, chunk_size: int = 8000) -> List[Dict]:
+def structure_play(text: str, chunk_size: int = 8000, use_ollama: bool = True) -> List[Dict]:
     """
     Step 2a: Structure a play into Acts → Scenes → Dialogue blocks.
     Processes in chunks to handle large texts.
@@ -220,7 +260,7 @@ def structure_play(client: OpenAI, text: str, chunk_size: int = 8000) -> List[Di
     for i, chunk in enumerate(chunks):
         print(f"  🎭 Processing play chunk {i+1}/{len(chunks)}...", flush=True)
         try:
-            result = call_gpt(client, system, f"PLAY TEXT:\n\n{chunk}")
+            result = call_llm(system, f"PLAY TEXT:\n\n{chunk}", use_ollama=use_ollama)
             acts = result.get("acts", [])
             all_acts.extend(acts)
         except Exception as e:
@@ -230,7 +270,7 @@ def structure_play(client: OpenAI, text: str, chunk_size: int = 8000) -> List[Di
     return _merge_play_acts(all_acts)
 
 
-def structure_novel(client: OpenAI, text: str, chunk_size: int = 8000) -> List[Dict]:
+def structure_novel(text: str, chunk_size: int = 8000, use_ollama: bool = True) -> List[Dict]:
     """
     Step 2b: Structure a novel into Chapters → Sections → Paragraphs.
     """
@@ -271,7 +311,7 @@ def structure_novel(client: OpenAI, text: str, chunk_size: int = 8000) -> List[D
     for i, chunk in enumerate(chunks):
         print(f"  📖 Processing novel chunk {i+1}/{len(chunks)}...", flush=True)
         try:
-            result = call_gpt(client, system, f"NOVEL TEXT:\n\n{chunk}")
+            result = call_llm(system, f"NOVEL TEXT:\n\n{chunk}", use_ollama=use_ollama)
             chapters = result.get("chapters", [])
             all_chapters.extend(chapters)
         except Exception as e:
@@ -280,7 +320,7 @@ def structure_novel(client: OpenAI, text: str, chunk_size: int = 8000) -> List[D
     return all_chapters
 
 
-def structure_generic(client: OpenAI, text: str, chunk_size: int = 8000) -> List[Dict]:
+def structure_generic(text: str, chunk_size: int = 8000, use_ollama: bool = True) -> List[Dict]:
     """
     Step 2c: Structure a generic/academic document into logical sections.
     """
@@ -311,7 +351,7 @@ def structure_generic(client: OpenAI, text: str, chunk_size: int = 8000) -> List
     for i, chunk in enumerate(chunks):
         print(f"  📄 Processing generic chunk {i+1}/{len(chunks)}...", flush=True)
         try:
-            result = call_gpt(client, system, f"DOCUMENT TEXT:\n\n{chunk}")
+            result = call_llm(system, f"DOCUMENT TEXT:\n\n{chunk}", use_ollama=use_ollama)
             sections = result.get("sections", [])
             all_sections.extend(sections)
         except Exception as e:
@@ -453,12 +493,12 @@ def _merge_play_acts(acts: List[Dict]) -> List[Dict]:
 # 5. MAIN PIPELINE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def process_pdf(pdf_path: str, output_path: str, api_key: str) -> Dict:
+def process_pdf(pdf_path: str, output_path: str, api_key: Optional[str] = None, use_ollama: bool = True) -> Dict:
     """
     Full pipeline:
       1. Extract text from PDF
       2. Classify document type
-      3. Structure content using GPT-4o
+      3. Structure content using LLM (Ollama or GPT-4o)
       4. Normalize and validate output
       5. Save JSON
     """
@@ -467,50 +507,49 @@ def process_pdf(pdf_path: str, output_path: str, api_key: str) -> Dict:
     # Step 1 – Extract
     print("🔍 Extracting text...", flush=True)
     raw_text = extract_text_from_pdf(pdf_path)
-    clean = clean_text(raw_text)
-    print(f"   ✅ Extracted {len(clean):,} characters from PDF.", flush=True)
+    text = clean_text(raw_text)
+    print(f"   ✅ Extracted {len(text):,} characters from PDF.", flush=True)
 
     # Step 2 – Classify
-    client = OpenAI(api_key=api_key)
     print("🧠 Classifying document type...", flush=True)
-    meta = detect_document_type_and_title(client, clean)
-    doc_type = meta["document_type"]
-    title    = meta["title"]
+    meta_data = detect_document_type_and_title(text, use_ollama=use_ollama)
+    doc_type = meta_data.get("document_type", "generic")
+    title    = meta_data.get("title", os.path.basename(pdf_path).replace(".pdf", ""))
     print(f"   ✅ Type: {doc_type} | Title: {title}", flush=True)
 
     # Step 3 – Structure
     print(f"⚙️  Building {doc_type} structure...", flush=True)
     if doc_type == "play":
-        raw_structure = structure_play(client, clean)
+        raw_structure = structure_play(text, use_ollama=use_ollama)
     elif doc_type == "novel":
-        raw_structure = structure_novel(client, clean)
+        raw_structure = structure_novel(text, use_ollama=use_ollama)
     else:
-        raw_structure = structure_generic(client, clean)
+        raw_structure = structure_generic(text, use_ollama=use_ollama)
 
     # Step 4 – Normalize
     print("🔧 Normalizing output...", flush=True)
     normalized = normalize_structure(doc_type, raw_structure)
 
     # Step 5 – Assemble final document
-    document = {
+    final_data = {
         "document_type": doc_type,
         "title":         title,
         "metadata": {
             "source_file":     os.path.basename(pdf_path),
             "total_units":     len(normalized),
-            "total_chars":     len(clean),
+            "total_chars":     len(text),
         },
-        "structure": normalized
+        "units": normalized
     }
 
     # Save
     print(f"💾 Saving to: {output_path}", flush=True)
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(document, f, indent=2, ensure_ascii=False)
+        json.dump(final_data, f, indent=2, ensure_ascii=False)
 
     print(f"\n✅ Done! Saved: {output_path}", flush=True)
     print(f"   Structure: {len(normalized)} top-level sections", flush=True)
-    return document
+    return final_data
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -524,7 +563,8 @@ def main():
     parser.add_argument("pdf",          help="Path to the input PDF file")
     parser.add_argument("output",       nargs="?", help="Path to the output JSON file (default: <pdf>.json)")
     parser.add_argument("--api-key",    help="OpenAI API key (or set OPENAI_API_KEY env var)")
-    parser.add_argument("--model",      default="gpt-4o", help="OpenAI model to use (default: gpt-4o)")
+    parser.add_argument("--ollama",     action="store_true", help="Use local Ollama for LLM calls (default: False)")
+    parser.add_argument("--model",      default="gpt-4o", help="LLM model to use (default: gpt-4o, or llama3 if --ollama is used)")
 
     args = parser.parse_args()
 
@@ -542,7 +582,7 @@ def main():
         )
 
     try:
-        process_pdf(args.pdf, args.output, api_key)
+        process_pdf(args.pdf, args.output, api_key, use_ollama=args.ollama)
     except FileNotFoundError as e:
         sys.exit(f"ERROR: {e}")
     except ValueError as e:

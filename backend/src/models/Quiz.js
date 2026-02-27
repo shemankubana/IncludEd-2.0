@@ -11,6 +11,10 @@ export const Quiz = sequelize.define('Quiz', {
     type: DataTypes.UUID,
     allowNull: false
   },
+  schoolId: {
+    type: DataTypes.UUID,
+    allowNull: true
+  },
   question: {
     type: DataTypes.TEXT,
     allowNull: false

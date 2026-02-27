@@ -21,6 +21,7 @@ const Welcome = () => {
                 if (response.ok) {
                     const userData = await response.json();
                     if (userData.role === "teacher") navigate("/teacher/dashboard");
+                    else if (userData.role === "admin") navigate("/admin/dashboard");
                     else navigate("/student/dashboard");
                 }
             };

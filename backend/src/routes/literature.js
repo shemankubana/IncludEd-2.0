@@ -15,16 +15,19 @@ router.post('/upload', authenticateToken, upload.fields([
   { name: 'image', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    const { title, author, language, subject, content } = req.body;
+    const { title, author, language, subject, content, simplifyText, generateAudio } = req.body;
     const files = req.files;
     const pdfFile = files?.file?.[0];
     const imageFile = files?.image?.[0];
 
+    const isSimplifyEnabled = simplifyText === 'true';
+    const isAudioEnabled = generateAudio === 'true';
+
     let originalContent, adaptedContent, wordCount;
 
     if (pdfFile) {
-      console.log(`📄 Processing PDF: ${pdfFile.originalname}`);
-      const processed = await processPDF(pdfFile.path);
+      console.log(`📄 Processing PDF: ${pdfFile.originalname} (Simplify: ${isSimplifyEnabled}, Audio: ${isAudioEnabled})`);
+      const processed = await processPDF(pdfFile.path, { simplifyText: isSimplifyEnabled });
       originalContent = processed.originalContent;
       adaptedContent = processed.adaptedContent;
       wordCount = processed.wordCount;
@@ -38,8 +41,10 @@ router.post('/upload', authenticateToken, upload.fields([
     }
 
     // Create literature record
-    const sections = splitIntoChapters(originalContent);
+    const sections = await splitIntoChapters(originalContent);
     console.log(`📚 Detected ${sections.length} sections/chapters`);
+
+    const user = await import('../models/User.js').then(m => m.User.findByPk(req.user.userId));
 
     const literature = await Literature.create({
       title: title || (pdfFile ? pdfFile.originalname.replace('.pdf', '') : 'New Lesson'),
@@ -52,8 +57,10 @@ router.post('/upload', authenticateToken, upload.fields([
       wordCount,
       sections,
       uploadedBy: req.user.userId,
+      schoolId: user?.schoolId || null,
       status: 'ready',
-      questionsGenerated: 0
+      questionsGenerated: 0,
+      generateAudio: isAudioEnabled
     });
 
     console.log(`💾 Saved to database: ${literature.id}`);
@@ -170,10 +177,14 @@ router.get('/my-content', authenticateToken, async (req, res) => {
   }
 });
 
-// List all literature (for teacher dashboard)
+// List all literature (for student dashboard / library)
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const user = await import('../models/User.js').then(m => m.User.findByPk(req.user.userId));
+    const schoolId = user?.schoolId;
+
     const literature = await Literature.findAll({
+      where: schoolId ? { schoolId } : {},
       order: [['createdAt', 'DESC']],
       limit: 50
     });

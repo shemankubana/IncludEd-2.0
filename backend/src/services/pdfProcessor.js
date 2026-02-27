@@ -2,9 +2,10 @@ import fs from 'fs';
 import pdf from 'pdf-parse';
 import axios from 'axios';
 
-export async function processPDF(filePath) {
+export async function processPDF(filePath, options = {}) {
   try {
-    console.log('📖 Reading PDF file...');
+    const { simplifyText = true } = options;
+    console.log(`📖 Reading PDF file... (Simplify: ${simplifyText})`);
 
     // Read PDF
     const dataBuffer = fs.readFileSync(filePath);
@@ -13,11 +14,6 @@ export async function processPDF(filePath) {
     let originalContent = pdfData.text;
 
     console.log(`📊 Extracted ${originalContent.length} characters from PDF`);
-
-    // Removed the 5000 character hard limit to allow full book processing
-    if (originalContent.length > 5000) {
-      console.log(`⚠️  PDF is large (${originalContent.length} chars). Proceeding with full content.`);
-    }
 
     // Remove metadata and formatting junk
     originalContent = cleanPDFText(originalContent);
@@ -28,21 +24,21 @@ export async function processPDF(filePath) {
     // Send to AI service for adaptation
     let adaptedContent = originalContent;
 
-    if (originalContent.length > 15000) {
+    if (!simplifyText) {
+      console.log('⏭️  Skipping AI adaptation as requested');
+    } else if (originalContent.length > 25000) {
       console.log('⚠️ Content is too large for synchronous AI adaptation. Bypassing adaptation step to avoid timeouts.');
     } else {
       try {
         console.log('🤖 Sending to AI service for adaptation...');
-        console.log(`🔗 AI Service URL: ${process.env.AI_SERVICE_URL || 'http://localhost:8000'}`);
-
         const response = await axios.post(
-          `${process.env.AI_SERVICE_URL || 'http://localhost:8000'}/adapt-text`,  // Fixed URL
+          `${process.env.AI_SERVICE_URL || 'http://localhost:8082'}/adapt-text`,
           {
             text: originalContent,
             target_level: 'accessible'
           },
           {
-            timeout: 15000,
+            timeout: 20000,
             headers: { 'Content-Type': 'application/json' }
           }
         );
@@ -50,20 +46,9 @@ export async function processPDF(filePath) {
         if (response.data && response.data.adaptedText) {
           adaptedContent = response.data.adaptedText;
           console.log('✅ AI adaptation successful');
-        } else {
-          console.log('⚠️  AI returned invalid response, using original');
         }
-
       } catch (error) {
-        if (error.response) {
-          console.log(`⚠️  AI service error ${error.response.status}: ${error.response.statusText}`);
-          console.log(`Response data:`, error.response.data);
-        } else if (error.request) {
-          console.log(`⚠️  AI service not reachable (is it running on port 8000?)`);
-        } else {
-          console.log(`⚠️  AI adaptation error: ${error.message}`);
-        }
-        // Use original if AI fails
+        console.log(`⚠️  AI adaptation error: ${error.message}`);
         adaptedContent = originalContent;
       }
     }

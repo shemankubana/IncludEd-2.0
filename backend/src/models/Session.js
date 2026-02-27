@@ -15,6 +15,10 @@ export const Session = sequelize.define('Session', {
         type: DataTypes.STRING,
         allowNull: false
     },
+    schoolId: {
+        type: DataTypes.UUID,
+        allowNull: true
+    },
     literatureId: {
         type: DataTypes.UUID,
         allowNull: true   // null if session was started without a specific text

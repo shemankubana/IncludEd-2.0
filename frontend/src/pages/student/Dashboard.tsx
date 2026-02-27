@@ -6,12 +6,43 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Trophy, Zap, Clock, ArrowRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom"; // Added for navigate function
+
+const Leaderboard = ({ users }: { users: any[] }) => (
+    <Card className="rounded-[32px] border border-border overflow-hidden bg-card/50 shadow-none">
+        <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-amber" /> School Leaderboard
+            </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+            <div className="divide-y divide-border/30">
+                {users.map((u, i) => (
+                    <div key={i} className="flex items-center gap-3 p-4 hover:bg-secondary/20 transition-colors">
+                        <div className="w-6 text-xs font-black text-muted-foreground">{i + 1}</div>
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-xs">
+                            {u.User?.firstName?.[0] || 'U'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold truncate">{u.User?.firstName} {u.User?.lastName}</p>
+                            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{u.User?.classLevel}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-sm font-black text-primary">{u.xp} XP</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </CardContent>
+    </Card>
+);
 
 const StudentDashboard = () => {
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [studentData, setStudentData] = useState<any>(null);
     const [recentLessons, setRecentLessons] = useState<any[]>([]);
+    const [leaderboard, setLeaderboard] = useState<any[]>([]); // Added leaderboard state
+    const navigate = useNavigate(); // Added useNavigate hook
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -21,30 +52,26 @@ const StudentDashboard = () => {
                 const headers = { "Authorization": `Bearer ${idToken}` };
                 const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-                // Fetch student stats
-                const profileRes = await fetch(`${baseUrl}/api/auth/me`, { headers });
-                const profileData = await profileRes.json();
+                // Fetch recent sessions and leaderboard in parallel
+                const [sessionsRes, leaderboardRes] = await Promise.all([
+                    fetch(`${baseUrl}/api/sessions/my`, { headers }),
+                    fetch(`${baseUrl}/api/stats/leaderboard`, { headers })
+                ]);
 
-                // Fetch recent sessions
-                const sessionsRes = await fetch(`${baseUrl}/api/sessions/my`, { headers });
-                const sessionsData = await sessionsRes.json();
+                if (sessionsRes.ok) {
+                    const sessionsData = await sessionsRes.json();
+                    setRecentLessons(sessionsData.map((s: any) => ({
+                        id: s.Literature?.id || s.id,
+                        title: s.Literature?.title || "Unknown Lesson",
+                        progress: Math.round(s.quizScore * 100 || 0),
+                        subject: s.Literature?.subject || "General",
+                        color: "bg-primary"
+                    })));
+                }
 
-                setStudentData({
-                    name: profileData.firstName || "Explorer",
-                    xp: profileData.xp || 0,
-                    nextLevelXp: 3000,
-                    streak: profileData.streak || 0,
-                    lessonsCompleted: profileData.totalSessions || 0,
-                    timeSpent: "2h 45m", // Placeholder for derived calc if not in backend
-                });
-
-                setRecentLessons(sessionsData.map((s: any) => ({
-                    id: s.Literature?.id || s.id,
-                    title: s.Literature?.title || "Unknown Lesson",
-                    progress: Math.round(s.quizScore * 100 || 0),
-                    subject: s.Literature?.subject || "General",
-                    color: "bg-primary"
-                })));
+                if (leaderboardRes.ok) {
+                    setLeaderboard(await leaderboardRes.json());
+                }
 
             } catch (error) {
                 console.error("Failed to fetch dashboard data:", error);
@@ -53,8 +80,8 @@ const StudentDashboard = () => {
             }
         };
 
-        fetchDashboardData();
-    }, [user]);
+        if (profile) fetchDashboardData();
+    }, [user, profile]);
 
     if (loading) {
         return (
@@ -66,13 +93,14 @@ const StudentDashboard = () => {
         );
     }
 
-    const student = studentData || {
-        name: "Explorer",
-        xp: 0,
-        nextLevelXp: 3000,
-        streak: 0,
-        lessonsCompleted: 0,
-        timeSpent: "0m",
+    const student = {
+        name: profile?.firstName || "Explorer",
+        xp: profile?.xp || 0,
+        nextLevelXp: ((profile?.level || 1)) * 500, // Updated nextLevelXp calculation
+        streak: profile?.streak || 0,
+        lessonsCompleted: profile?.totalSessions || 0,
+        timeSpent: "2h 45m",
+        level: profile?.level || 1, // Added level
     };
 
     return (
@@ -93,7 +121,7 @@ const StudentDashboard = () => {
 
                         <div className="flex gap-4">
                             <div className="p-4 rounded-3xl bg-secondary/50 border border-border flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-2xl bg-amber/20 flex items-center justify-center text-amber">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-600">
                                     <Zap className="w-5 h-5 fill-current" />
                                 </div>
                                 <div>
@@ -106,7 +134,7 @@ const StudentDashboard = () => {
                                     <Trophy className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-tighter">Level 8</p>
+                                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-tighter">Level {student.level}</p>
                                     <p className="text-xl font-bold">Explorer</p>
                                 </div>
                             </div>
@@ -124,9 +152,9 @@ const StudentDashboard = () => {
                             <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-primary/10 transition-colors" />
                             <CardHeader className="pb-2 relative z-10">
                                 <CardTitle className="text-xl font-bold flex items-center gap-2">
-                                    Next Level: Master Reader
+                                    Next Level Progress
                                 </CardTitle>
-                                <CardDescription>You are only {student.nextLevelXp - student.xp} XP away from the next title!</CardDescription>
+                                <CardDescription>You are only {student.nextLevelXp - student.xp} XP away from Level {student.level + 1}!</CardDescription>
                             </CardHeader>
                             <CardContent className="relative z-10">
                                 <div className="space-y-4">
@@ -141,12 +169,12 @@ const StudentDashboard = () => {
 
                         {/* Continue Reading */}
                         <div className="space-y-4">
-                            <h3 className="text-xl font-bold tracking-tight px-1">Continue Learning</h3>
+                            <h3 className="text-xl font-bold tracking-tight px-1 text-primary uppercase text-[10px] tracking-[0.2em]">Continue Learning</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {recentLessons.map((lesson) => (
-                                    <Card key={lesson.id} className="rounded-3xl border border-border overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer shadow-none hover:shadow-lg">
+                                    <Card key={lesson.id} className="rounded-3xl border border-border overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer shadow-none hover:shadow-lg bg-card/50">
                                         <CardHeader className="pb-2">
-                                            <span className={`w-fit px-2 py-0.5 rounded-full ${lesson.color} text-[10px] font-bold text-white uppercase`}>
+                                            <span className={`w-fit px-2 py-0.5 rounded-full ${lesson.color} text-[10px] font-black text-white uppercase`}>
                                                 {lesson.subject}
                                             </span>
                                             <CardTitle className="text-lg font-bold group-hover:text-primary transition-colors mt-2">{lesson.title}</CardTitle>
@@ -154,12 +182,15 @@ const StudentDashboard = () => {
                                         <CardContent>
                                             <div className="space-y-4">
                                                 <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
-                                                    <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> 15m left</div>
-                                                    <div>{lesson.progress}% done</div>
+                                                    <div className="flex items-center gap-1.5 font-black uppercase tracking-widest"><Clock className="w-3.5 h-3.5" /> 15m</div>
+                                                    <div className="font-black">{lesson.progress}%</div>
                                                 </div>
                                                 <Progress value={lesson.progress} className="h-2 rounded-full bg-secondary" />
-                                                <Button className="w-full rounded-2xl gap-2 font-bold h-10">
-                                                    Resume Session <ArrowRight className="w-4 h-4" />
+                                                <Button
+                                                    onClick={() => navigate(`/student/reader/${lesson.id}`)}
+                                                    className="w-full rounded-2xl gap-2 font-black uppercase text-xs h-10 tracking-widest"
+                                                >
+                                                    Resume <ArrowRight className="w-4 h-4" />
                                                 </Button>
                                             </div>
                                         </CardContent>
@@ -169,45 +200,36 @@ const StudentDashboard = () => {
                         </div>
                     </div>
 
-                    {/* Sidebar Area: Stats & Achievements */}
+                    {/* Sidebar Area: Stats & Leaderboard */}
                     <div className="space-y-8">
-                        <Card className="rounded-[32px] border border-border overflow-hidden bg-secondary/30 shadow-none border-dashed p-2">
+                        <Leaderboard users={leaderboard} />
+
+                        {/* Session Stats */}
+                        <Card className="rounded-[32px] border border-border overflow-hidden bg-secondary/20 shadow-none border-dashed p-2">
                             <CardHeader>
-                                <CardTitle className="text-lg font-bold">Session Stats</CardTitle>
+                                <CardTitle className="text-lg font-bold">Quick Stats</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="flex items-center justify-between p-4 rounded-2xl bg-background border border-border">
+                                <div className="flex items-center justify-between p-4 rounded-2xl bg-card border border-border">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-cyan/10 flex items-center justify-center text-cyan">
+                                        <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-600">
                                             <BookOpen className="w-4 h-4" />
                                         </div>
                                         <span className="text-sm font-bold">Lessons</span>
                                     </div>
                                     <span className="text-lg font-black">{student.lessonsCompleted}</span>
                                 </div>
-                                <div className="flex items-center justify-between p-4 rounded-2xl bg-background border border-border">
+                                <div className="flex items-center justify-between p-4 rounded-2xl bg-card border border-border">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-rose/10 flex items-center justify-center text-rose">
+                                        <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-600">
                                             <Clock className="w-4 h-4" />
                                         </div>
-                                        <span className="text-sm font-bold">Reading Time</span>
+                                        <span className="text-sm font-bold">Time</span>
                                     </div>
                                     <span className="text-lg font-black">{student.timeSpent}</span>
                                 </div>
                             </CardContent>
                         </Card>
-
-                        {/* Daily Challenge */}
-                        <div className="p-6 rounded-[32px] bg-primary text-primary-foreground relative overflow-hidden shadow-xl">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
-                            <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
-                                <Zap className="w-5 h-5 fill-current" /> Daily Challenge
-                            </h3>
-                            <p className="text-sm opacity-90 mb-6 font-medium">Read for 20 minutes to earn a 2x XP booster!</p>
-                            <Button variant="secondary" className="w-full rounded-2xl font-black text-xs uppercase h-10 tracking-widest">
-                                Open Lesson
-                            </Button>
-                        </div>
                     </div>
 
                 </div>

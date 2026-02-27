@@ -20,16 +20,20 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import os
 import time
+import tempfile
 from dotenv import load_dotenv
+import shutil
 
 # Service imports
-from services.question_generator  import FreeQuestionGenerator
+from services.smart_question_generator import SmartQuestionGenerator
 from services.accessibility_adapter import FreeAccessibilityAdapter
 from services.rl_agent_service    import RLAgentService
 from services.attention_monitor   import AttentionMonitor
 from services.session_manager     import SessionManager
 from services.tts_service         import TTSService
 from services.video_service       import VideoService
+from services.ollama_service      import OllamaService
+from pdf_structurer import process_pdf
 
 load_dotenv()
 
@@ -51,12 +55,13 @@ app.add_middleware(
 )
 
 # ── Service singletons ────────────────────────────────────────────────────────
-question_gen        = FreeQuestionGenerator()
+question_gen        = SmartQuestionGenerator()
 accessibility_adapter = FreeAccessibilityAdapter()
 rl_agent            = RLAgentService()
 session_manager     = SessionManager()
 tts_service         = TTSService()
 video_service       = VideoService()
+ollama_service      = OllamaService()
 
 # Simple in-memory analytics store (per session summary for teacher dashboard)
 # In production this would be replaced by calls to the Node.js backend's DB
@@ -80,6 +85,10 @@ class TTSRequest(BaseModel):
 class QuestionGenRequest(BaseModel):
     content: str
     count: int = Field(default=10, ge=1, le=20)
+
+class StructureRequest(BaseModel):
+    content: Optional[str] = None
+    file_path: Optional[str] = None
 
 class SessionStartRequest(BaseModel):
     student_id: str
@@ -193,7 +202,38 @@ async def generate_questions(request: QuestionGenRequest):
         questions = question_gen.generate(content_chunk, request.count)
         return {"questions": questions}
     except Exception as e:
-        return {"questions": question_gen.generate_fallback(request.content[:1000], request.count)}
+        print(f"❌ Question generation endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/structure-content")
+async def structure_content(request: StructureRequest):
+    """
+    Expertly structure content into Chapters/Acts/Scenes using Ollama.
+    """
+    try:
+        # If text is provided directly
+        if request.content:
+            # We need a temp file for the structurer's current implementation
+            with tempfile.NamedTemporaryFile(suffix=".txt", mode="w", delete=False) as tf:
+                tf.write(request.content)
+                temp_path = tf.name
+            
+            # This is a bit of a hack since process_pdf expects a PDF, 
+            # but we can modify it or add a text-based structure function.
+            # For now, let's assume we use the novel structure logic directly.
+            from pdf_structurer import structure_novel, normalize_structure
+            
+            raw_structure = structure_novel(request.content, use_ollama=True)
+            normalized = normalize_structure("novel", raw_structure)
+            
+            os.unlink(temp_path)
+            return {"units": normalized}
+            
+        return {"error": "No content provided"}
+    except Exception as e:
+        print(f"❌ Structuring failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/video/transcribe")

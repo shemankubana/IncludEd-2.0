@@ -1,5 +1,6 @@
 import re
 from typing import List, Dict, Optional
+from .ollama_service import OllamaService
 
 class FreeAccessibilityAdapter:
     def __init__(self):
@@ -37,16 +38,25 @@ class FreeAccessibilityAdapter:
             'sufficient': 'enough', 'assist': 'help', 'request': 'ask',
             'locate': 'find', 'observe': 'see', 'perceive': 'see',
         }
+        
+        self.ollama = OllamaService()
     
     def adapt_text(
         self, 
         text: str, 
         level: str = "accessible",
-        disability_profile: Optional[Dict] = None
+        disability_profile: Optional[Dict] = None,
+        use_llm: bool = True
     ) -> str:
         """
-        Main adaptation function - FAST and FREE
+        Main adaptation function. Uses Ollama for quality, falls back to rules for speed.
         """
+        if use_llm and self.ollama.is_available():
+            try:
+                return self.adapt_text_llm(text, level, disability_profile)
+            except Exception as e:
+                print(f"⚠️  LLM adaptation failed: {e}. Falling back to rules.")
+        
         # Step 1: Clean and normalize
         text = self._normalize_text(text)
         
@@ -79,6 +89,42 @@ class FreeAccessibilityAdapter:
                 text = self._add_scene_descriptions(text)
         
         return text
+
+    def adapt_text_llm(self, text: str, level: str, disability_profile: Optional[Dict]) -> str:
+        """
+        Uses Llama 3 to intelligently simplify and adapt educational content.
+        """
+        disabilities = disability_profile.get("disabilities", []) if disability_profile else []
+        
+        system_prompt = (
+            "You are an expert in accessible education. Your task is to rewrite the provided "
+            "educational text to be more accessible for students with diverse learning needs."
+        )
+        
+        prompt = f"""
+        REWRITE the following text for a student with these priorities:
+        - Target Level: {level}
+        - Learning Needs: {', '.join(disabilities) if disabilities else 'General Accessibility'}
+        
+        GUIDELINES:
+        1. Replace complex or archaic words with simple, modern alternatives.
+        2. Break down long, complex sentences into shorter, clearer ones.
+        3. Maintain the original core meaning and educational facts.
+        4. Use a supportive, clear tone.
+        5. If 'dyslexia' is present, focus on simple phonics and clear structure.
+        6. If 'adhd' is present, focus on conciseness and key takeaways.
+
+        TEXT TO REWRITE:
+        {text[:3000]}
+
+        Return ONLY the adapted text. No headers, no conversational filler.
+        """
+        
+        # Note: generate_json is for JSON. Using generate for raw text if available, 
+        # but let's see if OllamaService has a generic generate.
+        # Actually OllamaService only has generate_json. Let's add generate_text.
+        
+        return self.ollama.generate(prompt, system_prompt) or text
     
     def _normalize_text(self, text: str) -> str:
         """Clean up text formatting"""

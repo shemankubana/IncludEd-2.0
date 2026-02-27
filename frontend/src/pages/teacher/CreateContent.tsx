@@ -34,8 +34,13 @@ const CreateContent = () => {
     const [subject, setSubject] = useState("Literature");
     const [file, setFile] = useState<File | null>(null);
     const [image, setImage] = useState<File | null>(null);
+    const [simplifyText, setSimplifyText] = useState(true);
+    const [generateAudio, setGenerateAudio] = useState(false);
+    const [videoFile, setVideoFile] = useState<File | null>(null);
+    const [vttContent, setVttContent] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
 
     const handleProcess = async () => {
         if (!title) {
@@ -54,45 +59,66 @@ const CreateContent = () => {
         try {
             const idToken = await user?.getIdToken();
             const formData = new FormData();
-            formData.append("title", title);
-            formData.append("subject", subject);
-            formData.append("language", "english");
 
-            if (file) {
-                formData.append("file", file);
+            if (activeTab === "video") {
+                if (!videoFile) return;
+                formData.append("file", videoFile);
+
+                const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/video/transcribe`, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${idToken}` },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setVttContent(data.vtt);
+                    setUploadProgress(100);
+                    toast({ title: "Transcription Complete", description: "Your video captions are ready." });
+                } else {
+                    throw new Error("Video transcription failed");
+                }
             } else {
-                formData.append("content", content);
-            }
+                formData.append("title", title);
+                formData.append("subject", subject);
+                formData.append("language", "english");
 
-            if (image) {
-                formData.append("image", image);
-            }
+                if (file) {
+                    formData.append("file", file);
+                } else {
+                    formData.append("content", content);
+                }
 
-            setUploadProgress(40);
+                if (image) {
+                    formData.append("image", image);
+                }
 
-            const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/upload`, {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${idToken}`
-                },
-                body: formData
-            });
+                formData.append("simplifyText", String(simplifyText));
+                formData.append("generateAudio", String(generateAudio));
 
-            setUploadProgress(80);
+                setUploadProgress(40);
 
-            if (response.ok) {
-                setUploadProgress(100);
-                toast({ title: "Success!", description: "Lesson generated and added to library." });
-                // Reset form
-                setTitle("");
-                setContent("");
-                setFile(null);
-            } else {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "Failed to upload content");
+                const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/upload`, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${idToken}` },
+                    body: formData
+                });
+
+                setUploadProgress(80);
+
+                if (response.ok) {
+                    setUploadProgress(100);
+                    toast({ title: "Success!", description: "Lesson generated and added to library." });
+                    setTitle("");
+                    setContent("");
+                    setFile(null);
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || "Failed to upload content");
+                }
             }
         } catch (error: any) {
-            toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
+            toast({ title: "Process Failed", description: error.message, variant: "destructive" });
         } finally {
             setTimeout(() => {
                 setIsProcessing(false);
@@ -238,15 +264,38 @@ const CreateContent = () => {
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="border-4 border-dashed border-border rounded-[32px] p-20 flex flex-col items-center justify-center text-center space-y-4 hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer group">
-                                        <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-muted-foreground group-hover:scale-110 group-hover:text-primary transition-all">
-                                            <Upload className="w-8 h-8" />
+                                    <div className="space-y-6">
+                                        <div
+                                            onClick={() => videoInputRef.current?.click()}
+                                            className="border-4 border-dashed border-border rounded-[32px] p-16 flex flex-col items-center justify-center text-center space-y-4 hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer group"
+                                        >
+                                            <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-muted-foreground group-hover:scale-110 group-hover:text-primary transition-all">
+                                                <Video className="w-8 h-8" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-lg">{videoFile ? videoFile.name : "Drop your video here"}</p>
+                                                <p className="text-sm text-muted-foreground">MP4, MOV up to 100MB</p>
+                                            </div>
+                                            <Button variant="outline" className="rounded-xl font-bold h-10 px-6">Select File</Button>
+                                            <input
+                                                type="file"
+                                                ref={videoInputRef}
+                                                onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
+                                                className="hidden"
+                                                accept="video/*,audio/*"
+                                            />
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-lg">Drop your video here</p>
-                                            <p className="text-sm text-muted-foreground">MP4, MOV up to 100MB</p>
-                                        </div>
-                                        <Button variant="outline" className="rounded-xl font-bold h-10 px-6">Select File</Button>
+
+                                        {vttContent && (
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Generated Captions (WebVTT)</label>
+                                                <Textarea
+                                                    value={vttContent}
+                                                    readOnly
+                                                    className="min-h-[200px] rounded-2xl border-2 p-6 font-mono text-xs leading-relaxed bg-secondary/20"
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -283,22 +332,28 @@ const CreateContent = () => {
                                 <CardTitle className="text-lg font-bold">AI Settings</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3">
-                                <div className="p-4 rounded-2xl bg-background border border-border flex items-center justify-between group cursor-pointer hover:border-primary/50 transition-colors">
+                                <div
+                                    className={`p-4 rounded-2xl bg-background border flex items-center justify-between group cursor-pointer transition-colors ${simplifyText ? 'border-primary' : 'border-border hover:border-primary/50'}`}
+                                    onClick={() => setSimplifyText(!simplifyText)}
+                                >
                                     <div className="flex items-center gap-3">
-                                        <Type className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
-                                        <span className="text-sm font-bold">Simplify Text</span>
+                                        <Type className={`w-4 h-4 ${simplifyText ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
+                                        <span className={`text-sm font-bold ${simplifyText ? 'text-foreground' : 'text-muted-foreground'}`}>Simplify Text</span>
                                     </div>
-                                    <div className="w-10 h-5 rounded-full bg-primary/20 relative cursor-pointer">
-                                        <div className="absolute right-0.5 top-0.5 w-4 h-4 rounded-full bg-primary" />
+                                    <div className={`w-10 h-5 rounded-full relative transition-colors ${simplifyText ? 'bg-primary' : 'bg-primary/20'}`}>
+                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${simplifyText ? 'right-0.5' : 'left-0.5'}`} />
                                     </div>
                                 </div>
-                                <div className="p-4 rounded-2xl bg-background border border-border flex items-center justify-between group cursor-pointer hover:border-primary/50 transition-colors">
+                                <div
+                                    className={`p-4 rounded-2xl bg-background border flex items-center justify-between group cursor-pointer transition-colors ${generateAudio ? 'border-primary' : 'border-border hover:border-primary/50'}`}
+                                    onClick={() => setGenerateAudio(!generateAudio)}
+                                >
                                     <div className="flex items-center gap-3">
-                                        <Music className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
-                                        <span className="text-sm font-bold">Generate Audio</span>
+                                        <Music className={`w-4 h-4 ${generateAudio ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
+                                        <span className={`text-sm font-bold ${generateAudio ? 'text-foreground' : 'text-muted-foreground'}`}>Generate Audio</span>
                                     </div>
-                                    <div className="w-10 h-5 rounded-full bg-secondary relative cursor-pointer">
-                                        <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-muted-foreground opacity-30" />
+                                    <div className={`w-10 h-5 rounded-full relative transition-colors ${generateAudio ? 'bg-primary' : 'bg-primary/20'}`}>
+                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${generateAudio ? 'right-0.5' : 'left-0.5'}`} />
                                     </div>
                                 </div>
                             </CardContent>
