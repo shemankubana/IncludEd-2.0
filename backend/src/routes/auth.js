@@ -82,13 +82,18 @@ router.get('/me', authenticateToken, async (req, res) => {
 
     // ── Role-mismatch check (optional query param) ────────────────────
     // Frontend can pass ?expectedRole=teacher to validate on login
+    // ALLOW teachers to pass as students for Preview Mode support
     const { expectedRole } = req.query;
     if (expectedRole && user.role !== expectedRole) {
-      return res.status(403).json({
-        error: `This account is registered as a ${user.role}, not a ${expectedRole}.`,
-        actualRole: user.role,
-        code: 'ROLE_MISMATCH'
-      });
+      const isTeacherPreviewing = (user.role === 'teacher' && expectedRole === 'student');
+
+      if (!isTeacherPreviewing) {
+        return res.status(403).json({
+          error: `This account is registered as a ${user.role}, not a ${expectedRole}.`,
+          actualRole: user.role,
+          code: 'ROLE_MISMATCH'
+        });
+      }
     }
 
     // ── Teacher suspension check ─────────────────────────────────────

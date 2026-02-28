@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {
-    const { user, profile, loading } = useAuth();
+    const { user, profile, loading, previewMode } = useAuth();
     const location = useLocation();
 
     if (loading) {
@@ -26,6 +26,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
     }
 
     if (requiredRole && profile && profile.role !== requiredRole) {
+        // ALLOW TEACHERS IN PREVIEW MODE TO ACCESS STUDENT ROUTES
+        if (profile.role === "teacher" && previewMode && requiredRole === "student") {
+            return <>{children}</>;
+        }
+
         // Role mismatch: redirect to their own dashboard
         console.warn(`Role mismatch: expected ${requiredRole}, got ${profile.role}. Redirecting...`);
 

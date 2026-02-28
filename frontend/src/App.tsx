@@ -15,6 +15,7 @@ import AchievementHall from "./pages/student/Achievements";
 import TeacherDashboard from "./pages/teacher/Dashboard";
 import CreateContent from "./pages/teacher/CreateContent";
 import MyContent from "./pages/teacher/MyContent";
+import TeacherProfile from "./pages/teacher/Profile";
 import PendingApproval from "./pages/teacher/PendingApproval";
 
 // Dashboard Components
@@ -54,6 +55,7 @@ const App = () => (
               <Route path="/teacher/dashboard" element={<ProtectedRoute requiredRole="teacher"><TeacherDashboard /></ProtectedRoute>} />
               <Route path="/teacher/create" element={<ProtectedRoute requiredRole="teacher"><CreateContent /></ProtectedRoute>} />
               <Route path="/teacher/my-content" element={<ProtectedRoute requiredRole="teacher"><MyContent /></ProtectedRoute>} />
+              <Route path="/teacher/profile" element={<ProtectedRoute requiredRole="teacher"><TeacherProfile /></ProtectedRoute>} />
               <Route path="/teacher/pending" element={<PendingApproval />} />
 
               {/* Admin Routes */}
