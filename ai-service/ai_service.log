@@ -1,4 +1,4 @@
-INFO:     Started server process [65701]
+INFO:     Started server process [89624]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8082 (Press CTRL+C to quit)
@@ -8,8 +8,69 @@ INFO:     Uvicorn running on http://0.0.0.0:8082 (Press CTRL+C to quit)
 🤖 OllamaService initialized with model: llama3
 ✅ RL Agent: loaded model from /Users/yvanshema/Documents/SHEMA/IncludEd-2.0/ai-service/services/ppo_included_agent.zip
 🤖 OllamaService initialized with model: llama3
-INFO:     127.0.0.1:65258 - "POST /reanalyze-text HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65258 - "POST /reanalyze-text HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65326 - "POST /reanalyze-text HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65326 - "POST /reanalyze-text HTTP/1.1" 200 OK
- process [63771]
+DEBUG RE-ANALYZE: macbeth.txt | type:play | units:5 | flat:28
+INFO:     127.0.0.1:50855 - "POST /reanalyze-text HTTP/1.1" 200 OK
+DEBUG RE-ANALYZE: Macbeth.txt | type:play | units:5 | flat:28
+INFO:     127.0.0.1:50855 - "POST /reanalyze-text HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51033 - "POST /analyze HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 419, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/fastapi/applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/applications.py", line 123, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/middleware/cors.py", line 83, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 62, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/routing.py", line 762, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/routing.py", line 782, in app
+    await route.handle(scope, receive, send)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/routing.py", line 297, in handle
+    await self.app(scope, receive, send)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/routing.py", line 77, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/starlette/routing.py", line 72, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/fastapi/routing.py", line 299, in app
+    raise e
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/fastapi/routing.py", line 294, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/venv/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/ai-service/main.py", line 81, in analyze_pdf
+    result = await asyncio.to_thread(
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yvanshema/.pyenv/versions/3.11.9/lib/python3.11/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yvanshema/.pyenv/versions/3.11.9/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/ai-service/ml_pipeline/analyzer.py", line 115, in analyze
+    all_blocks, total_chars = self._extract_all_blocks(doc)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'LiteratureAnalyzer' object has no attribute '_extract_all_blocks'
+INFO:     127.0.0.1:51036 - "POST /generate-questions HTTP/1.1" 404 Not Found

@@ -83,27 +83,35 @@ class ContentClassifier:
             is_intro = (idx < line_count * 0.1)
 
             # Use .search() to find ACT/SCENE even if smushed in TOC
+            # We check if it's at the BEGINNING to give full weight, 
+            # or middle (likely TOC) for partial weight if we wanted, 
+            # but for now, let's just use weights.
             if _ACT_RE.search(t):
                 play_score += _WEIGHTS["play"]["act_heading"]
                 signals["act_heading"] += 1
             if _SCENE_RE.search(t):
                 play_score += _WEIGHTS["play"]["scene_heading"]
                 signals["scene_heading"] += 1
+            
+            # Character cues and stage directions
             if _CUE_RE.match(t) and len(t.split()) <= 5:
                 play_score += _WEIGHTS["play"]["character_cue"]
                 signals["character_cue"] += 1
-            if _STAGE_RE.search(t) or _STAGE_VERB.search(t): # Permissive stage search
+            if _STAGE_RE.search(t) or _STAGE_VERB.search(t):
                 play_score += _WEIGHTS["play"]["stage_direction"]
                 signals["stage_direction"] += 1
             if _CAST_RE.search(t):
                 play_score += _WEIGHTS["play"]["cast_page"]
                 signals["cast_page"] += 1
 
+            # Novel signals
             if _CHAPTER_RE.search(t):
                 novel_score += _WEIGHTS["novel"]["chapter_heading"]
                 signals["chapter_heading"] += 1
             
-            p_mult = 0.2 if is_intro else 1.0
+            # Reduce novel signal impact in the introduction (TOC often looks like prose)
+            p_mult = 0.1 if is_intro else 1.0
+            
             fp = len(_FIRST_PERS.findall(t))
             if fp:
                 novel_score += fp * _WEIGHTS["novel"]["first_person"] * p_mult
@@ -121,14 +129,15 @@ class ContentClassifier:
                 vec = self.vectorizer.transform([full_text])
                 probs = self.model.predict_proba(vec)[0]
                 ml_probs = dict(zip(self.model.classes_, probs))
-                play_score += ml_probs.get("play", 0.0) * 10.0
-                novel_score += ml_probs.get("novel", 0.0) * 10.0
+                # Boost based on ML model
+                play_score += ml_probs.get("play", 0.0) * 15.0
+                novel_score += ml_probs.get("novel", 0.0) * 15.0
             except: pass
 
-        # STRICT OVERRIDE FOR PLAYS
-        # If we see multiple Acts OR a mix of Act/Scene, it's a play.
-        if (signals["act_heading"] >= 1 and signals["scene_heading"] >= 1) or signals["act_heading"] >= 3:
-            return ClassificationResult("play", 0.95, play_score, novel_score, ml_probs, signals)
+        # --- STRICT OVERRIDE ---
+        # If we see multiple Acts OR a mix of Act/Scene, it's almost certainly a play.
+        if (signals["act_heading"] >= 1 and signals["scene_heading"] >= 2) or signals["act_heading"] >= 2:
+            return ClassificationResult("play", 0.98, play_score, novel_score, ml_probs, signals)
 
         total = play_score + novel_score
         if total < self.MIN_EVIDENCE:

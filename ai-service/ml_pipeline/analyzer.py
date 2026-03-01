@@ -203,6 +203,8 @@ class LiteratureAnalyzer:
         # 3. Segment (Regex-based hierarchy)
         units = self._segmenter.segment(mock_blocks, doc_type)
         flat_units = self._flatten_units(units, doc_type)
+        
+        print(f"DEBUG RE-ANALYZE: {filename} | type:{doc_type} | units:{len(units)} | flat:{len(flat_units)}")
 
         # 4. Generate questions (optional)
         questions = []

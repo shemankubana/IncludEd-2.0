@@ -1,0 +1,161 @@
+TEXT LENGTH: 111120
+Starting tokenise...
+TOKENS CREATED: 102
+HEADINGS FOUND: 69
+  H0: act | ACT 1
+  H1: scene | Scene 1
+  H2: scene | Scene 2
+  H3: scene | Scene 3
+  H4: scene | Scene 4
+  H5: scene | Scene 5
+  H6: scene | Scene 6
+  H7: scene | Scene 7
+  H8: act | ACT 2
+  H9: scene | Scene 1
+  H10: scene | Scene 2
+  H11: scene | Scene 3
+  H12: scene | Scene 4
+  H13: act | ACT 3
+  H14: scene | Scene 1
+  H15: scene | Scene 2
+  H16: scene | Scene 3
+  H17: scene | Scene 4
+  H18: scene | Scene 5
+  H19: scene | Scene 6
+CLUSTER found at token 1: ['ACT 1', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'Scene 7'] (len: 0)
+CLUSTER found at token 2: ['Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'Scene 7', 'ACT 2'] (len: 0)
+CLUSTER found at token 3: ['Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'Scene 7', 'ACT 2', 'Scene 1'] (len: 0)
+CLUSTER found at token 4: ['Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'Scene 7', 'ACT 2', 'Scene 1', 'Scene 2'] (len: 0)
+CLUSTER found at token 5: ['Scene 4', 'Scene 5', 'Scene 6', 'Scene 7', 'ACT 2', 'Scene 1', 'Scene 2', 'Scene 3'] (len: 0)
+CLUSTER found at token 6: ['Scene 5', 'Scene 6', 'Scene 7', 'ACT 2', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4'] (len: 0)
+CLUSTER found at token 7: ['Scene 6', 'Scene 7', 'ACT 2', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'ACT 3'] (len: 0)
+CLUSTER found at token 8: ['Scene 7', 'ACT 2', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'ACT 3', 'Scene 1'] (len: 0)
+CLUSTER found at token 9: ['ACT 2', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'ACT 3', 'Scene 1', 'Scene 2'] (len: 0)
+CLUSTER found at token 10: ['Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'ACT 3', 'Scene 1', 'Scene 2', 'Scene 3'] (len: 0)
+CLUSTER found at token 11: ['Scene 2', 'Scene 3', 'Scene 4', 'ACT 3', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4'] (len: 0)
+CLUSTER found at token 12: ['Scene 3', 'Scene 4', 'ACT 3', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5'] (len: 0)
+CLUSTER found at token 13: ['Scene 4', 'ACT 3', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6'] (len: 0)
+CLUSTER found at token 14: ['ACT 3', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'ACT 4'] (len: 0)
+CLUSTER found at token 15: ['Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'ACT 4', 'Scene 1'] (len: 0)
+CLUSTER found at token 16: ['Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'ACT 4', 'Scene 1', 'Scene 2'] (len: 0)
+CLUSTER found at token 17: ['Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'ACT 4', 'Scene 1', 'Scene 2', 'Scene 3'] (len: 0)
+CLUSTER found at token 18: ['Scene 4', 'Scene 5', 'Scene 6', 'ACT 4', 'Scene 1', 'Scene 2', 'Scene 3', 'ACT 5'] (len: 0)
+CLUSTER found at token 19: ['Scene 5', 'Scene 6', 'ACT 4', 'Scene 1', 'Scene 2', 'Scene 3', 'ACT 5', 'Scene 1'] (len: 0)
+CLUSTER found at token 20: ['Scene 6', 'ACT 4', 'Scene 1', 'Scene 2', 'Scene 3', 'ACT 5', 'Scene 1', 'Scene 2'] (len: 0)
+CLUSTER found at token 21: ['ACT 4', 'Scene 1', 'Scene 2', 'Scene 3', 'ACT 5', 'Scene 1', 'Scene 2', 'Scene 3'] (len: 0)
+CLUSTER found at token 22: ['Scene 1', 'Scene 2', 'Scene 3', 'ACT 5', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4'] (len: 0)
+CLUSTER found at token 23: ['Scene 2', 'Scene 3', 'ACT 5', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5'] (len: 0)
+CLUSTER found at token 24: ['Scene 3', 'ACT 5', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6'] (len: 0)
+CLUSTER found at token 25: ['ACT 5', 'Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'Scene 7'] (len: 0)
+CLUSTER found at token 26: ['Scene 1', 'Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'Scene 7', 'Scene 8'] (len: 0)
+CLUSTER found at token 27: ['Scene 2', 'Scene 3', 'Scene 4', 'Scene 5', 'Scene 6', 'Scene 7', 'Scene 8'] (len: 0)
+
+--- FIRST 100 TOKENS ---
+  0: content |       |      | You can get your own copy of this text to keep. Pu
+  1: heading | act   | TOC! | ACT 1
+  2: heading | scene | TOC! | Scene 1
+  3: heading | scene | TOC! | Scene 2
+  4: heading | scene | TOC! | Scene 3
+  5: heading | scene | TOC! | Scene 4
+  6: heading | scene | TOC! | Scene 5
+  7: heading | scene | TOC! | Scene 6
+  8: heading | scene | TOC! | Scene 7
+  9: heading | act   | TOC! | ACT 2
+ 10: heading | scene | TOC! | Scene 1
+ 11: heading | scene | TOC! | Scene 2
+ 12: heading | scene | TOC! | Scene 3
+ 13: heading | scene | TOC! | Scene 4
+ 14: heading | act   | TOC! | ACT 3
+ 15: heading | scene | TOC! | Scene 1
+ 16: heading | scene | TOC! | Scene 2
+ 17: heading | scene | TOC! | Scene 3
+ 18: heading | scene | TOC! | Scene 4
+ 19: heading | scene | TOC! | Scene 5
+ 20: heading | scene | TOC! | Scene 6
+ 21: heading | act   | TOC! | ACT 4
+ 22: heading | scene | TOC! | Scene 1
+ 23: heading | scene | TOC! | Scene 2
+ 24: heading | scene | TOC! | Scene 3
+ 25: heading | act   | TOC! | ACT 5
+ 26: heading | scene | TOC! | Scene 1
+ 27: heading | scene | TOC! | Scene 2
+ 28: heading | scene | TOC! | Scene 3
+ 29: heading | scene | TOC! | Scene 4
+ 30: heading | scene | TOC! | Scene 5
+ 31: heading | scene | TOC! | Scene 6
+ 32: heading | scene | TOC! | Scene 7
+ 33: heading | scene | TOC! | Scene 8
+ 34: content |       |      | Contents Michael Witmore Director,  It is hard to 
+ 35: heading | act   |      | ACT 1
+ 36: heading | scene |      | Scene 1
+ 37: content |       |      | 5 10 9 Macbeth ACT 1. SC. 2 DUNCAN MALCOLM CAPTAIN
+ 38: heading | scene |      | Scene 2
+ 39: content |       |      | 5 10 15 20 25 11 Macbeth ACT 1. SC. 2 DUNCAN CAPTA
+ 40: heading | scene |      | Scene 3
+ 41: content |       |      | 5 15 Macbeth ACT 1. SC. 3 SECOND WITCH FIRST WITCH
+ 42: heading | scene |      | Scene 4
+ 43: content |       |      | 5 27 Macbeth ACT 1. SC. 4 DUNCAN MACBETH DUNCAN BA
+ 44: heading | scene |      | Scene 5
+ 45: content |       |      | 5 10 15 20 25 30 33 Macbeth ACT 1. SC. 5 MESSENGER
+ 46: heading | scene |      | Scene 6
+ 47: content |       |      | 37 Macbeth
+ 48: heading | act   |      | ACT 1
+ 49: content |       |      | . SC. 6 BANQUO DUNCAN LADY MACBETH DUNCAN LADY MAC
+ 50: heading | scene |      | Scene 7
+ 51: content |       |      | 5 10 15 20 41 Macbeth ACT 1. SC. 7 LADY MACBETH MA
+ 52: heading | act   |      | ACT 2
+ 53: heading | scene |      | Scene 1
+ 54: content |       |      | 5 10 15 51 Macbeth ACT 2. SC. 1 He gives Macbeth a
+ 55: heading | scene |      | Scene 2
+ 56: content |       |      | 5 10 15 20 25 57 Macbeth ACT 2. SC. 2 MACBETH LADY
+ 57: heading | scene |      | Scene 3
+ 58: content |       |      | 5 10 15 20 63 Macbeth ACT 2. SC. 3 MACDUFF PORTER 
+ 59: heading | scene |      | Scene 4
+ 60: content |       |      | 5 10 15 75 Macbeth ACT 2. SC. 4 OLD MAN ROSS MACDU
+ 61: heading | act   |      | ACT 3
+ 62: heading | scene |      | Scene 1
+ 63: content |       |      | 5 10 15 83 Macbeth ACT 3. SC. 1 MACBETH BANQUO MAC
+ 64: heading | scene |      | Scene 2
+ 65: content |       |      | 5 93 Macbeth ACT 3. SC. 2 MACBETH LADY MACBETH MAC
+ 66: heading | scene |      | Scene 3
+ 67: content |       |      | 5 97 Macbeth ACT 3. SC. 3 FIRST MURDERER THIRD MUR
+ 68: heading | scene |      | Scene 4
+ 69: content |       |      | 5 10 15 20 101 Macbeth ACT 3. SC. 4 MURDERER MACBE
+ 70: heading | scene |      | Scene 5
+ 71: content |       |      | 5 10 15 20 25 30 113 Macbeth ACT 3. SC. 6 Music an
+ 72: heading | scene |      | Scene 6
+ 73: content |       |      | 5 10 15 20 115 Macbeth ACT 3. SC. 6 LORD LENNOX LO
+ 74: heading | act   |      | ACT 4
+ 75: heading | scene |      | Scene 1
+ 76: content |       |      | 5 10 15 121 Macbeth ACT 4. SC. 1 ALL THIRD WITCH A
+ 77: heading | scene |      | Scene 2
+ 78: content |       |      | 5 10 15 20 25 30 135 Macbeth ACT 4. SC. 2 LADY MAC
+ 79: heading | scene |      | Scene 3
+ 80: content |       |      | 5 10 15 141 Macbeth ACT 4. SC. 3 MACDUFF MALCOLM M
+ 81: heading | act   |      | ACT 5
+ 82: heading | scene |      | Scene 1
+ 83: content |       |      | 5 10 15 20 163 Macbeth ACT 5. SC. 1 DOCTOR GENTLEW
+ 84: heading | scene |      | Scene 2
+ 85: content |       |      | 167 Macbeth
+ 86: heading | act   |      | ACT 5
+ 87: content |       |      | . SC. 2 ANGUS CAITHNESS LENNOX MENTEITH CAITHNESS 
+ 88: heading | scene |      | Scene 3
+ 89: content |       |      | 5 10 15 20 171 Macbeth ACT 5. SC. 3 SEYTON MACBETH
+ 90: heading | scene |      | Scene 4
+ 91: content |       |      | 175 Macbeth
+ 92: heading | act   |      | ACT 5
+ 93: content |       |      | . SC. 4 MENTEITH SIWARD MENTEITH MALCOLM SOLDIER S
+ 94: heading | scene |      | Scene 5
+ 95: content |       |      | 5 10 15 20 25 179 Macbeth ACT 5. SC. 5 MESSENGER M
+ 96: heading | scene |      | Scene 6
+ 97: content |       |      | 5 10
+ 98: heading | scene |      | Scene 7
+ 99: content |       |      | 5 183 Macbeth ACT 5. SC. 7 MACBETH YOUNG SIWARD MA
+
+Running segment...
+UNITS CREATED: 5
+ACT: ACT 1 (scenes: 7)
+ACT: ACT 2 (scenes: 4)
+ACT: ACT 3 (scenes: 6)
+ACT: ACT 4 (scenes: 3)
+ACT: ACT 5 (scenes: 8)
