@@ -65,12 +65,12 @@ async function migrate() {
                     headers: { 'Content-Type': 'application/json' }
                 });
 
-                if (response.data && response.data.units) {
+                if (response.data && response.data.flat_units) {
                     await item.update({
                         contentType: response.data.document_type || 'generic',
-                        sections: response.data.units
+                        sections: response.data.flat_units
                     });
-                    console.log(`   ✅ Success: ${response.data.document_type} with ${response.data.units.length} units.`);
+                    console.log(`   ✅ Success: ${response.data.document_type} with ${response.data.flat_units.length} units.`);
                     successCount++;
                 } else {
                     console.warn(`   ⚠️  Received empty result for "${item.title}".`);

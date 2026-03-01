@@ -24,6 +24,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
+import LiteratureViewer from "../../components/literature/LiteratureViewer";
 
 interface DialogueLine {
     type: 'speaker' | 'stage_direction' | 'narrative';
@@ -125,7 +126,8 @@ const AdaptiveReader = () => {
 
     const totalSections = sections.length;
     const currentSection = sections[currentSectionIndex] || { title: "", content: "" };
-    const words = currentSection.content.split(/\s+/).filter(Boolean);
+    const safeContent = currentSection.content || "";
+    const words = safeContent.split(/\s+/).filter(Boolean);
 
     // Mock timestamps for audio sync visual demo
     const timestamps = [
@@ -298,43 +300,16 @@ const AdaptiveReader = () => {
 
                     {/* Reading Content */}
                     <CardContent className="p-8 md:p-12">
-                        {contentType === 'play' && currentSection.dialogue && currentSection.dialogue.length > 0 ? (
-                            // ── PLAY RENDERER ──────────────────────────────────────
-                            <div className="space-y-6">
-                                {currentSection.dialogue.map((line, idx) => {
-                                    if (line.type === 'stage_direction') {
-                                        return (
-                                            <p key={idx} className="text-muted-foreground text-sm italic text-center px-8 py-2 border-y border-border/30">
-                                                {line.text}
-                                            </p>
-                                        );
-                                    }
-                                    if (line.type === 'speaker') {
-                                        return (
-                                            <div key={idx} className="flex gap-4 items-start">
-                                                {/* Character Name */}
-                                                <div className="shrink-0 w-32 pt-1 text-right">
-                                                    <span className="inline-block px-3 py-1 rounded-xl bg-primary/10 text-primary text-xs font-black uppercase tracking-wider border border-primary/20">
-                                                        {line.name}
-                                                    </span>
-                                                </div>
-                                                {/* Dialogue */}
-                                                <div className="flex-1 space-y-1 leading-relaxed text-lg font-medium">
-                                                    {line.lines?.map((l, li) => (
-                                                        <p key={li}>{l}</p>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-                                    // Narrative / other
-                                    return (
-                                        <p key={idx} className="leading-relaxed text-muted-foreground text-base italic pl-36">
-                                            {line.text}
-                                        </p>
-                                    );
-                                })}
-                            </div>
+                        {contentType === 'play' ? (
+                            <LiteratureViewer
+                                data={{
+                                    document_type: 'play',
+                                    title: lesson?.title || "Literature",
+                                    confidence: 1.0,
+                                    units: [],
+                                    flat_units: sections
+                                }}
+                            />
                         ) : contentType === 'novel' ? (
                             // ── NOVEL RENDERER ─────────────────────────────────────
                             <div className="space-y-6">
@@ -342,7 +317,7 @@ const AdaptiveReader = () => {
                                     {currentSection.title}
                                 </h2>
                                 <div className="text-xl leading-[2] font-medium text-foreground/90 tracking-wide">
-                                    {currentSection.content.split('\n\n').map((para, i) => (
+                                    {(currentSection.content || "").split('\n\n').map((para, i) => (
                                         <p key={i} className="mb-6 indent-8">{para.trim()}</p>
                                     ))}
                                 </div>

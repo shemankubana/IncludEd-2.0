@@ -346,27 +346,13 @@ class LiteratureAnalyzer:
         if doc_type == "play":
             for act in units:
                 for scene in act.get("children", []):
-                    dialogue = []
                     full_content = []
                     for b in scene.get("blocks", []):
                         if b["type"] == "dialogue":
-                            dialogue.append({
-                                "type": "speaker",
-                                "name": b["character"],
-                                "lines": [b["content"]]
-                            })
                             full_content.append(f"{b['character']}: {b['content']}")
                         elif b["type"] == "stage_direction":
-                            dialogue.append({
-                                "type": "stage_direction",
-                                "text": b["content"]
-                            })
                             full_content.append(f"[{b['content']}]")
                         else:
-                            dialogue.append({
-                                "type": "narrative",
-                                "text": b["content"]
-                            })
                             full_content.append(b["content"])
                     
                     scene_title = scene.get("title", "Scene")
@@ -375,7 +361,7 @@ class LiteratureAnalyzer:
                     flat.append({
                         "title": title,
                         "content": "\n\n".join(full_content),
-                        "dialogue": dialogue
+                        "blocks": scene.get("blocks", [])
                     })
         else:
             for chapter in units:
