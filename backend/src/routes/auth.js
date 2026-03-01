@@ -119,7 +119,13 @@ router.get('/me', authenticateToken, async (req, res) => {
       });
     }
 
-    res.json({ ...user.toJSON(), school });
+    // ── Fetch student stats ───────────────────────────────────────────
+    let stats = null;
+    if (user.role === 'student') {
+      stats = await StudentStats.findOne({ where: { userId: user.id } });
+    }
+
+    res.json({ ...user.toJSON(), school, stats });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

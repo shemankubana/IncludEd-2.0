@@ -14,7 +14,7 @@ import {
     SidebarInset,
     SidebarTrigger
 } from "@/components/ui/sidebar";
-import { BookOpen, Home, BookHeadphones, LayoutDashboard, Settings, LogOut, Bell, User, Users, ShieldCheck, GraduationCap } from "lucide-react";
+import { BookOpen, Home, BookHeadphones, LayoutDashboard, Settings, LogOut, Bell, User, Users, ShieldCheck, GraduationCap, Type } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ interface DashboardLayoutProps {
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { user, profile, logout, previewMode, setPreviewMode } = useAuth();
+    const { user, profile, logout, previewMode, setPreviewMode, dyslexicMode, setDyslexicMode } = useAuth();
     const effectiveRole = previewMode ? "student" : role;
 
     const handleLogout = async () => {
@@ -141,6 +141,18 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                                 >
                                     <User className="w-3.5 h-3.5" />
                                     {previewMode ? "Back to Teacher" : "Preview as Student"}
+                                </Button>
+                            )}
+
+                            {effectiveRole === "student" && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={`w-full justify-start gap-2 h-8 text-[10px] font-bold uppercase tracking-wider transition-all ${dyslexicMode ? 'bg-primary/10 border-primary text-primary' : ''}`}
+                                    onClick={() => setDyslexicMode(!dyslexicMode)}
+                                >
+                                    <Type className="w-3.5 h-3.5" />
+                                    {dyslexicMode ? "Standard Font" : "Dyslexia Friendly"}
                                 </Button>
                             )}
 

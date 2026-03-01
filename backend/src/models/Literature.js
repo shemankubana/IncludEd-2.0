@@ -68,5 +68,21 @@ export const Literature = sequelize.define('Literature', {
   audioUrl: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  contentType: {
+    type: DataTypes.ENUM('play', 'novel', 'generic'),
+    defaultValue: 'generic'
+  },
+  difficulty: {
+    type: DataTypes.ENUM('beginner', 'intermediate', 'advanced'),
+    defaultValue: 'beginner'
+  },
+  averageRating: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0
+  },
+  ratingCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
   }
 });

@@ -10,6 +10,8 @@ interface AuthContextType {
     refreshProfile: () => Promise<void>;
     previewMode: boolean;
     setPreviewMode: (mode: boolean) => void;
+    dyslexicMode: boolean;
+    setDyslexicMode: (mode: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -19,7 +21,9 @@ const AuthContext = createContext<AuthContextType>({
     logout: async () => { },
     refreshProfile: async () => { },
     previewMode: false,
-    setPreviewMode: () => { }
+    setPreviewMode: () => { },
+    dyslexicMode: false,
+    setDyslexicMode: () => { }
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -29,6 +33,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [profile, setProfile] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const [previewMode, setPreviewMode] = useState(false);
+    const [dyslexicMode, setDyslexicMode] = useState(() => {
+        return localStorage.getItem("dyslexicMode") === "true";
+    });
+
+    useEffect(() => {
+        localStorage.setItem("dyslexicMode", String(dyslexicMode));
+        if (dyslexicMode) {
+            document.body.classList.add("font-dyslexic");
+        } else {
+            document.body.classList.remove("font-dyslexic");
+        }
+    }, [dyslexicMode]);
 
     const refreshProfile = async () => {
         if (!auth.currentUser) return;
@@ -69,7 +85,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             logout,
             refreshProfile,
             previewMode,
-            setPreviewMode
+            setPreviewMode,
+            dyslexicMode,
+            setDyslexicMode
         }}>
             {!loading && children}
         </AuthContext.Provider>

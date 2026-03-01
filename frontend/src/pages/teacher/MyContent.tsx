@@ -16,7 +16,8 @@ import {
     Loader2,
     BrainCircuit,
     ImageOff,
-    FileText
+    FileText,
+    RefreshCcw
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -61,7 +62,43 @@ const MyContent = () => {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [reprocessingId, setReprocessingId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+    const handleReprocess = async (id: string) => {
+        if (!user) return;
+        setReprocessingId(id);
+        try {
+            const idToken = await user.getIdToken();
+            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/${id}/reprocess`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${idToken}` }
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                toast({
+                    title: "Analysis Complete",
+                    description: `Detected as ${data.contentType} with ${data.sectionCount} sections.`,
+                });
+                // Refresh content list
+                const refreshedRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/my-content`, {
+                    headers: { "Authorization": `Bearer ${idToken}` }
+                });
+                if (refreshedRes.ok) setContent(await refreshedRes.json());
+            } else {
+                throw new Error("Failed to re-process");
+            }
+        } catch (err) {
+            toast({
+                title: "Analysis Failed",
+                description: "Could not analyze this content. Please try again.",
+                variant: "destructive"
+            });
+        } finally {
+            setReprocessingId(null);
+        }
+    };
 
     const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -189,10 +226,15 @@ const MyContent = () => {
                                                 </div>
                                             )}
                                             {/* Subject badge overlay */}
-                                            <div className="absolute top-3 left-3">
-                                                <span className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border ${subjectColors[item.subject] || subjectColors.General}`}>
+                                            <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+                                                <span className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border w-fit ${subjectColors[item.subject] || subjectColors.General}`}>
                                                     {item.subject || "General"}
                                                 </span>
+                                                {item.contentType && item.contentType !== 'generic' && (
+                                                    <span className="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-black/60 text-white backdrop-blur-sm w-fit border border-white/20">
+                                                        {item.contentType === 'play' ? "🎭 Play" : "📖 Novel"}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
 
@@ -251,9 +293,19 @@ const MyContent = () => {
                                                             <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Preview
                                                         </Button>
                                                         <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="rounded-xl h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                                            disabled={reprocessingId === item.id}
+                                                            onClick={() => handleReprocess(item.id)}
+                                                            title="Re-analyze content type"
+                                                        >
+                                                            <RefreshCcw className={`w-4 h-4 ${reprocessingId === item.id ? "animate-spin" : ""}`} />
+                                                        </Button>
+                                                        <Button
                                                             size="sm"
                                                             variant="ghost"
-                                                            className="rounded-xl h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                                            className="rounded-xl h-9 w-9 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                                                             onClick={() => setConfirmDeleteId(item.id)}
                                                         >
                                                             <Trash2 className="w-4 h-4" />

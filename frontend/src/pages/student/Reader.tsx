@@ -25,15 +25,23 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
 
+interface DialogueLine {
+    type: 'speaker' | 'stage_direction' | 'narrative';
+    name?: string;
+    lines?: string[];
+    text?: string;
+}
+
 interface Section {
     title: string;
     content: string;
+    dialogue?: DialogueLine[];
 }
 
 const AdaptiveReader = () => {
     const navigate = useNavigate();
     const { id } = useParams();
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
 
     // Reader state
     const [isPlaying, setIsPlaying] = useState(false);
@@ -45,6 +53,7 @@ const AdaptiveReader = () => {
     const [sections, setSections] = useState<Section[]>([]);
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
     const [showQuizPrompt, setShowQuizPrompt] = useState(false);
+    const [contentType, setContentType] = useState<'play' | 'novel' | 'generic'>('generic');
 
     // Fetch real lesson content + sections from backend
     useEffect(() => {
@@ -60,8 +69,11 @@ const AdaptiveReader = () => {
                 setLesson({
                     title: data.title,
                     author: data.author,
-                    difficulty: "Adaptive"
+                    difficulty: data.difficulty || "Adaptive"
                 });
+
+                // Set content type for rendering
+                if (data.contentType) setContentType(data.contentType);
 
                 // If backend has pre-computed sections, use them
                 // Otherwise, fall back to splitting the content by word count
@@ -80,6 +92,27 @@ const AdaptiveReader = () => {
                         });
                     }
                     setSections(chunks.length > 0 ? chunks : [{ title: "Content", content: rawContent }]);
+                }
+
+                // Load existing progress
+                const progressRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${id}`, {
+                    headers: { "Authorization": `Bearer ${idToken}` }
+                });
+                if (progressRes.ok) {
+                    const progressData = await progressRes.json();
+                    if (progressData && progressData.currentSection !== undefined) {
+                        setCurrentSectionIndex(progressData.currentSection);
+                    } else {
+                        // First visit: create an in_progress record so the dashboard shows this lesson
+                        await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${id}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${idToken}`
+                            },
+                            body: JSON.stringify({ currentSection: 0, status: 'in_progress', schoolId: null })
+                        });
+                    }
                 }
             } catch (error) {
                 console.error("Failed to fetch lesson:", error);
@@ -126,21 +159,47 @@ const AdaptiveReader = () => {
         return () => clearInterval(interval);
     }, [isPlaying, currentSection, showQuizPrompt, currentSectionIndex]);
 
+    const saveProgress = async (index: number, status: 'in_progress' | 'completed' = 'in_progress') => {
+        if (!user || !id) return;
+        try {
+            const idToken = await user.getIdToken();
+            await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                },
+                body: JSON.stringify({
+                    currentSection: index,
+                    status,
+                    schoolId: profile?.schoolId // Correctly pass schoolId from profile
+                })
+            });
+        } catch (err) {
+            console.error("Failed to save progress:", err);
+        }
+    };
+
     const handleNextSection = () => {
         if (currentSectionIndex < totalSections - 1) {
-            setCurrentSectionIndex(prev => prev + 1);
+            const nextIdx = currentSectionIndex + 1;
+            setCurrentSectionIndex(nextIdx);
+            saveProgress(nextIdx, 'in_progress');
             setActiveWordIndex(-1);
             setCurrentTime(0);
             setIsPlaying(false);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
+            saveProgress(currentSectionIndex, 'completed');
             navigate(`/student/quiz/${id}`);
         }
     };
 
     const handlePrevSection = () => {
         if (currentSectionIndex > 0) {
-            setCurrentSectionIndex(prev => prev - 1);
+            const prevIdx = currentSectionIndex - 1;
+            setCurrentSectionIndex(prevIdx);
+            saveProgress(prevIdx, 'in_progress');
             setActiveWordIndex(-1);
             setCurrentTime(0);
             setIsPlaying(false);
@@ -238,22 +297,74 @@ const AdaptiveReader = () => {
                     </div>
 
                     {/* Reading Content */}
-                    <CardContent className="p-12 md:p-20">
-                        <div className="reading-area leading-[2.2] text-xl md:text-2xl font-medium tracking-wide text-foreground/90 select-text whitespace-pre-wrap">
-                            {words.map((word: string, idx: number) => (
-                                <motion.span
-                                    key={idx}
-                                    animate={{
-                                        backgroundColor: activeWordIndex === idx && isPlaying ? "rgba(253, 224, 71, 0.8)" : "transparent",
-                                        scale: activeWordIndex === idx && isPlaying ? 1.05 : 1,
-                                        color: activeWordIndex === idx && isPlaying ? "#000" : "inherit"
-                                    }}
-                                    className="inline-block px-0.5 rounded transition-colors"
-                                >
-                                    {word}{" "}
-                                </motion.span>
-                            ))}
-                        </div>
+                    <CardContent className="p-8 md:p-12">
+                        {contentType === 'play' && currentSection.dialogue && currentSection.dialogue.length > 0 ? (
+                            // ── PLAY RENDERER ──────────────────────────────────────
+                            <div className="space-y-6">
+                                {currentSection.dialogue.map((line, idx) => {
+                                    if (line.type === 'stage_direction') {
+                                        return (
+                                            <p key={idx} className="text-muted-foreground text-sm italic text-center px-8 py-2 border-y border-border/30">
+                                                {line.text}
+                                            </p>
+                                        );
+                                    }
+                                    if (line.type === 'speaker') {
+                                        return (
+                                            <div key={idx} className="flex gap-4 items-start">
+                                                {/* Character Name */}
+                                                <div className="shrink-0 w-32 pt-1 text-right">
+                                                    <span className="inline-block px-3 py-1 rounded-xl bg-primary/10 text-primary text-xs font-black uppercase tracking-wider border border-primary/20">
+                                                        {line.name}
+                                                    </span>
+                                                </div>
+                                                {/* Dialogue */}
+                                                <div className="flex-1 space-y-1 leading-relaxed text-lg font-medium">
+                                                    {line.lines?.map((l, li) => (
+                                                        <p key={li}>{l}</p>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    // Narrative / other
+                                    return (
+                                        <p key={idx} className="leading-relaxed text-muted-foreground text-base italic pl-36">
+                                            {line.text}
+                                        </p>
+                                    );
+                                })}
+                            </div>
+                        ) : contentType === 'novel' ? (
+                            // ── NOVEL RENDERER ─────────────────────────────────────
+                            <div className="space-y-6">
+                                <h2 className="text-3xl font-black tracking-tight text-center py-4 border-b border-border/30 mb-8">
+                                    {currentSection.title}
+                                </h2>
+                                <div className="text-xl leading-[2] font-medium text-foreground/90 tracking-wide">
+                                    {currentSection.content.split('\n\n').map((para, i) => (
+                                        <p key={i} className="mb-6 indent-8">{para.trim()}</p>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            // ── GENERIC / WORD-HIGHLIGHT RENDERER ──────────────────
+                            <div className="reading-area leading-[2.2] text-xl md:text-2xl font-medium tracking-wide text-foreground/90 select-text whitespace-pre-wrap">
+                                {words.map((word: string, idx: number) => (
+                                    <motion.span
+                                        key={idx}
+                                        animate={{
+                                            backgroundColor: activeWordIndex === idx && isPlaying ? "rgba(253, 224, 71, 0.8)" : "transparent",
+                                            scale: activeWordIndex === idx && isPlaying ? 1.05 : 1,
+                                            color: activeWordIndex === idx && isPlaying ? "#000" : "inherit"
+                                        }}
+                                        className="inline-block px-0.5 rounded transition-colors"
+                                    >
+                                        {word}{" "}
+                                    </motion.span>
+                                ))}
+                            </div>
+                        )}
                     </CardContent>
 
                     {/* Player Controls */}

@@ -36,6 +36,7 @@ const CreateContent = () => {
     const [image, setImage] = useState<File | null>(null);
     const [simplifyText, setSimplifyText] = useState(true);
     const [generateAudio, setGenerateAudio] = useState(false);
+    const [difficulty, setDifficulty] = useState("beginner");
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [vttContent, setVttContent] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +96,7 @@ const CreateContent = () => {
 
                 formData.append("simplifyText", String(simplifyText));
                 formData.append("generateAudio", String(generateAudio));
+                formData.append("difficulty", difficulty);
 
                 setUploadProgress(40);
 
@@ -197,6 +199,23 @@ const CreateContent = () => {
                                                     <option>History</option>
                                                     <option>General</option>
                                                 </select>
+                                            </div>
+                                        </div>
+
+                                        {/* Difficulty Level */}
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Content Difficulty</label>
+                                            <div className="grid grid-cols-3 gap-3">
+                                                {["beginner", "intermediate", "advanced"].map((level) => (
+                                                    <button
+                                                        key={level}
+                                                        type="button"
+                                                        onClick={() => setDifficulty(level)}
+                                                        className={`h-11 rounded-xl border-2 font-bold text-xs uppercase tracking-wider transition-all capitalize ${difficulty === level ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}
+                                                    >
+                                                        {level === "beginner" ? "🌱 Beginner" : level === "intermediate" ? "🔥 Intermediate" : "⚡ Advanced"}
+                                                    </button>
+                                                ))}
                                             </div>
                                         </div>
 

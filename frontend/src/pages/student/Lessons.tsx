@@ -9,6 +9,68 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
 
+const difficultyColor: Record<string, string> = {
+    beginner: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    intermediate: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    advanced: "bg-rose-500/10 text-rose-700 dark:text-rose-400"
+};
+
+const StarRating = ({ lessonId, initialRating, ratingCount }: { lessonId: string, initialRating: number, ratingCount: number }) => {
+    const { user } = useAuth();
+    const [hover, setHover] = useState(0);
+    const [userRating, setUserRating] = useState(0);
+    const [avg, setAvg] = useState(initialRating);
+    const [count, setCount] = useState(ratingCount);
+    const [submitting, setSubmitting] = useState(false);
+
+    const submitRating = async (stars: number) => {
+        if (!user || submitting) return;
+        setSubmitting(true);
+        try {
+            const idToken = await user.getIdToken();
+            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${lessonId}/rate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
+                body: JSON.stringify({ rating: stars })
+            });
+            if (res.ok) {
+                const isNewRating = userRating === 0;
+                const newCount = isNewRating ? count + 1 : count;
+                const newAvg = isNewRating
+                    ? ((avg * count) + stars) / newCount
+                    : ((avg * count) - userRating + stars) / count;
+                setAvg(parseFloat(newAvg.toFixed(2)));
+                setCount(newCount);
+                setUserRating(stars);
+            }
+        } catch (e) { /* silent */ }
+        finally { setSubmitting(false); }
+    };
+
+    return (
+        <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-0.5" onMouseLeave={() => setHover(0)}>
+                {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                        key={star}
+                        onClick={(e) => { e.preventDefault(); submitRating(star); }}
+                        onMouseEnter={() => setHover(star)}
+                        className="transition-transform hover:scale-125 active:scale-110"
+                        title={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                    >
+                        <Star
+                            className={`w-3.5 h-3.5 transition-colors ${(hover || userRating) >= star ? "fill-amber-400 text-amber-400" : "fill-transparent text-muted-foreground"}`}
+                        />
+                    </button>
+                ))}
+            </div>
+            <span className="text-[10px] font-bold text-muted-foreground">
+                {avg > 0 ? `${avg.toFixed(1)} (${count})` : "Rate"}
+            </span>
+        </div>
+    );
+};
+
 const LessonLibrary = () => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
@@ -32,12 +94,11 @@ const LessonLibrary = () => {
                         id: item.id,
                         title: item.title,
                         subject: item.subject || "General",
-                        duration: item.estimatedTime || "15m",
-                        difficulty: item.difficulty || "Beginner",
-                        rating: 4.8,
-                        image: item.imageUrl
-                            ? `${baseUrl}${item.imageUrl}`
-                            : null,
+                        duration: item.estimatedMinutes ? `${item.estimatedMinutes}m` : "—",
+                        difficulty: item.difficulty || "beginner",
+                        rating: item.averageRating || 0,
+                        ratingCount: item.ratingCount || 0,
+                        image: item.imageUrl ? `${baseUrl}${item.imageUrl}` : null,
                         xp: 500
                     })));
                 } else {
@@ -115,7 +176,7 @@ const LessonLibrary = () => {
                             transition={{ delay: idx * 0.05 }}
                         >
                             <Card className="rounded-[32px] border border-border overflow-hidden h-full flex flex-col group hover:scale-[1.02] transition-all cursor-pointer shadow-none hover:shadow-2xl hover:border-primary/20 bg-card/50 backdrop-blur-sm">
-                                <Link to={`/student/reader/${lesson.id}`} className="h-full">
+                                <Link to={`/student/reader/${lesson.id}`} className="flex-1 flex flex-col">
                                     <div className="aspect-[4/3] w-full flex items-center justify-center relative transition-colors bg-secondary/20">
                                         {lesson.image ? (
                                             <img src={lesson.image} alt={lesson.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
@@ -125,15 +186,21 @@ const LessonLibrary = () => {
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-6">
                                             <span className="text-white font-black text-xs uppercase tracking-widest">Start Reading</span>
                                         </div>
+                                        {/* Difficulty Badge overlaid on image */}
+                                        <div className="absolute top-3 left-3">
+                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${difficultyColor[lesson.difficulty] || difficultyColor.beginner}`}>
+                                                {lesson.difficulty}
+                                            </span>
+                                        </div>
                                     </div>
 
                                     <CardHeader className="flex-1">
-                                        <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center justify-between mb-2">
                                             <Badge variant="secondary" className="rounded-lg font-black text-[10px] uppercase tracking-wider px-2.5 py-1">
                                                 {lesson.subject}
                                             </Badge>
-                                            <div className="flex items-center gap-1 text-amber text-xs font-bold">
-                                                <Star className="w-3.5 h-3.5 fill-current" /> {lesson.rating}
+                                            <div className="flex items-center gap-1 text-xs font-bold text-muted-foreground">
+                                                <Clock className="w-3.5 h-3.5" /> {lesson.duration}
                                             </div>
                                         </div>
                                         <CardTitle className="text-xl font-bold leading-snug group-hover:text-primary transition-colors">
@@ -143,17 +210,8 @@ const LessonLibrary = () => {
 
                                     <CardContent>
                                         <div className="pt-4 border-t border-border/50 flex items-center justify-between">
-                                            <div className="flex gap-4">
-                                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-bold">
-                                                    <Clock className="w-3.5 h-3.5" /> {lesson.duration}
-                                                </div>
-                                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-bold">
-                                                    <Star className="w-3.5 h-3.5" /> {lesson.difficulty}
-                                                </div>
-                                            </div>
-                                            <div className="text-sm font-black text-primary">
-                                                +{lesson.xp} XP
-                                            </div>
+                                            <StarRating lessonId={lesson.id} initialRating={lesson.rating} ratingCount={lesson.ratingCount} />
+                                            <div className="text-sm font-black text-primary">+{lesson.xp} XP</div>
                                         </div>
                                     </CardContent>
                                 </Link>

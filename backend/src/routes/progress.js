@@ -153,7 +153,27 @@ router.post('/:literatureId/rate', authenticateToken, async (req, res) => {
             defaults: { status: 'in_progress' }
         });
 
+        const oldRating = progress.rating;
         await progress.update({ rating });
+
+        // Recalculate the average rating on the Literature record
+        const lit = await Literature.findByPk(req.params.literatureId);
+        if (lit) {
+            let newCount = lit.ratingCount;
+            let newAvg = lit.averageRating;
+
+            if (oldRating) {
+                // Update: remove old rating from average
+                newAvg = ((newAvg * newCount) - oldRating + rating) / newCount;
+            } else {
+                // First time rating from this user
+                newAvg = ((newAvg * newCount) + rating) / (newCount + 1);
+                newCount = newCount + 1;
+            }
+
+            await lit.update({ averageRating: parseFloat(newAvg.toFixed(2)), ratingCount: newCount });
+        }
+
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });

@@ -15,7 +15,7 @@ router.post('/upload', authenticateToken, upload.fields([
   { name: 'image', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    const { title, author, language, subject, content, simplifyText, generateAudio } = req.body;
+    const { title, author, language, subject, content, simplifyText, generateAudio, difficulty } = req.body;
     const files = req.files;
     const pdfFile = files?.file?.[0];
     const imageFile = files?.image?.[0];
@@ -41,8 +41,8 @@ router.post('/upload', authenticateToken, upload.fields([
     }
 
     // Create literature record
-    const sections = await splitIntoChapters(originalContent);
-    console.log(`📚 Detected ${sections.length} sections/chapters`);
+    const { contentType, sections } = await splitIntoChapters(originalContent);
+    console.log(`📚 Detected ${sections.length} sections (type: ${contentType})`);
 
     const user = await import('../models/User.js').then(m => m.User.findByPk(req.user.userId));
 
@@ -60,7 +60,9 @@ router.post('/upload', authenticateToken, upload.fields([
       schoolId: user?.schoolId || null,
       status: 'ready',
       questionsGenerated: 0,
-      generateAudio: isAudioEnabled
+      generateAudio: isAudioEnabled,
+      difficulty: difficulty || 'beginner',
+      contentType: contentType || 'generic'
     });
 
     console.log(`💾 Saved to database: ${literature.id}`);
@@ -84,6 +86,8 @@ router.post('/upload', authenticateToken, upload.fields([
       language: literature.language,
       status: 'ready',
       wordCount: literature.wordCount,
+      estimatedMinutes: Math.ceil(literature.wordCount / 200),
+      difficulty: literature.difficulty,
       questionsGenerated: 0
     });
 
@@ -167,10 +171,14 @@ router.get('/my-content', authenticateToken, async (req, res) => {
     const literature = await Literature.findAll({
       where: { uploadedBy: req.user.userId },
       order: [['createdAt', 'DESC']],
-      attributes: ['id', 'title', 'author', 'subject', 'language', 'wordCount', 'questionsGenerated', 'status', 'imageUrl', 'createdAt']
+      attributes: ['id', 'title', 'author', 'subject', 'language', 'wordCount', 'questionsGenerated', 'status', 'imageUrl', 'difficulty', 'averageRating', 'ratingCount', 'createdAt']
     });
     console.log(`✅ Found ${literature.length} items`);
-    res.json(literature);
+    const result = literature.map(l => ({
+      ...l.toJSON(),
+      estimatedMinutes: Math.ceil(l.wordCount / 200)
+    }));
+    res.json(result);
   } catch (error) {
     console.error('❌ My content error:', error);
     res.status(500).json({ error: error.message });
@@ -188,8 +196,39 @@ router.get('/', authenticateToken, async (req, res) => {
       order: [['createdAt', 'DESC']],
       limit: 50
     });
-    res.json(literature);
+    const result = literature.map(l => ({
+      ...l.toJSON(),
+      estimatedMinutes: Math.ceil(l.wordCount / 200)
+    }));
+    res.json(result);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Re-process existing literature (regenerate sections + contentType)
+router.post('/:id/reprocess', authenticateToken, async (req, res) => {
+  try {
+    const literature = await Literature.findByPk(req.params.id);
+    if (!literature) return res.status(404).json({ error: 'Not found' });
+
+    const textToProcess = literature.originalContent || literature.adaptedContent;
+    if (!textToProcess) return res.status(400).json({ error: 'No content to process' });
+
+    const { splitIntoChapters } = await import('../services/chapterSplitter.js');
+    const { contentType, sections } = await splitIntoChapters(textToProcess);
+
+    await literature.update({ contentType, sections });
+    console.log(`♻️  Re-processed: ${literature.title} → ${contentType} (${sections.length} sections)`);
+
+    res.json({
+      success: true,
+      contentType,
+      sectionCount: sections.length,
+      sections: sections.map(s => ({ title: s.title, hasDialogue: !!s.dialogue }))
+    });
+  } catch (error) {
+    console.error('❌ Reprocess error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -203,7 +242,10 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Literature not found' });
     }
 
-    res.json(literature);
+    res.json({
+      ...literature.toJSON(),
+      estimatedMinutes: Math.ceil(literature.wordCount / 200)
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

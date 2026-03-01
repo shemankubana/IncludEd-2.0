@@ -4,7 +4,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Trophy, Zap, Clock, ArrowRight, Loader2 } from "lucide-react";
+import { BookOpen, Trophy, Zap, Clock, ArrowRight, Loader2, Star } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom"; // Added for navigate function
 
@@ -52,21 +52,28 @@ const StudentDashboard = () => {
                 const headers = { "Authorization": `Bearer ${idToken}` };
                 const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-                // Fetch recent sessions and leaderboard in parallel
-                const [sessionsRes, leaderboardRes] = await Promise.all([
-                    fetch(`${baseUrl}/api/sessions/my`, { headers }),
+                // Fetch progress and leaderboard in parallel
+                const [progressRes, leaderboardRes] = await Promise.all([
+                    fetch(`${baseUrl}/api/progress`, { headers }),
                     fetch(`${baseUrl}/api/stats/leaderboard`, { headers })
                 ]);
 
-                if (sessionsRes.ok) {
-                    const sessionsData = await sessionsRes.json();
-                    setRecentLessons(sessionsData.map((s: any) => ({
-                        id: s.Literature?.id || s.id,
-                        title: s.Literature?.title || "Unknown Lesson",
-                        progress: Math.round(s.quizScore * 100 || 0),
-                        subject: s.Literature?.subject || "General",
-                        color: "bg-primary"
-                    })));
+                if (progressRes.ok) {
+                    const progressData = await progressRes.json();
+                    setRecentLessons(progressData.map((p: any) => {
+                        const totalSections = p.Literature?.sections?.length || 1;
+                        const completedCount = p.completedSections?.length || 0;
+                        const progressPercent = p.status === 'completed' ? 100 : Math.round((completedCount / totalSections) * 100);
+
+                        return {
+                            id: p.Literature?.id,
+                            title: p.Literature?.title || "Unknown Lesson",
+                            progress: progressPercent,
+                            subject: p.Literature?.subject || "General",
+                            color: p.status === 'completed' ? "bg-accent" : "bg-primary",
+                            status: p.status
+                        };
+                    }));
                 }
 
                 if (leaderboardRes.ok) {
@@ -95,12 +102,13 @@ const StudentDashboard = () => {
 
     const student = {
         name: profile?.firstName || "Explorer",
-        xp: profile?.xp || 0,
-        nextLevelXp: ((profile?.level || 1)) * 500, // Updated nextLevelXp calculation
-        streak: profile?.streak || 0,
-        lessonsCompleted: profile?.totalSessions || 0,
-        timeSpent: "2h 45m",
-        level: profile?.level || 1, // Added level
+        xp: profile?.stats?.xp || 0,
+        nextLevelXp: (profile?.stats?.level || 1) * 500,
+        streak: profile?.stats?.streak || 0,
+        lessonsCompleted: profile?.stats?.completedLessons || 0,
+        timeSpent: `${profile?.stats?.totalReadingTime || 0}m`,
+        level: profile?.stats?.level || 1,
+        badges: profile?.stats?.badges || []
     };
 
     return (
@@ -169,33 +177,44 @@ const StudentDashboard = () => {
 
                         {/* Continue Reading */}
                         <div className="space-y-4">
-                            <h3 className="text-xl font-bold tracking-tight px-1 text-primary uppercase text-[10px] tracking-[0.2em]">Continue Learning</h3>
+                            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-primary/60 px-1">
+                                Continue Learning
+                            </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {recentLessons.map((lesson) => (
-                                    <Card key={lesson.id} className="rounded-3xl border border-border overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer shadow-none hover:shadow-lg bg-card/50">
-                                        <CardHeader className="pb-2">
-                                            <span className={`w-fit px-2 py-0.5 rounded-full ${lesson.color} text-[10px] font-black text-white uppercase`}>
-                                                {lesson.subject}
-                                            </span>
-                                            <CardTitle className="text-lg font-bold group-hover:text-primary transition-colors mt-2">{lesson.title}</CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="space-y-4">
-                                                <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
-                                                    <div className="flex items-center gap-1.5 font-black uppercase tracking-widest"><Clock className="w-3.5 h-3.5" /> 15m</div>
-                                                    <div className="font-black">{lesson.progress}%</div>
+                                {recentLessons.length > 0 ? (
+                                    recentLessons.map((lesson) => (
+                                        <Card key={lesson.id} className="rounded-3xl border border-border overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer shadow-none hover:shadow-lg bg-card/50">
+                                            <CardHeader className="pb-2">
+                                                <span className={`w-fit px-2 py-0.5 rounded-full ${lesson.color} text-[10px] font-black text-white uppercase`}>
+                                                    {lesson.subject}
+                                                </span>
+                                                <CardTitle className="text-lg font-bold group-hover:text-primary transition-colors mt-2">{lesson.title}</CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
+                                                        <div className="flex items-center gap-1.5 font-black uppercase tracking-widest"><Clock className="w-3.5 h-3.5" /> In progress</div>
+                                                        <div className="font-black">{lesson.progress}%</div>
+                                                    </div>
+                                                    <Progress value={lesson.progress} className="h-2 rounded-full bg-secondary" />
+                                                    <Button
+                                                        onClick={() => navigate(`/student/reader/${lesson.id}`)}
+                                                        className="w-full rounded-2xl gap-2 font-black uppercase text-xs h-10 tracking-widest"
+                                                    >
+                                                        {lesson.status === 'completed' ? 'Review' : 'Resume'} <ArrowRight className="w-4 h-4" />
+                                                    </Button>
                                                 </div>
-                                                <Progress value={lesson.progress} className="h-2 rounded-full bg-secondary" />
-                                                <Button
-                                                    onClick={() => navigate(`/student/reader/${lesson.id}`)}
-                                                    className="w-full rounded-2xl gap-2 font-black uppercase text-xs h-10 tracking-widest"
-                                                >
-                                                    Resume <ArrowRight className="w-4 h-4" />
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
+                                            </CardContent>
+                                        </Card>
+                                    ))
+                                ) : (
+                                    <div className="md:col-span-2 flex flex-col items-center justify-center py-12 text-center gap-3 text-muted-foreground border-2 border-dashed border-border rounded-3xl">
+                                        <BookOpen className="w-10 h-10 opacity-30" />
+                                        <p className="font-bold text-sm">No lessons started yet</p>
+                                        <p className="text-xs">Head to the Lesson Library and start reading to see your progress here.</p>
+                                        <Button variant="outline" className="mt-2 rounded-xl font-bold" onClick={() => navigate('/student/lessons')}>Browse Lessons</Button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -227,6 +246,28 @@ const StudentDashboard = () => {
                                         <span className="text-sm font-bold">Time</span>
                                     </div>
                                     <span className="text-lg font-black">{student.timeSpent}</span>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Badges Section */}
+                        <Card className="rounded-[32px] border border-border overflow-hidden bg-card/50 shadow-none">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                                    <Trophy className="w-5 h-5 text-primary" /> Your Badges
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex flex-wrap gap-2">
+                                    {student.badges.length > 0 ? (
+                                        student.badges.map((badge: string) => (
+                                            <div key={badge} className="p-2 px-3 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
+                                                <Star className="w-3 h-3" /> {badge.replace('_', ' ')}
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground italic">No badges earned yet. Keep reading!</p>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
