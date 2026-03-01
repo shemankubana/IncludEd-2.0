@@ -1,0 +1,457 @@
+/**
+ * LiteratureViewer.css
+ * ====================
+ * Scoped CSS for the ML-Powered Literature Viewer component.
+ *
+ * Design tokens use the existing index.css CSS variables where possible
+ * (--primary, --accent, --background, --foreground, etc.).
+ */
+
+/* ── Container ─────────────────────────────────────────────────────────────── */
+.literature-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: 'Space Grotesk', 'DM Sans', sans-serif;
+}
+
+/* ── Top bar (title + badge) ───────────────────────────────────────────────── */
+.lit-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+}
+
+.lit-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+  color: hsl(var(--foreground));
+}
+
+.lit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lit-badge--play {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary) / 0.3);
+}
+
+.lit-badge--novel {
+  background: hsl(var(--accent) / 0.15);
+  color: hsl(var(--accent));
+  border: 1px solid hsl(var(--accent) / 0.3);
+}
+
+.lit-badge--generic {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border));
+}
+
+.lit-confidence {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ── Navigation bar ────────────────────────────────────────────────────────── */
+.script-navbar {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1.5rem;
+  gap: 0.5rem;
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+}
+
+.script-navbar__act-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Act buttons ─────────────────────────────────────────────────────────────── */
+.act-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1.5px solid hsl(var(--border));
+  background: transparent;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.act-btn:hover {
+  border-color: hsl(var(--primary) / 0.6);
+  background: hsl(var(--primary) / 0.07);
+  color: hsl(var(--primary));
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.15);
+}
+
+.act-btn--active {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  box-shadow: 0 2px 12px hsl(var(--primary) / 0.4);
+}
+
+.act-btn--active:hover {
+  color: hsl(var(--primary-foreground));
+  transform: translateY(-1px);
+}
+
+.act-btn__chevron {
+  transition: transform 0.2s ease;
+  opacity: 0.7;
+}
+
+.act-btn--active .act-btn__chevron {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+
+/* Scene buttons  ─────────────────────────────────────────────────────────── */
+.script-navbar__scene-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-left: 0.5rem;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.3s ease, opacity 0.25s ease;
+  opacity: 0;
+}
+
+.script-navbar__scene-row--visible {
+  max-height: 200px;
+  opacity: 1;
+}
+
+.scene-btn {
+  padding: 0.3rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1.5px solid hsl(var(--border));
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.scene-btn:hover {
+  border-color: hsl(var(--accent) / 0.6);
+  background: hsl(var(--accent) / 0.07);
+  color: hsl(var(--accent));
+}
+
+.scene-btn--active {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  font-weight: 600;
+}
+
+/* ── Script display area ───────────────────────────────────────────────────── */
+.script-display {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  scroll-behavior: smooth;
+}
+
+.script-display__inner {
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* Scene header ─────────────────────────────────────────────────────────────── */
+.script-display__scene-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 0.25rem;
+}
+
+.script-display__scene-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: hsl(var(--foreground));
+}
+
+.script-display__setting {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 1.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+/* Dialogue block ───────────────────────────────────────────────────────────── */
+.script-block {
+  margin-bottom: 1.25rem;
+}
+
+.script-block--dialogue .character-name {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+  margin-bottom: 0.2rem;
+}
+
+.script-block--dialogue .dialogue-text {
+  font-size: 1rem;
+  line-height: 1.75;
+  color: hsl(var(--foreground));
+  margin: 0;
+  padding-left: 0.1rem;
+}
+
+/* Stage direction block ────────────────────────────────────────────────────── */
+.script-block--stage-direction {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.script-block--stage-direction .stage-text {
+  font-size: 0.875rem;
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Paragraph block (novels / generic) ──────────────────────────────────────── */
+.script-block--paragraph p {
+  font-size: 1rem;
+  line-height: 1.85;
+  color: hsl(var(--foreground));
+  margin: 0 0 0.75rem;
+  text-align: justify;
+  hyphens: auto;
+}
+
+/* Empty state ─────────────────────────────────────────────────────────────── */
+.script-display__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+  gap: 0.75rem;
+}
+
+.script-display__empty svg {
+  opacity: 0.3;
+}
+
+/* ── Questions panel ─────────────────────────────────────────────────────── */
+.questions-panel {
+  border-top: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 1.25rem 1.5rem;
+  flex-shrink: 0;
+}
+
+.questions-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: hsl(var(--foreground));
+  padding: 0;
+  margin-bottom: 0.75rem;
+}
+
+.questions-panel__toggle svg {
+  transition: transform 0.2s ease;
+}
+
+.questions-panel__toggle--open svg {
+  transform: rotate(180deg);
+}
+
+.question-card {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.question-card:hover {
+  box-shadow: 0 2px 10px hsl(var(--foreground) / 0.06);
+}
+
+.question-card__text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin-bottom: 0.6rem;
+  line-height: 1.5;
+}
+
+.question-card__options {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.question-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  border: 1.5px solid hsl(var(--border));
+  background: transparent;
+  color: hsl(var(--foreground));
+  text-align: left;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.question-option:hover {
+  border-color: hsl(var(--primary) / 0.5);
+  background: hsl(var(--primary) / 0.05);
+}
+
+.question-option--correct {
+  border-color: hsl(var(--accent));
+  background: hsl(var(--accent) / 0.1);
+  color: hsl(var(--accent));
+  font-weight: 600;
+}
+
+.question-option--wrong {
+  border-color: hsl(var(--destructive) / 0.5);
+  background: hsl(var(--destructive) / 0.05);
+  color: hsl(var(--destructive));
+}
+
+.question-card__difficulty {
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ── Upload / loading states ─────────────────────────────────────────────── */
+.lit-upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 3rem 2rem;
+  border: 2px dashed hsl(var(--border));
+  border-radius: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+}
+
+.lit-upload-zone:hover,
+.lit-upload-zone--dragging {
+  border-color: hsl(var(--primary) / 0.6);
+  background: hsl(var(--primary) / 0.04);
+  color: hsl(var(--primary));
+}
+
+.lit-upload-zone__icon {
+  width: 48px;
+  height: 48px;
+  opacity: 0.6;
+}
+
+.lit-upload-zone__label {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.lit-upload-zone__hint {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.lit-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 3rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.lit-loading__spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid hsl(var(--border));
+  border-top-color: hsl(var(--primary));
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.lit-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: hsl(var(--destructive));
+  text-align: center;
+  background: hsl(var(--destructive) / 0.05);
+  border: 1px solid hsl(var(--destructive) / 0.2);
+  border-radius: 0.75rem;
+}

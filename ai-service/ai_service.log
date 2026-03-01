@@ -1,0 +1,11 @@
+INFO:     Started server process [62790]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8082 (Press CTRL+C to quit)
+🤖 OllamaService initialized with model: llama3
+🤖 OllamaService initialized with model: llama3
+✅ spaCy loaded
+🤖 OllamaService initialized with model: llama3
+✅ RL Agent: loaded model from /Users/yvanshema/Documents/SHEMA/IncludEd-2.0/ai-service/services/ppo_included_agent.zip
+🤖 OllamaService initialized with model: llama3
+INFO:     127.0.0.1:64714 - "GET / HTTP/1.1" 200 OK

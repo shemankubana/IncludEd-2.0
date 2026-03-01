@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import os
 import time
+import asyncio
 import tempfile
 from dotenv import load_dotenv
 import shutil
@@ -34,6 +35,10 @@ from services.tts_service         import TTSService
 from services.video_service       import VideoService
 from services.ollama_service      import OllamaService
 from pdf_structurer import process_pdf
+from ml_pipeline import LiteratureAnalyzer
+
+# ML pipeline singleton (shared across requests)
+_literature_analyzer = LiteratureAnalyzer()
 
 load_dotenv()
 
@@ -457,6 +462,151 @@ async def analytics_summary():
         "by_disability":      by_disability,
         "recent_sessions":    _session_summaries[-20:],   # last 20 sessions
     }
+
+
+class AnalyzeTextRequest(BaseModel):
+    text:           str
+    filename:       Optional[str] = "document.txt"
+    generate_questions: bool   = True
+    question_count:     int    = 5
+
+
+class DialogueBlock(BaseModel):
+    type:      str                    # "dialogue" | "stage_direction" | "paragraph"
+    character: Optional[str] = None  # set for dialogue blocks
+    content:   str
+
+
+class SceneNode(BaseModel):
+    id:       str
+    title:    str
+    inferred: bool = False
+    setting:  Optional[str] = None
+    blocks:   List[DialogueBlock] = Field(default_factory=list)
+    # novel mode: paragraphs + content instead of blocks
+    paragraphs: List[str] = Field(default_factory=list)
+    content:    str = ""
+
+
+class UnitNode(BaseModel):
+    id:       str
+    title:    str
+    inferred: bool = False
+    content:  str = ""
+    children: List[SceneNode] = Field(default_factory=list)
+
+
+class QuestionItem(BaseModel):
+    question:      str
+    options:       List[str]
+    correctAnswer: int
+    explanation:   str
+    difficulty:    str = "medium"
+
+
+class AnalyzeResponse(BaseModel):
+    document_type: str
+    title:         str
+    confidence:    float
+    units:         List[Dict[str, Any]]
+    flat_units:    List[Dict[str, Any]]
+    questions:     List[Dict[str, Any]]
+    metadata:      Dict[str, Any]
+
+
+@app.post("/analyze", response_model=AnalyzeResponse, tags=["literature"])
+async def analyze_pdf(
+    file:               UploadFile = File(..., description="PDF file of a play or novel"),
+    generate_questions: bool       = True,
+    question_count:     int        = 5,
+):
+    """
+    **ML-Powered Literature Analyzer**
+
+    Classifies a PDF as a play or novel using heuristic signals extracted
+    from PyMuPDF font-size and boldness metadata, then segments it into a
+    hierarchical structure:
+
+    - **Play**  → Act → Scene → Dialogue / Stage-Direction blocks
+    - **Novel** → Chapter → Section → Paragraphs
+
+    Optionally generates pedagogical comprehension questions via Ollama.
+
+    Returns a hierarchical JSON suitable for the React `LiteratureViewer`
+    component.
+    """
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=422,
+            detail="Only PDF files are accepted. Please upload a .pdf file.",
+        )
+
+    try:
+        pdf_bytes = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read uploaded file: {e}")
+
+    if len(pdf_bytes) == 0:
+        raise HTTPException(status_code=422, detail="Uploaded file is empty.")
+
+    try:
+        # Run blocking PyMuPDF work in a thread so the async loop stays free
+        result = await asyncio.to_thread(
+            _literature_analyzer.analyze,
+            pdf_bytes,
+            file.filename,
+            generate_questions,
+            question_count,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        print(f"❌ /analyze failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+    return AnalyzeResponse(
+        document_type = result.document_type,
+        title         = result.title,
+        confidence    = result.confidence,
+        units         = result.units,
+        questions     = result.questions,
+        metadata      = result.metadata,
+    )
+
+
+@app.post("/reanalyze-text", response_model=AnalyzeResponse, tags=["literature"])
+async def reanalyze_text(req: AnalyzeTextRequest):
+    """
+    **Text-only Literature Analyzer**
+    
+    Used for batch processing existing database records where the raw text is available
+    but the original PDF may be missing. 
+    """
+    try:
+        # Mocking PyMuPDF blocks for the segmenter using the raw text
+        # Since we don't have font metadata, the segmenter will fallback to 
+        # regex-only heading detection.
+        result = await asyncio.to_thread(
+            _literature_analyzer.analyze_text,
+            req.text,
+            req.filename or "legacy_content",
+            req.generate_questions,
+            req.question_count,
+        )
+    except Exception as e:
+        print(f"❌ /reanalyze-text failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Re-analysis failed: {str(e)}")
+
+    return AnalyzeResponse(
+        document_type = result.document_type,
+        title         = result.title,
+        confidence    = result.confidence,
+        units         = result.units,
+        questions     = result.questions,
+        metadata      = result.metadata,
+    )
 
 
 if __name__ == "__main__":

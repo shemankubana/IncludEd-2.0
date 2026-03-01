@@ -1,12 +1,16 @@
 import express from 'express';
-import { upload } from '../config/upload.js';  // ✅ FIXED IMPORT
+import { upload } from '../config/upload.js';
 import { Literature } from '../models/Literature.js';
 import { processPDF } from '../services/pdfProcessor.js';
 import { generateQuestions } from '../services/questionGenerator.js';
 import { splitIntoChapters } from '../services/chapterSplitter.js';
 import { authenticateToken } from '../middleware/auth.js';
+import axios from 'axios';
+import FormData from 'form-data';
+import fs from 'fs';
 
 const router = express.Router();
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8082';
 
 // Upload PDF endpoint
 // Upload PDF and Image endpoint
@@ -24,25 +28,58 @@ router.post('/upload', authenticateToken, upload.fields([
     const isAudioEnabled = generateAudio === 'true';
 
     let originalContent, adaptedContent, wordCount;
+    let finalContentType = 'generic';
+    let finalSections = [];
 
     if (pdfFile) {
-      console.log(`📄 Processing PDF: ${pdfFile.originalname} (Simplify: ${isSimplifyEnabled}, Audio: ${isAudioEnabled})`);
+      console.log(`📄 Processing PDF: ${pdfFile.originalname}`);
+
+      // 1. Call AI Analyzer FIRST (while file exists)
+      try {
+        console.log(`🧠 Calling AI Analyzer for: ${pdfFile.originalname}`);
+        const formData = new FormData();
+        formData.append('file', fs.createReadStream(pdfFile.path));
+
+        const aiResp = await axios.post(`${AI_SERVICE_URL}/analyze`, formData, {
+          headers: formData.getHeaders(),
+          timeout: 30000
+        });
+
+        if (aiResp.data) {
+          finalContentType = aiResp.data.document_type;
+          finalSections = aiResp.data.flat_units;
+          console.log(`✅ AI Analyzer success: ${finalContentType} (${finalSections.length} flat units)`);
+        }
+      } catch (err) {
+        console.error('⚠️ AI Analyzer call failed:', err.message);
+      }
+
+      // 2. Extract text and simplify (this unlinks the file!)
       const processed = await processPDF(pdfFile.path, { simplifyText: isSimplifyEnabled });
       originalContent = processed.originalContent;
       adaptedContent = processed.adaptedContent;
       wordCount = processed.wordCount;
+
     } else if (content) {
       console.log(`✍️ Processing raw text input`);
       originalContent = content;
       adaptedContent = content;
       wordCount = content.split(/\s+/).length;
+
+      // Basic split for raw text
+      const split = await splitIntoChapters(originalContent);
+      finalContentType = split.contentType;
+      finalSections = split.sections;
     } else {
       return res.status(400).json({ error: 'No file or content provided' });
     }
 
-    // Create literature record
-    const { contentType, sections } = await splitIntoChapters(originalContent);
-    console.log(`📚 Detected ${sections.length} sections (type: ${contentType})`);
+    // Default to basic splitter if AI analyzer failed to return sections
+    if (finalSections.length === 0) {
+      const split = await splitIntoChapters(originalContent);
+      finalContentType = split.contentType;
+      finalSections = split.sections;
+    }
 
     const user = await import('../models/User.js').then(m => m.User.findByPk(req.user.userId));
 
@@ -55,14 +92,14 @@ router.post('/upload', authenticateToken, upload.fields([
       originalContent,
       adaptedContent,
       wordCount,
-      sections,
+      sections: finalSections,
       uploadedBy: req.user.userId,
       schoolId: user?.schoolId || null,
       status: 'ready',
       questionsGenerated: 0,
       generateAudio: isAudioEnabled,
       difficulty: difficulty || 'beginner',
-      contentType: contentType || 'generic'
+      contentType: finalContentType
     });
 
     console.log(`💾 Saved to database: ${literature.id}`);
