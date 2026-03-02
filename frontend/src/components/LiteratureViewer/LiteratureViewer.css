@@ -1,10 +1,14 @@
 /**
  * LiteratureViewer.css
  * ====================
- * Scoped CSS for the ML-Powered Literature Viewer component.
+ * Dyslexia/ADHD-friendly CSS for the Literature Viewer.
  *
- * Design tokens use the existing index.css CSS variables where possible
- * (--primary, --accent, --background, --foreground, etc.).
+ * Design priorities:
+ *   - High contrast, generous spacing
+ *   - OpenDyslexic font support
+ *   - Chat-bubble dialogue layout for plays
+ *   - Clean paragraph layout for novels
+ *   - Accessible colors and focus indicators
  */
 
 /* ── Container ─────────────────────────────────────────────────────────────── */
@@ -15,7 +19,7 @@
   min-height: 0;
   background: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: 'Space Grotesk', 'DM Sans', sans-serif;
+  font-family: 'OpenDyslexic', 'Space Grotesk', 'DM Sans', sans-serif;
 }
 
 /* ── Top bar (title + badge) ───────────────────────────────────────────────── */
@@ -32,7 +36,7 @@
   font-size: 1.25rem;
   font-weight: 700;
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
   color: hsl(var(--foreground));
 }
 
@@ -89,16 +93,16 @@
   gap: 0.5rem;
 }
 
-/* Act buttons ─────────────────────────────────────────────────────────────── */
 .act-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.4rem 0.9rem;
+  padding: 0.5rem 1rem;
   border-radius: 9999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  border: 1.5px solid hsl(var(--border));
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 2px solid hsl(var(--border));
   background: transparent;
   color: hsl(var(--foreground));
   cursor: pointer;
@@ -110,8 +114,11 @@
   border-color: hsl(var(--primary) / 0.6);
   background: hsl(var(--primary) / 0.07);
   color: hsl(var(--primary));
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px hsl(var(--primary) / 0.15);
+}
+
+.act-btn:focus-visible {
+  outline: 3px solid hsl(var(--primary));
+  outline-offset: 2px;
 }
 
 .act-btn--active {
@@ -119,11 +126,6 @@
   border-color: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
   box-shadow: 0 2px 12px hsl(var(--primary) / 0.4);
-}
-
-.act-btn--active:hover {
-  color: hsl(var(--primary-foreground));
-  transform: translateY(-1px);
 }
 
 .act-btn__chevron {
@@ -136,7 +138,6 @@
   opacity: 1;
 }
 
-/* Scene buttons  ─────────────────────────────────────────────────────────── */
 .script-navbar__scene-row {
   display: flex;
   flex-wrap: wrap;
@@ -154,11 +155,11 @@
 }
 
 .scene-btn {
-  padding: 0.3rem 0.75rem;
+  padding: 0.35rem 0.85rem;
   border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border: 1.5px solid hsl(var(--border));
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 2px solid hsl(var(--border));
   background: transparent;
   color: hsl(var(--muted-foreground));
   cursor: pointer;
@@ -172,11 +173,16 @@
   color: hsl(var(--accent));
 }
 
+.scene-btn:focus-visible {
+  outline: 3px solid hsl(var(--accent));
+  outline-offset: 2px;
+}
+
 .scene-btn--active {
   background: hsl(var(--accent));
   border-color: hsl(var(--accent));
   color: hsl(var(--accent-foreground));
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* ── Script display area ───────────────────────────────────────────────────── */
@@ -188,13 +194,19 @@
 }
 
 .script-display__inner {
-  max-width: 680px;
+  max-width: 780px;
   margin: 0 auto;
+}
+
+.script-display__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 /* Scene header ─────────────────────────────────────────────────────────────── */
 .script-display__scene-label {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -203,14 +215,15 @@
 }
 
 .script-display__scene-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0 0 0.75rem;
   color: hsl(var(--foreground));
+  letter-spacing: 0.02em;
 }
 
 .script-display__setting {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-style: italic;
   color: hsl(var(--muted-foreground));
   margin-bottom: 1.75rem;
@@ -218,55 +231,149 @@
   border-bottom: 1px solid hsl(var(--border));
 }
 
-/* Dialogue block ───────────────────────────────────────────────────────────── */
-.script-block {
-  margin-bottom: 1.25rem;
-}
+/* ══════════════════════════════════════════════════════════════════════════════
+   DIALOGUE BUBBLES — Chat-style layout for plays
+   ══════════════════════════════════════════════════════════════════════════════ */
 
-.script-block--dialogue .character-name {
-  display: block;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: hsl(var(--primary));
-  margin-bottom: 0.2rem;
-}
-
-.script-block--dialogue .dialogue-text {
-  font-size: 1rem;
-  line-height: 1.75;
-  color: hsl(var(--foreground));
-  margin: 0;
-  padding-left: 0.1rem;
-}
-
-/* Stage direction block ────────────────────────────────────────────────────── */
-.script-block--stage-direction {
+.dialogue-bubble {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  max-width: 85%;
+  animation: fadeSlideIn 0.3s ease;
 }
 
-.script-block--stage-direction .stage-text {
-  font-size: 0.875rem;
-  font-style: italic;
-  color: hsl(var(--muted-foreground));
-  line-height: 1.6;
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Left-aligned dialogue (first speaker) */
+.dialogue-bubble--left {
+  align-self: flex-start;
+  flex-direction: row;
+}
+
+/* Right-aligned dialogue (second speaker) */
+.dialogue-bubble--right {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+/* Character avatar circle */
+.dialogue-bubble__avatar {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: white;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+/* Message bubble */
+.dialogue-bubble__message {
+  background: hsl(var(--card));
+  border: 1.5px solid hsl(var(--border));
+  border-radius: 1.25rem;
+  padding: 0.75rem 1.1rem;
+  box-shadow: 0 1px 4px hsl(var(--foreground) / 0.04);
+  transition: box-shadow 0.2s ease;
+}
+
+.dialogue-bubble--left .dialogue-bubble__message {
+  border-top-left-radius: 0.25rem;
+}
+
+.dialogue-bubble--right .dialogue-bubble__message {
+  border-top-right-radius: 0.25rem;
+  background: hsl(var(--primary) / 0.06);
+  border-color: hsl(var(--primary) / 0.15);
+}
+
+.dialogue-bubble__message:hover {
+  box-shadow: 0 3px 12px hsl(var(--foreground) / 0.08);
+}
+
+/* Character name above the bubble */
+.dialogue-bubble__name {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}
+
+/* Dialogue text — dyslexia-friendly */
+.dialogue-bubble__text {
+  font-size: 1.05rem;
+  line-height: 1.9;
+  letter-spacing: 0.03em;
+  word-spacing: 0.12em;
+  color: hsl(var(--foreground));
   margin: 0;
 }
 
-/* Paragraph block (novels / generic) ──────────────────────────────────────── */
-.script-block--paragraph p {
-  font-size: 1rem;
-  line-height: 1.85;
-  color: hsl(var(--foreground));
-  margin: 0 0 0.75rem;
-  text-align: justify;
-  hyphens: auto;
+/* ══════════════════════════════════════════════════════════════════════════════
+   STAGE DIRECTIONS — Centered annotations between dialogue
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.stage-direction-block {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  margin: 0.5rem 0;
 }
 
-/* Empty state ─────────────────────────────────────────────────────────────── */
+.stage-direction-block__line {
+  flex: 1;
+  height: 1px;
+  background: hsl(var(--border));
+}
+
+.stage-direction-block__text {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+  white-space: nowrap;
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 999px;
+  line-height: 1.5;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   PARAGRAPHS — Novel/generic dyslexia-friendly text
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.accessible-paragraph p {
+  font-size: 1.1rem;
+  line-height: 2;
+  letter-spacing: 0.03em;
+  word-spacing: 0.15em;
+  color: hsl(var(--foreground));
+  margin: 0 0 1.25rem;
+  text-align: left;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────────── */
 .script-display__empty {
   display: flex;
   flex-direction: column;
@@ -282,7 +389,10 @@
   opacity: 0.3;
 }
 
-/* ── Questions panel ─────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════════
+   QUESTIONS PANEL
+   ══════════════════════════════════════════════════════════════════════════════ */
+
 .questions-panel {
   border-top: 1px solid hsl(var(--border));
   background: hsl(var(--card));
@@ -314,44 +424,42 @@
 
 .question-card {
   background: hsl(var(--background));
-  border: 1px solid hsl(var(--border));
-  border-radius: 0.75rem;
-  padding: 0.85rem 1rem;
+  border: 1.5px solid hsl(var(--border));
+  border-radius: 1rem;
+  padding: 1rem 1.2rem;
   margin-bottom: 0.75rem;
-  transition: box-shadow 0.2s ease;
-}
-
-.question-card:hover {
-  box-shadow: 0 2px 10px hsl(var(--foreground) / 0.06);
 }
 
 .question-card__text {
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 700;
   color: hsl(var(--foreground));
   margin-bottom: 0.6rem;
-  line-height: 1.5;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
 }
 
 .question-card__options {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
 .question-option {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.82rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.75rem;
+  font-size: 0.88rem;
   cursor: pointer;
-  border: 1.5px solid hsl(var(--border));
+  border: 2px solid hsl(var(--border));
   background: transparent;
   color: hsl(var(--foreground));
   text-align: left;
   transition: all 0.15s ease;
   width: 100%;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
 }
 
 .question-option:hover {
@@ -359,11 +467,16 @@
   background: hsl(var(--primary) / 0.05);
 }
 
+.question-option:focus-visible {
+  outline: 3px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
 .question-option--correct {
   border-color: hsl(var(--accent));
   background: hsl(var(--accent) / 0.1);
   color: hsl(var(--accent));
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .question-option--wrong {
@@ -381,7 +494,10 @@
   color: hsl(var(--muted-foreground));
 }
 
-/* ── Upload / loading states ─────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════════
+   UPLOAD / LOADING STATES
+   ══════════════════════════════════════════════════════════════════════════════ */
+
 .lit-upload-zone {
   display: flex;
   flex-direction: column;
@@ -389,8 +505,8 @@
   justify-content: center;
   gap: 1rem;
   padding: 3rem 2rem;
-  border: 2px dashed hsl(var(--border));
-  border-radius: 1rem;
+  border: 2.5px dashed hsl(var(--border));
+  border-radius: 1.5rem;
   cursor: pointer;
   transition: all 0.2s ease;
   background: transparent;
@@ -405,6 +521,11 @@
   color: hsl(var(--primary));
 }
 
+.lit-upload-zone:focus-visible {
+  outline: 3px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
 .lit-upload-zone__icon {
   width: 48px;
   height: 48px;
@@ -412,22 +533,14 @@
 }
 
 .lit-upload-zone__label {
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .lit-upload-zone__hint {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   opacity: 0.7;
-}
-
-.lit-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  padding: 3rem;
-  color: hsl(var(--muted-foreground));
 }
 
 .lit-loading__spinner {
@@ -452,6 +565,47 @@
   color: hsl(var(--destructive));
   text-align: center;
   background: hsl(var(--destructive) / 0.05);
-  border: 1px solid hsl(var(--destructive) / 0.2);
-  border-radius: 0.75rem;
+  border: 1.5px solid hsl(var(--destructive) / 0.2);
+  border-radius: 1rem;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   TTS HIGHLIGHT — Word being read aloud
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.tts-word--active {
+  background: hsl(50, 95%, 65%);
+  color: hsl(0, 0%, 10%);
+  border-radius: 0.25rem;
+  padding: 0.05rem 0.15rem;
+  transition: background 0.15s ease;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .dialogue-bubble {
+    max-width: 95%;
+  }
+
+  .dialogue-bubble__avatar {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    font-size: 0.65rem;
+  }
+
+  .dialogue-bubble__text {
+    font-size: 0.95rem;
+  }
+
+  .accessible-paragraph p {
+    font-size: 1rem;
+  }
+
+  .script-display {
+    padding: 1rem;
+  }
 }

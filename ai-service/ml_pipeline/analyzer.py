@@ -6,10 +6,11 @@ LiteratureAnalyzer — Main orchestrator.
 Pipeline:
   1. Open PDF with PyMuPDF (fitz).
   2. Extract span-level block data (with page numbers injected).
-  3. ContentClassifier → doc_type, confidence.
-  4. StructuralSegmenter → structured hierarchy (Act>Scene or Chapter>Section).
-  5. PedagogicalQuestionGenerator → questions for the first scene/chapter.
-  6. Return AnalysisResult dataclass.
+  3. FrontMatterFilter → remove TOC, forewords, prefaces, dedications, epigraphs.
+  4. ContentClassifier → doc_type, confidence.
+  5. StructuralSegmenter → structured hierarchy (Act>Scene or Chapter>Section).
+  6. PedagogicalQuestionGenerator → questions for the first scene/chapter.
+  7. Return AnalysisResult dataclass.
 """
 
 from __future__ import annotations
@@ -24,11 +25,12 @@ try:
     _FITZ_OK = True
 except ImportError:
     _FITZ_OK = False
-    print("⚠️  PyMuPDF (fitz) not installed. Run: pip install pymupdf")
+    print("PyMuPDF (fitz) not installed. Run: pip install pymupdf")
 
 from .content_classifier   import ContentClassifier, ClassificationResult
 from .structural_segmenter import StructuralSegmenter
 from .question_generator   import PedagogicalQuestionGenerator
+from .front_matter_filter  import FrontMatterFilter
 
 
 # ── Result dataclass ───────────────────────────────────────────────────────────
@@ -66,9 +68,10 @@ class LiteratureAnalyzer:
     """
 
     def __init__(self):
-        self._classifier  = ContentClassifier()
-        self._segmenter   = StructuralSegmenter()
-        self._qgen        = PedagogicalQuestionGenerator()
+        self._classifier    = ContentClassifier()
+        self._segmenter     = StructuralSegmenter()
+        self._qgen          = PedagogicalQuestionGenerator()
+        self._front_filter  = FrontMatterFilter()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -112,7 +115,7 @@ class LiteratureAnalyzer:
         # ── Step 1: Open & extract ─────────────────────────────────────────────
         doc   = fitz.open(stream=pdf_bytes, filetype="pdf")
         pages = doc.page_count
-        all_blocks, total_chars = self._extract_all_blocks(doc)
+        all_blocks, total_chars = self._extract_blocks(doc)
 
         if total_chars < 50:
             raise ValueError(
@@ -120,17 +123,31 @@ class LiteratureAnalyzer:
                 "Pre-process it with OCR (e.g., pytesseract) first."
             )
 
-        # ── Step 2: Classify ───────────────────────────────────────────────────
-        clf = self._classifier.classify(all_blocks)
-
-        # ── Step 3: Infer title ────────────────────────────────────────────────
+        # ── Step 2: Infer title (before filtering — title is on page 1) ──────
         title = self._infer_title(all_blocks, doc, filename)
 
-        # ── Step 4: Segment ────────────────────────────────────────────────────
-        units = self._segmenter.segment(all_blocks, doc_type=clf.type)
+        # ── Step 3: Classify (on full text for better signal detection) ───────
+        clf = self._classifier.classify(all_blocks)
+
+        # ── Step 4: Filter front matter ───────────────────────────────────────
+        # Remove TOC, forewords, prefaces, dedications, epigraphs, etc.
+        content_blocks, filter_meta = self._front_filter.filter_blocks(
+            all_blocks, doc_type=clf.type
+        )
+
+        # Recount chars after filtering
+        filtered_chars = 0
+        for b in content_blocks:
+            if b.get("type") == 0:
+                for line in b.get("lines", []):
+                    for span in line.get("spans", []):
+                        filtered_chars += len(span.get("text", ""))
+
+        # ── Step 5: Segment (on filtered content only) ────────────────────────
+        units = self._segmenter.segment(content_blocks, doc_type=clf.type)
         flat_units = self._flatten_units(units, doc_type=clf.type)
 
-        # ── Step 5: Generate questions ─────────────────────────────────────────
+        # ── Step 6: Generate questions ─────────────────────────────────────────
         questions: List[Dict[str, Any]] = []
         if generate_questions:
             sample_content = self._extract_first_content(units, clf.type)
@@ -154,6 +171,8 @@ class LiteratureAnalyzer:
                 "source_file":         filename,
                 "pages":               pages,
                 "total_chars":         total_chars,
+                "content_chars":       filtered_chars,
+                "front_matter_filtered": filter_meta,
                 "top_level_units":     len(units),
                 "processing_time_ms":  elapsed_ms,
                 "play_score":          clf.play_score,
