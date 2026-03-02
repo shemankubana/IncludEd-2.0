@@ -16,6 +16,7 @@ export default {
       fontFamily: {
         "space": ["Space Grotesk", "sans-serif"],
         "dm-sans": ["DM Sans", "sans-serif"],
+        "dyslexic": ["OpenDyslexic", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

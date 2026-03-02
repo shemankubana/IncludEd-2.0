@@ -1,35 +1,31 @@
 """
 IncludEd AI Service – FastAPI Application
 ==========================================
+ML-powered PDF analysis and accessibility service for students
+with Dyslexia and ADHD. Receives literature PDFs, classifies them,
+segments into chapters/scenes, filters front matter, and provides
+TTS with word-level timestamps.
 """
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
-import time
 import asyncio
-import tempfile
 from dotenv import load_dotenv
-import shutil
 
-# Service imports
-from services.smart_question_generator import SmartQuestionGenerator
+from services.tts_service import TTSService
 from services.accessibility_adapter import FreeAccessibilityAdapter
-from services.rl_agent_service    import RLAgentService
-from services.attention_monitor   import AttentionMonitor
-from services.session_manager     import SessionManager
-from services.tts_service         import TTSService
-from services.video_service       import VideoService
-from services.ollama_service      import OllamaService
+from services.ollama_service import OllamaService
 from ml_pipeline import LiteratureAnalyzer
 
 # ML pipeline singleton
 _literature_analyzer = LiteratureAnalyzer()
 
 load_dotenv()
-app = FastAPI(title="IncludEd AI Service", version="2.0.0")
+app = FastAPI(title="IncludEd AI Service", version="2.0.0",
+              description="ML-powered PDF accessibility pipeline for neurodivergent learners")
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,15 +36,11 @@ app.add_middleware(
 )
 
 # Service singletons
-question_gen = SmartQuestionGenerator()
 accessibility_adapter = FreeAccessibilityAdapter()
-rl_agent = RLAgentService()
-session_manager = SessionManager()
 tts_service = TTSService()
-video_service = VideoService()
 ollama_service = OllamaService()
 
-# ── Models ────────────────────────────────────────────────────────────────────
+# ── Request/Response Models ──────────────────────────────────────────────────
 
 class AnalyzeTextRequest(BaseModel):
     text: str
@@ -65,11 +57,22 @@ class AnalyzeResponse(BaseModel):
     questions: List[Dict[str, Any]]
     metadata: Dict[str, Any]
 
+class TTSRequest(BaseModel):
+    text: str
+    voice: Optional[str] = "en-KE-AsminaNeural"
+    rate: Optional[str] = "+0%"
+
+class AdaptTextRequest(BaseModel):
+    text: str
+    level: Optional[str] = "accessible"
+    disabilities: Optional[List[str]] = None
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/")
 async def root():
-    return {"status": "healthy", "service": "IncludEd AI Service"}
+    return {"status": "healthy", "service": "IncludEd AI Service",
+            "purpose": "ML-powered PDF accessibility for Dyslexia & ADHD"}
 
 @app.post("/analyze", response_model=AnalyzeResponse, tags=["literature"])
 async def analyze_pdf(
@@ -77,6 +80,7 @@ async def analyze_pdf(
     generate_questions: bool = True,
     question_count: int = 5,
 ):
+    """Analyze a PDF: classify type, segment structure, filter front matter, generate questions."""
     pdf_bytes = await file.read()
     result = await asyncio.to_thread(
         _literature_analyzer.analyze,
@@ -97,6 +101,7 @@ async def analyze_pdf(
 
 @app.post("/reanalyze-text", response_model=AnalyzeResponse, tags=["literature"])
 async def reanalyze_text(req: AnalyzeTextRequest):
+    """Re-analyze raw text content (no PDF) through the ML pipeline."""
     result = await asyncio.to_thread(
         _literature_analyzer.analyze_text,
         req.text,
@@ -114,27 +119,31 @@ async def reanalyze_text(req: AnalyzeTextRequest):
         metadata=result.metadata,
     )
 
-# ── Helper Endpoints ──
+@app.post("/adapt-text", tags=["accessibility"])
+async def adapt_text(request: AdaptTextRequest):
+    """Adapt text for accessibility (simplify vocabulary, break sentences, dyslexia/ADHD modes)."""
+    disability_profile = {"disabilities": request.disabilities} if request.disabilities else None
+    adapted = accessibility_adapter.adapt_text(
+        text=request.text,
+        level=request.level,
+        disability_profile=disability_profile,
+    )
+    return {"adaptedText": adapted, "originalLength": len(request.text), "adaptedLength": len(adapted)}
 
-@app.post("/adapt-text")
-async def adapt_text(request: Any):
-    return {"adaptedText": request.text[:5000], "strategy": "Original"}
+@app.post("/tts/generate", tags=["tts"])
+async def generate_tts(request: TTSRequest):
+    """Generate TTS audio with word-level timestamps for synchronized highlighting."""
+    result = await tts_service.generate_with_timestamps(
+        text=request.text,
+        voice=request.voice,
+        rate=request.rate,
+    )
+    return result
 
-@app.post("/tts/generate")
-async def generate_tts(request: Any):
-    return await tts_service.generate_with_timestamps(text=request.text)
-
-@app.post("/session/start")
-async def start_session(request: Any):
-    return {"session_id": "mock_session"}
-
-@app.post("/session/telemetry")
-async def push_telemetry(request: Any):
-    return {"status": "ok"}
-
-@app.post("/session/end")
-async def end_session(request: Any):
-    return {"status": "finished"}
+@app.get("/tts/voices", tags=["tts"])
+async def list_voices():
+    """List available TTS voices."""
+    return {"voices": TTSService.VOICES}
 
 if __name__ == "__main__":
     import uvicorn
