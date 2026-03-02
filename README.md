@@ -10,72 +10,110 @@ The platform follows a distributed microservices pattern to separate concerns be
 
 ```mermaid
 graph TD
-    A[React Frontend / Streamlit] -- Telemetry --> B(Node.js Backend)
+    A[React Frontend] -- Telemetry/API --> B(Node.js Backend)
     B -- Sessions/Profiles --> C{PostgreSQL}
-    A -- Adaptive Requests --> D[FastAPI AI Service]
+    A -- Adaptive Requests --> D[Python AI Service]
     D -- RL Policy --> E(PPO Model)
-    D -- Text Utils --> F(spaCy / edge-TTS)
-    D -- Vision/Audio --> G(Whisper / OpenCV)
+    D -- Text Utils --> F(spaCy / Ollama)
+    D -- Audio --> G(edge-TTS)
     B -- Analytics Sync --> D
 ```
 
 ### Core Services
-1.  **Node.js Backend (Port 3000)**: Manages users, student profiles, reading session history, and provides the main API for the React frontend.
-2.  **Python AI Service (Port 8080)**: The "Brain" of the project. Built with FastAPI, it hosts the PPO (Proximal Policy Optimization) agent and all accessibility tools (TTS, Transcription, Simplification).
-3.  **Streamlit Portal (Port 8501)**: A dedicated testing and monitoring UI used for simulating sessions, inspecting the RL agent's behavior, and verifying accessibility features.
-
----
-
-## 🧠 AI & Reinforcement Learning Logic
-
-The core innovation is the **Closed-Loop Adaptation Engine**.
-
-### 1. The State Vector (8 Dimensions)
-The AI perceives the student's state through a normalized vector:
-- `[reading_speed, mouse_dwell, scroll_hesitation, backtrack_freq, attention_score, disability_type, text_difficulty, session_fatigue]`
-
-### 2. Action Space (Pedagogical Interventions)
-Based on the state, the RL agent selects one of 6 actions:
-- `0: Keep Original`
-- `1: Light Simplification`
-- `2: Heavy Simplification`
-- `3: TTS + Synchronized Highlights`
-- `4: Syllable Break Adaptation`
-- `5: Mandatory Attention Break`
-
-### 3. Reward Function
-The agent is trained to maximize a reward based on **Attention Stability** and **Quiz Performance**. It is penalized for causing high "fatigue" (over-adapting) or allowing "attention lapses".
-
----
-
-## 🚀 API Reference (AI Service)
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/adapt-text` | `POST` | Takes text and disability profile; returns adapted text + chosen RL strategy. |
-| `/tts/generate` | `POST` | Generates MP3 audio + **word-level timestamps** for synchronized highlighting. |
-| `/video/transcribe` | `POST` | Transcribes video/audio to `.vtt` format for accessible captions. |
-| `/session/telemetry` | `POST` | Receives live telemetry; returns the next RL-recommended intervention. |
+1.  **Node.js Backend (Port 3000)**: Manages users, student profiles, and reading session history.
+2.  **Python AI Service (Port 8082)**: The "Brain" of the project. Built with FastAPI, it hosts the PPO agent, Ollama-powered content structuring, and accessibility tools.
+3.  **React Frontend (Port 8080/81)**: The student/teacher interface built with Vite, Tailwind CSS, and Shadcn UI.
 
 ---
 
 ## 🛠️ Setup & Development
 
-### 1. Prerequisites
-- Node.js (v18+) & Python 3.11+
-- `ffmpeg` (required for video transcription)
+Follow these steps to set up IncludEd 2.0 on a new machine.
 
-### 2. Startup Sequence
-1.  **Database**: `docker-compose up -d` (Postgres on 5432)
-2.  **Backend**: `cd backend && npm install && npm run dev`
-3.  **AI Service**: 
-    ```bash
-    cd ai-service
-    pip install -r requirements.txt
-    python main.py
-    ```
-4.  **Testing UI**: `cd streamlit_app && streamlit run app.py`
-5.  **Frontend**: `cd frontend && npm install && npm run dev`
+### 1. Prerequisites
+- **Node.js** (v18+)
+- **Python** (3.11+)
+- **FFmpeg**: Required for audio processing.
+  - Mac: `brew install ffmpeg`
+  - Linux: `sudo apt install ffmpeg`
+- **Ollama**: Required for smart content structuring and question generation.
+  - [Download Ollama](https://ollama.com/)
+  - Run `ollama pull llama3` after installation.
+
+### 2. Environment Configuration
+
+Clone the repository and set up the environment files:
+
+#### Backend (`/backend/.env`)
+Create a `.env` file in the `backend` directory:
+```env
+PORT=3000
+DATABASE_URL=postgresql://user:password@localhost:5432/included_db
+FRONTEND_URL=http://localhost:8080
+AI_SERVICE_URL=http://localhost:8082
+FIREBASE_PROJECT_ID=your-project-id
+NODE_ENV=development
+```
+
+#### Frontend (`/frontend/.env`)
+Create a `.env` file in the `frontend` directory:
+```env
+VITE_API_URL=http://localhost:3000
+VITE_FIREBASE_API_KEY=your_key
+VITE_FIREBASE_AUTH_DOMAIN=your_domain
+VITE_FIREBASE_PROJECT_ID=your_id
+VITE_FIREBASE_STORAGE_BUCKET=your_bucket
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_id
+VITE_FIREBASE_APP_ID=your_app_id
+```
+
+### 3. Firebase Setup
+1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com/).
+2. Enable **Authentication** (Google & Email/Password).
+3. Generate a **Web App** and copy the config to the frontend `.env`.
+4. Go to **Project Settings > Service Accounts**, generate a new private key, and save it as `backend/serviceAccountKey.json`.
+
+### 4. Startup Sequence
+
+#### Step A: Database
+Ensure PostgreSQL is running.
+```bash
+# Example if using Docker
+docker-compose up -d
+```
+
+#### Step B: Backend
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+#### Step C: AI Service
+```bash
+cd ai-service
+python -m venv venv
+source venv/bin/activate  # Mac/Linux
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+python main.py
+```
+
+#### Step D: Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## 🚀 Key Features
+
+- **🎭 Smart Content Structuring**: Automatically detects Plays and Novels from PDFs and formats them for readability.
+- **🎧 Adaptive Reader**: Real-time syllable highlighting, text-to-speech, and personalized intervention from the RL agent.
+- **📈 Teacher Analytics**: Track student progress, reading speed, and accessibility needs across the class.
+- **♿ Dyslexia Friendly**: Integrated OpenDyslexic font support and high-contrast focus modes.
 
 ---
 
