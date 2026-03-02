@@ -44,7 +44,7 @@ export const StudentStats = sequelize.define('StudentStats', {
         comment: 'Total minutes spent reading'
     },
     badges: {
-        type: DataTypes.JSONB,
+        type: DataTypes.JSON,
         defaultValue: [],
         comment: 'Array of earned badge IDs like ["first_lesson", "streak_7"]'
     }

@@ -29,7 +29,7 @@ export const LessonProgress = sequelize.define('LessonProgress', {
         comment: 'Index of the last section the student was reading'
     },
     completedSections: {
-        type: DataTypes.JSONB,
+        type: DataTypes.JSON,
         defaultValue: [],
         comment: 'Array of section indices the student has finished'
     },
