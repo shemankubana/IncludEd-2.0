@@ -19,6 +19,7 @@ import { Progress } from "@/components/ui/progress";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { API_BASE } from "@/lib/api";
 import { useRef } from "react";
 
 const CreateContent = () => {
@@ -65,7 +66,7 @@ const CreateContent = () => {
                 if (!videoFile) return;
                 formData.append("file", videoFile);
 
-                const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/video/transcribe`, {
+                const response = await fetch(`${API_BASE}/api/video/transcribe`, {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${idToken}` },
                     body: formData
@@ -100,7 +101,7 @@ const CreateContent = () => {
 
                 setUploadProgress(40);
 
-                const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/upload`, {
+                const response = await fetch(`${API_BASE}/api/literature/upload`, {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${idToken}` },
                     body: formData

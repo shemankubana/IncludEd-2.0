@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/api";
 
 const AdminDashboard = () => {
     const { user } = useAuth();
@@ -17,10 +18,10 @@ const AdminDashboard = () => {
             try {
                 const idToken = await user?.getIdToken();
                 const [statsRes, schoolRes] = await Promise.all([
-                    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/admin/stats`, {
+                    fetch(`${API_BASE}/api/admin/stats`, {
                         headers: { "Authorization": `Bearer ${idToken}` }
                     }),
-                    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/schools/mine`, {
+                    fetch(`${API_BASE}/api/schools/mine`, {
                         headers: { "Authorization": `Bearer ${idToken}` }
                     })
                 ]);

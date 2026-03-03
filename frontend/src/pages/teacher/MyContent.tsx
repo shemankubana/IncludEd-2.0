@@ -22,6 +22,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { API_BASE } from "@/lib/api";
 
 const subjectColors: Record<string, string> = {
     Literature: "bg-violet-500/10 text-violet-600 border-violet-200 dark:border-violet-800",
@@ -70,7 +71,7 @@ const MyContent = () => {
         setReprocessingId(id);
         try {
             const idToken = await user.getIdToken();
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/${id}/reprocess`, {
+            const res = await fetch(`${API_BASE}/api/literature/${id}/reprocess`, {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${idToken}` }
             });
@@ -82,7 +83,7 @@ const MyContent = () => {
                     description: `Detected as ${data.contentType} with ${data.sectionCount} sections.`,
                 });
                 // Refresh content list
-                const refreshedRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/my-content`, {
+                const refreshedRes = await fetch(`${API_BASE}/api/literature/my-content`, {
                     headers: { "Authorization": `Bearer ${idToken}` }
                 });
                 if (refreshedRes.ok) setContent(await refreshedRes.json());
@@ -100,7 +101,7 @@ const MyContent = () => {
         }
     };
 
-    const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+    const API = API_BASE;
 
     const fetchContent = async () => {
         if (!user) return;

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
+import { API_BASE } from "@/lib/api";
 
 const Welcome = () => {
     const navigate = useNavigate();
@@ -15,7 +16,7 @@ const Welcome = () => {
             // Fetch profile to redirect to correct dashboard
             const fetchRoleAndRedirect = async () => {
                 const idToken = await user.getIdToken();
-                const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me`, {
+                const response = await fetch(`${API_BASE}/api/auth/me`, {
                     headers: { "Authorization": `Bearer ${idToken}` }
                 });
                 if (response.ok) {

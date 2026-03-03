@@ -44,9 +44,9 @@ const AI_SERVICE_URL =
     (import.meta.env.VITE_AI_SERVICE_URL as string | undefined) ??
     "http://localhost:8082";
 
-const API_URL =
-    (import.meta.env.VITE_API_URL as string | undefined) ??
-    "http://localhost:3000";
+import { API_BASE } from "@/lib/api";
+
+const API_URL = API_BASE;
 
 interface Section {
     title: string;
