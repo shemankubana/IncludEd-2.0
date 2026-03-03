@@ -27,6 +27,10 @@ app.use(cors({
     if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
       return callback(null, true);
     }
+    // Allow cloud workspace origins (Lightning AI, Codespaces, etc.)
+    if (origin.endsWith('.cloudspaces.litng.ai') || origin.endsWith('.github.dev')) {
+      return callback(null, true);
+    }
     const allowed = process.env.FRONTEND_URL;
     if (allowed && origin === allowed) return callback(null, true);
     callback(new Error(`CORS: origin ${origin} not allowed`));
