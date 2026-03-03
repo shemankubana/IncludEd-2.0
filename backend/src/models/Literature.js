@@ -56,7 +56,7 @@ export const Literature = sequelize.define('Literature', {
     allowNull: true
   },
   sections: {
-    type: DataTypes.JSONB,
+    type: DataTypes.JSON,
     allowNull: true,
     defaultValue: null,
     comment: 'Array of {title, content} chapter/scene/act sections detected from content'
