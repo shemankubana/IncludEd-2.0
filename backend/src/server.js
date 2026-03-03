@@ -12,10 +12,13 @@ import adminRoutes from './routes/admin.js';
 import progressRoutes from './routes/progress.js';
 import { sequelize } from './config/database.js';
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load backend/.env first (higher priority), then fall back to project root.
+// dotenv does NOT overwrite existing values, so first-loaded wins.
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,6 +28,10 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (origin.startsWith('http') || origin.startsWith('http')) {
+      return callback(null, true);
+    }
+    // Allow cloud workspace origins (Lightning AI, Codespaces, etc.)
+    if (origin.endsWith('.cloudspaces.litng.ai') || origin.endsWith('.github.dev')) {
       return callback(null, true);
     }
     const allowed = process.env.FRONTEND_URL;
