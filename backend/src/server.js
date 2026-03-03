@@ -15,9 +15,10 @@ import { sequelize } from './config/database.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env from backend/ first, then fall back to project root
+// Load backend/.env first (higher priority), then fall back to project root.
+// dotenv does NOT overwrite existing values, so first-loaded wins.
+dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-dotenv.config(); // backend/.env overrides if it exists
 
 const app = express();
 const PORT = process.env.PORT || 3000;
