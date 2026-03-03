@@ -7,6 +7,7 @@ import { Search, Filter, BookOpen, Clock, Star, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/api";
 import { motion } from "framer-motion";
 
 const difficultyColor: Record<string, string> = {
@@ -28,7 +29,7 @@ const StarRating = ({ lessonId, initialRating, ratingCount }: { lessonId: string
         setSubmitting(true);
         try {
             const idToken = await user.getIdToken();
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${lessonId}/rate`, {
+            const res = await fetch(`${API_BASE}/api/progress/${lessonId}/rate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
                 body: JSON.stringify({ rating: stars })
@@ -84,7 +85,7 @@ const LessonLibrary = () => {
             try {
                 const idToken = await user.getIdToken();
                 const headers = { "Authorization": `Bearer ${idToken}` };
-                const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+                const baseUrl = API_BASE;
 
                 const response = await fetch(`${baseUrl}/api/literature`, { headers });
                 const data = await response.json();

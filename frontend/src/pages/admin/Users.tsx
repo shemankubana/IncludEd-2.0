@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/api";
 
 const AdminUsers = () => {
     const { user } = useAuth();
@@ -19,7 +20,7 @@ const AdminUsers = () => {
         try {
             setLoading(true);
             const idToken = await user?.getIdToken();
-            let url = `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/admin/users`;
+            let url = `${API_BASE}/api/admin/users`;
             const params = new URLSearchParams();
             if (filterRole !== "all") params.append("role", filterRole);
             if (searchTerm) params.append("search", searchTerm);
@@ -42,7 +43,7 @@ const AdminUsers = () => {
     const handleApprove = async (id: string) => {
         try {
             const idToken = await user?.getIdToken();
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/admin/users/${id}/approve`, {
+            const res = await fetch(`${API_BASE}/api/admin/users/${id}/approve`, {
                 method: "PATCH",
                 headers: { "Authorization": `Bearer ${idToken}` }
             });
@@ -62,7 +63,7 @@ const AdminUsers = () => {
             const method = action === 'delete' ? 'DELETE' : 'PATCH';
             const endpoint = action === 'delete' ? id : `${id}/suspend`;
 
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/admin/users/${endpoint}`, {
+            const res = await fetch(`${API_BASE}/api/admin/users/${endpoint}`, {
                 method,
                 headers: { "Authorization": `Bearer ${idToken}` }
             });

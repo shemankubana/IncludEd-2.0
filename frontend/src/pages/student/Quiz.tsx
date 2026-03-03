@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Trophy, ArrowRight, CheckCircle2, Star, Sparkles, Loader2, ArrowLeft } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/api";
 
 const ComprehensionQuiz = () => {
     const navigate = useNavigate();
@@ -28,7 +29,7 @@ const ComprehensionQuiz = () => {
             if (!user || !id) return;
             try {
                 const idToken = await user.getIdToken();
-                const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/quiz/${id}`, {
+                const response = await fetch(`${API_BASE}/api/quiz/${id}`, {
                     headers: {
                         "Authorization": `Bearer ${idToken}`
                     }

@@ -4,6 +4,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/api";
 
 const AdminProfile = () => {
     const { user, profile } = useAuth();
@@ -15,7 +16,7 @@ const AdminProfile = () => {
         const fetchSchool = async () => {
             try {
                 const idToken = await user?.getIdToken();
-                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/schools/mine`, {
+                const res = await fetch(`${API_BASE}/api/schools/mine`, {
                     headers: { "Authorization": `Bearer ${idToken}` }
                 });
                 if (res.ok) setSchool(await res.json());
@@ -38,7 +39,7 @@ const AdminProfile = () => {
             const formData = new FormData();
             formData.append("logo", file);
 
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/schools/mine`, {
+            const res = await fetch(`${API_BASE}/api/schools/mine`, {
                 method: "PUT",
                 headers: { "Authorization": `Bearer ${idToken}` },
                 body: formData
@@ -70,7 +71,7 @@ const AdminProfile = () => {
                                 <div className="relative group">
                                     <div className="w-24 h-24 rounded-[32px] bg-white border-4 border-white shadow-2xl flex items-center justify-center overflow-hidden">
                                         {school?.logoUrl ? (
-                                            <img src={`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${school.logoUrl}`} alt="Logo" className="w-full h-full object-cover" />
+                                            <img src={`${API_BASE}${school.logoUrl}`} alt="Logo" className="w-full h-full object-cover" />
                                         ) : (
                                             <School className="w-10 h-10 text-primary/20" />
                                         )}

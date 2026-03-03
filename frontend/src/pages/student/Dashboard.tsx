@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Trophy, Zap, Clock, ArrowRight, Loader2, Star } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/api";
 import { useNavigate } from "react-router-dom"; // Added for navigate function
 
 const Leaderboard = ({ users }: { users: any[] }) => (
@@ -50,7 +51,7 @@ const StudentDashboard = () => {
             try {
                 const idToken = await user.getIdToken();
                 const headers = { "Authorization": `Bearer ${idToken}` };
-                const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+                const baseUrl = API_BASE;
 
                 // Fetch progress and leaderboard in parallel
                 const [progressRes, leaderboardRes] = await Promise.all([
