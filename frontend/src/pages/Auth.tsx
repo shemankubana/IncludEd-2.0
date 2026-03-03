@@ -77,10 +77,39 @@ const Auth = () => {
       const idToken = await userCredential.user.getIdToken();
 
       // Fetch user profile with role check
-      const response = await fetch(
+      let response = await fetch(
         `${API_BASE}/api/auth/me?expectedRole=${loginRole}`,
         { headers: { "Authorization": `Bearer ${idToken}` } }
       );
+
+      // If user exists in Firebase but not in backend DB, auto-sync
+      if (response.status === 404) {
+        const nameParts = (userCredential.user.displayName || email.split("@")[0]).split(" ");
+        const syncRes = await fetch(`${API_BASE}/api/auth/sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            email,
+            firstName: nameParts[0] || "",
+            lastName: nameParts.slice(1).join(" ") || "",
+            role: loginRole,
+          })
+        });
+
+        if (!syncRes.ok) {
+          const syncData = await syncRes.json();
+          throw new Error(syncData.error || "Failed to sync account");
+        }
+
+        // Re-fetch profile after sync
+        response = await fetch(
+          `${API_BASE}/api/auth/me?expectedRole=${loginRole}`,
+          { headers: { "Authorization": `Bearer ${idToken}` } }
+        );
+      }
 
       const data = await response.json();
 
