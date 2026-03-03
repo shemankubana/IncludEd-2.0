@@ -17,6 +17,7 @@ import { useNavigate, Link } from "react-router-dom";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
+import { API_BASE } from "@/lib/api";
 
 const roles: { value: string; label: string; description: string; icon: string }[] = [
   { value: "student", label: "Student", description: "Access adaptive lessons & track progress", icon: "📚" },
@@ -46,7 +47,7 @@ const Auth = () => {
       const fetchRoleAndRedirect = async () => {
         try {
           const idToken = await user.getIdToken();
-          const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me`, {
+          const response = await fetch(`${API_BASE}/api/auth/me`, {
             headers: { "Authorization": `Bearer ${idToken}` }
           });
           if (response.ok) {
@@ -77,7 +78,7 @@ const Auth = () => {
 
       // Fetch user profile with role check
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me?expectedRole=${loginRole}`,
+        `${API_BASE}/api/auth/me?expectedRole=${loginRole}`,
         { headers: { "Authorization": `Bearer ${idToken}` } }
       );
 
@@ -121,7 +122,7 @@ const Auth = () => {
 
     // Validate school code first? (Optional, but good UX)
     try {
-      const schoolRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/schools/by-code/${schoolCode}`);
+      const schoolRes = await fetch(`${API_BASE}/api/schools/by-code/${schoolCode}`);
       if (!schoolRes.ok) {
         throw new Error("Invalid school code. Please verify with your school.");
       }
@@ -133,7 +134,7 @@ const Auth = () => {
         await updateProfile(userCredential.user, { displayName: fullName });
 
         const names = fullName.split(" ");
-        const syncRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/sync`, {
+        const syncRes = await fetch(`${API_BASE}/api/auth/sync`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -210,7 +211,7 @@ const Auth = () => {
       const user = result.user;
       const idToken = await user.getIdToken();
 
-      const checkRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me`, {
+      const checkRes = await fetch(`${API_BASE}/api/auth/me`, {
         headers: { "Authorization": `Bearer ${idToken}` }
       });
 
@@ -218,7 +219,7 @@ const Auth = () => {
         if (mode === "login") throw new Error("Account not found. Please sign up first.");
 
         const nameParts = (user.displayName || "").split(" ");
-        await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/sync`, {
+        await fetch(`${API_BASE}/api/auth/sync`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

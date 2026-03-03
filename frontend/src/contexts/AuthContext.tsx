@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { API_BASE } from "@/lib/api";
 
 interface AuthContextType {
     user: User | null;
@@ -50,7 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!auth.currentUser) return;
         try {
             const idToken = await auth.currentUser.getIdToken();
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/me`, {
+            const res = await fetch(`${API_BASE}/api/auth/me`, {
                 headers: { "Authorization": `Bearer ${idToken}` }
             });
             if (res.ok) setProfile(await res.json());

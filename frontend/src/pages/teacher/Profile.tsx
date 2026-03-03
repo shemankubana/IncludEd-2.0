@@ -4,6 +4,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/api";
 
 const TeacherProfile = () => {
     const { user, profile } = useAuth();
@@ -14,7 +15,7 @@ const TeacherProfile = () => {
         const fetchStats = async () => {
             try {
                 const idToken = await user?.getIdToken();
-                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/literature/my-content`, {
+                const res = await fetch(`${API_BASE}/api/literature/my-content`, {
                     headers: { "Authorization": `Bearer ${idToken}` }
                 });
                 if (res.ok) {

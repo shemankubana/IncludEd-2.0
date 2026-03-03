@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { API_BASE } from "@/lib/api";
 import { Check, ArrowRight, ArrowLeft, Brain, BookOpen, Layers } from "lucide-react";
 
 const onboardingSteps = [
@@ -114,7 +115,7 @@ const Onboarding = () => {
             const result = calculateProfile();
             const idToken = await user?.getIdToken();
 
-            const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/onboarding/submit`, {
+            const response = await fetch(`${API_BASE}/api/onboarding/submit`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
