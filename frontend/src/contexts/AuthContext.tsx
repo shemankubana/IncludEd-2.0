@@ -54,7 +54,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const res = await fetch(`${API_BASE}/api/auth/me`, {
                 headers: { "Authorization": `Bearer ${idToken}` }
             });
-            if (res.ok) setProfile(await res.json());
+            if (res.ok) {
+                setProfile(await res.json());
+            } else if (res.status === 404) {
+                // User exists in Firebase but not in backend DB yet — profile will
+                // be created on login/signup via /api/auth/sync.
+                setProfile(null);
+            }
         } catch (err) {
             console.error("Failed to fetch profile:", err);
         }
