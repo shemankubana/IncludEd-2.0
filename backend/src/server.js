@@ -24,7 +24,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+    if (origin.startsWith('http') || origin.startsWith('http')) {
       return callback(null, true);
     }
     const allowed = process.env.FRONTEND_URL;
