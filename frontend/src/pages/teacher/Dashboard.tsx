@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/api";
 import { motion } from "framer-motion";
 import AnalyticsCharts from "@/components/teacher/AnalyticsCharts";
 
@@ -43,7 +44,7 @@ const TeacherDashboard = () => {
             try {
                 const idToken = await user.getIdToken();
                 const headers = { "Authorization": `Bearer ${idToken}` };
-                const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+                const baseUrl = API_BASE;
 
                 const response = await fetch(`${baseUrl}/api/analytics/class`, { headers });
                 const data = await response.json();
@@ -88,7 +89,7 @@ const TeacherDashboard = () => {
         setIsInviting(true);
         try {
             const idToken = await user?.getIdToken();
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/schools/invite`, {
+            const res = await fetch(`${API_BASE}/api/schools/invite`, {
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${idToken}`,
@@ -275,7 +276,7 @@ const TeacherDashboard = () => {
                                         <div className="h-32 bg-secondary/50 relative overflow-hidden">
                                             {item.imageUrl && (
                                                 <img
-                                                    src={`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${item.imageUrl}`}
+                                                    src={`${API_BASE}${item.imageUrl}`}
                                                     className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all"
                                                     alt={item.title}
                                                 />
@@ -301,7 +302,7 @@ const TeacherDashboard = () => {
                                                             if (!window.confirm("Delete this lesson?")) return;
                                                             try {
                                                                 const idToken = await user?.getIdToken();
-                                                                await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/literature/${item.id}`, {
+                                                                await fetch(`${API_BASE}/api/literature/${item.id}`, {
                                                                     method: "DELETE",
                                                                     headers: { "Authorization": `Bearer ${idToken}` }
                                                                 });

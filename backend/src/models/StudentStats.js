@@ -38,17 +38,13 @@ export const StudentStats = sequelize.define('StudentStats', {
         type: DataTypes.INTEGER,
         defaultValue: 0
     },
-    totalSessions: {
-        type: DataTypes.INTEGER,
-        defaultValue: 0
-    },
     totalReadingTime: {
         type: DataTypes.INTEGER,
         defaultValue: 0,
         comment: 'Total minutes spent reading'
     },
     badges: {
-        type: DataTypes.JSONB,
+        type: DataTypes.JSON,
         defaultValue: [],
         comment: 'Array of earned badge IDs like ["first_lesson", "streak_7"]'
     }

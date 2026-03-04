@@ -20,7 +20,7 @@ export const Quiz = sequelize.define('Quiz', {
     allowNull: false
   },
   options: {
-    type: DataTypes.JSONB,
+    type: DataTypes.JSON,
     allowNull: false
   },
   correctAnswer: {

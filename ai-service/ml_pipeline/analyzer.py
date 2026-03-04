@@ -26,7 +26,7 @@ try:
     _FITZ_OK = True
 except ImportError:
     _FITZ_OK = False
-    print("⚠️  PyMuPDF (fitz) not installed. Run: pip install pymupdf")
+    print("PyMuPDF (fitz) not installed. Run: pip install pymupdf")
 
 from .content_classifier    import ContentClassifier, ClassificationResult
 from .structural_segmenter  import StructuralSegmenter
@@ -107,6 +107,7 @@ class LiteratureAnalyzer:
         # ── Step 1: Open & extract ─────────────────────────────────────────────
         doc   = fitz.open(stream=pdf_bytes, filetype="pdf")
         pages = doc.page_count
+        all_blocks, total_chars = self._extract_blocks(doc)
         all_blocks, total_chars = self._extract_blocks(doc)
 
         if total_chars < 50:

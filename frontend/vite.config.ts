@@ -8,8 +8,19 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    allowedHosts: true,
     hmr: {
       overlay: false,
+    },
+    proxy: {
+      "/api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
+      "/uploads": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

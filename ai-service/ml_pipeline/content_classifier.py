@@ -108,6 +108,8 @@ class ContentClassifier:
             if _SCENE_RE.search(t):
                 play_score += _WEIGHTS["play"]["scene_heading"]
                 signals["scene_heading"] += 1
+            
+            # Character cues and stage directions
             if _CUE_RE.match(t) and len(t.split()) <= 5:
                 play_score += _WEIGHTS["play"]["character_cue"]
                 signals["character_cue"] += 1

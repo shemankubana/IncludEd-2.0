@@ -60,7 +60,7 @@ const UploadZone: React.FC<{
                         Analyzing document…
                     </p>
                     <p style={{ fontSize: "0.8rem", opacity: 0.65 }}>
-                        Classifying type · Segmenting structure · Generating questions
+                        Filtering front matter · Classifying type · Segmenting structure
                     </p>
                 </>
             ) : (
@@ -107,10 +107,12 @@ const UploadZone: React.FC<{
 
 const MetaStrip: React.FC<{ data: AnalyzeResponse }> = ({ data }) => {
     const { metadata } = data;
+    const filterMeta = (metadata.front_matter_filtered as any) || {};
     const items = [
         { label: "Pages", value: String(metadata.pages ?? "—") },
-        { label: "Characters", value: Number(metadata.total_chars ?? 0).toLocaleString() },
+        { label: "Content chars", value: Number(metadata.content_chars ?? metadata.total_chars ?? 0).toLocaleString() },
         { label: "Units", value: String(metadata.top_level_units ?? data.units.length) },
+        { label: "Front matter removed", value: String(filterMeta.total_removed ?? 0) + " blocks" },
         { label: "Processed in", value: `${metadata.processing_time_ms ?? "—"} ms` },
     ];
 
@@ -210,8 +212,9 @@ const LiteratureAnalyzerPage: React.FC = () => {
                         color: "hsl(var(--muted-foreground))",
                     }}
                 >
-                    Upload a play or novel PDF — the ML pipeline classifies, segments, and
-                    generates comprehension questions automatically.
+                    Upload a literature PDF — the ML pipeline filters front matter, classifies
+                    type (play/novel), segments into chapters or scenes, and formats content
+                    for Dyslexia/ADHD-friendly reading.
                 </p>
             </div>
 
@@ -274,10 +277,10 @@ const LiteratureAnalyzerPage: React.FC = () => {
                             }}
                         >
                             {[
+                                { icon: "🧹", label: "Front Matter Filter", desc: "Strips TOC, forewords, prologues" },
                                 { icon: "🧠", label: "Auto-Classification", desc: "Play vs. Novel detection" },
                                 { icon: "📐", label: "Smart Segmenting", desc: "Act/Scene or Chapters" },
-                                { icon: "💬", label: "Script Layout", desc: "Character-dialogue view" },
-                                { icon: "❓", label: "Auto Questions", desc: "Pedagogical MCQs" },
+                                { icon: "💬", label: "Chat Dialogue", desc: "Side-by-side character view" },
                             ].map((f) => (
                                 <div
                                     key={f.label}
