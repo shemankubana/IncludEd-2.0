@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 /**
  * detectContentType(text)
  *
@@ -40,8 +38,13 @@ function detectContentType(text) {
     if (/\b(dramatis personae|tragedy|comedy|prologue|epilogue)\b/i.test(sample)) playScore += 3;
 
     // ── Novel indicators ─────────────────────────────────────────────────────
+    // Line-start chapter headings (standard format)
     if (/^CHAPTER\s+(I{1,3}V?|VI{0,3}|\d+|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)/im.test(sample)) novelScore += 5;
     if (/^PART\s+(I{1,3}V?|VI{0,3}|\d+|ONE|TWO|THREE)/im.test(sample)) novelScore += 3;
+    // Inline chapter headings (Planet eBook / some scan formats: "Chapter 1 ...")
+    const inlineChapters = (sample.match(/\bChapter\s+\d+\b/gi) || []).length;
+    if (inlineChapters >= 2) novelScore += 4;
+    else if (inlineChapters >= 1) novelScore += 2;
 
     // Long paragraphs (3+ sentences) are more likely novels
     const longParagraphs = sample.split('\n\n').filter(p => (p.match(/\./g) || []).length >= 3).length;
@@ -159,7 +162,9 @@ function splitPlay(text) {
  * Splits a novel by CHAPTER/PART headings.
  */
 function splitNovel(text) {
+    // Handles both line-start ("CHAPTER 1") and inline ("Chapter 1 Text starts here...")
     const chapterPattern = /^(CHAPTER|PART|BOOK|VOLUME)\s+([IVXLCDM\d]+|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|ELEVEN|TWELVE)[.:]?\s*(.*)?$/im;
+    const inlineChapterPattern = /\b(Chapter\s+\d+)\b/i;
     const namedHeadingPattern = /^([A-Z][A-Z '.]{3,50})$/m;
     const lines = text.split('\n');
     const sections = [];
@@ -170,14 +175,24 @@ function splitNovel(text) {
         const trimmed = line.trim();
         const isChapterHeading = chapterPattern.test(trimmed);
         const isNamedHeading = namedHeadingPattern.test(trimmed) && trimmed.length < 60 && trimmed.length > 3;
+        // Detect inline chapter: "Chapter 1 Some content..." — split and keep content
+        const inlineMatch = !isChapterHeading && inlineChapterPattern.exec(trimmed);
+        const isInlineChapter = inlineMatch && trimmed.indexOf(inlineMatch[0]) < 20;
 
-        if (isChapterHeading || isNamedHeading) {
+        if (isChapterHeading || isNamedHeading || isInlineChapter) {
             const prevContent = currentLines.join('\n').trim();
             if (prevContent.length > 100) {
                 sections.push({ title: currentTitle, content: prevContent });
             }
-            currentTitle = trimmed;
-            currentLines = [];
+            if (isInlineChapter && inlineMatch) {
+                // "Chapter 3 The party began..." → title="Chapter 3", first line = rest of text
+                currentTitle = inlineMatch[0];
+                const rest = trimmed.slice(trimmed.indexOf(inlineMatch[0]) + inlineMatch[0].length).trim();
+                currentLines = rest ? [rest] : [];
+            } else {
+                currentTitle = trimmed;
+                currentLines = [];
+            }
         } else {
             currentLines.push(line);
         }
@@ -224,29 +239,6 @@ function splitByWordCount(text, wordsPerPage = 600, type = 'generic') {
 export async function splitIntoChapters(text) {
     const contentType = detectContentType(text);
     console.log(`📖 Content type detected: ${contentType.toUpperCase()}`);
-
-    // Try Ollama-powered smart structuring (optional enhancement)
-    if (process.env.AI_SERVICE_URL) {
-        try {
-            const aiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8082';
-            const response = await axios.post(`${aiUrl}/structure-content`, {
-                content: text.slice(0, 30000),
-                content_type: contentType
-            }, { timeout: 12000 });
-
-            if (response.data?.units?.length > 1) {
-                console.log(`✅ AI structuring: ${response.data.units.length} units`);
-                const units = response.data.units.map(u => ({
-                    title: u.title || 'Section',
-                    content: u.content || '',
-                    ...(contentType === 'play' ? { dialogue: parsePlayDialogue(u.content || '') } : {})
-                }));
-                return { contentType, sections: units };
-            }
-        } catch (err) {
-            console.log(`⚠️ AI structuring skipped: ${err.message}`);
-        }
-    }
 
     // Deterministic regex-based splitting
     let sections;

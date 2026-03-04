@@ -59,6 +59,7 @@ const App = () => (
               <Route path="/teacher/profile" element={<ProtectedRoute requiredRole="teacher"><TeacherProfile /></ProtectedRoute>} />
               <Route path="/teacher/pending" element={<PendingApproval />} />
               <Route path="/teacher/analyze" element={<ProtectedRoute requiredRole="teacher"><LiteratureAnalyzer /></ProtectedRoute>} />
+              <Route path="/teacher/reader/:id" element={<ProtectedRoute requiredRole="teacher"><AdaptiveReader /></ProtectedRoute>} />
 
               {/* Admin Routes */}
               <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />

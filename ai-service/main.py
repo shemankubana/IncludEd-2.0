@@ -139,6 +139,15 @@ class QuizGenerateRequest(BaseModel):
     unit_title: Optional[str] = None
 
 
+class IntroductionGenerateRequest(BaseModel):
+    """Generate an AI introduction for a book/document."""
+    title: str
+    author: Optional[str] = None
+    content: Optional[str] = None
+    content_summary: Optional[str] = None
+    doc_type: Optional[str] = "generic"
+    language: Optional[str] = "en"
+
 # ── Core Literature Endpoints ──────────────────────────────────────────────────
 
 @app.get("/")
@@ -298,6 +307,80 @@ async def generate_quiz(req: QuizGenerateRequest):
         "count":     len(questions),
         "doc_type":  req.doc_type,
         "language":  req.language,
+    }
+
+
+@app.post("/introduction/generate", tags=["content"])
+async def generate_introduction(req: IntroductionGenerateRequest):
+    """
+    Generate a concise AI-powered introduction for a book/document.
+    Describes what the book is about, who wrote it, key themes, etc.
+    
+    Used to provide context without requiring users to read the full content.
+    """
+    
+    # Determine language
+    lang = req.language or "en"
+    lang_context = "French" if lang.lower().startswith("fr") else "English"
+    
+    # Build context from available info
+    context_parts = []
+    if req.title:
+        context_parts.append(f"Title: {req.title}")
+    if req.author:
+        context_parts.append(f"Author: {req.author}")
+    if req.content_summary:
+        context_parts.append(f"Summary: {req.content_summary[:500]}")
+    elif req.content:
+        # Use first 1000 chars as sample
+        sample = req.content[:1000]
+        context_parts.append(f"Content sample: {sample}")
+    context = "\n".join(context_parts)
+    
+    # Prepare prompt
+    prompt = f"""Given the following {req.doc_type} content, write a SHORT, engaging introduction (max 100-150 words) about:
+- What the work is about
+- Who the author is (if known)
+- Key themes or what makes it interesting
+- Who would enjoy reading it
+
+{lang_context} context:
+{context}
+
+Write the introduction in {lang_context}:"""
+    
+    system_prompt = f"You are an expert literary analyst. Write clear, concise introductions for {lang_context} books."
+    
+    # Try Ollama first if available, fallback to basic template
+    if ollama_service.is_available():
+        try:
+            intro = await asyncio.to_thread(
+                ollama_service.generate,
+                prompt,
+                system_prompt
+            )
+            if intro:
+                return {
+                    "introduction": intro.strip(),
+                    "source": "ollama",
+                    "title": req.title,
+                    "language": lang
+                }
+        except Exception as e:
+            print(f"⚠️ Ollama generation failed: {e}, using template fallback")
+    
+    # Fallback: structured template
+    intro = f"""
+{req.title} is a compelling {req.doc_type.lower()} work{f' by {req.author}' if req.author else ''}.
+This piece explores themes and storytelling that will captivate readers interested in literature.
+The narrative style and character development make it an engaging read for learners seeking quality educational content.
+"""
+    
+    return {
+        "introduction": intro.strip(),
+        "source": "template",
+        "title": req.title,
+        "language": lang
     }
 
 

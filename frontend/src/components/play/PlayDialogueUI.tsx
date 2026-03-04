@@ -45,7 +45,7 @@ export interface EmotionAnim {
 }
 
 export interface DialogueLine {
-    type: "dialogue" | "stage_direction" | "paragraph";
+    type: "dialogue" | "stage_direction" | "paragraph" | "narrative";
     character?: string | null;
     content: string;
     // ML-enriched emotion data (from ai-service EmotionAnalyzer)

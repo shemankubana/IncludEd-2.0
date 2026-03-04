@@ -77,6 +77,11 @@ export const Literature = sequelize.define('Literature', {
     type: DataTypes.ENUM('beginner', 'intermediate', 'advanced'),
     defaultValue: 'beginner'
   },
+  introduction: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'AI-generated introduction describing the book, author, and key themes'
+  },
   averageRating: {
     type: DataTypes.FLOAT,
     defaultValue: 0

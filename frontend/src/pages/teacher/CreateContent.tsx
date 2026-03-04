@@ -13,20 +13,26 @@ import {
     CheckCircle2,
     Loader2,
     Type,
-    Music
+    Music,
+    BookOpen,
+    ExternalLink,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { useRef } from "react";
 
 const CreateContent = () => {
     const { user } = useAuth();
     const { toast } = useToast();
+    const navigate = useNavigate();
     const [isProcessing, setIsProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [activeTab, setActiveTab] = useState<"text" | "video">("text");
+    const [lastUpload, setLastUpload] = useState<{ id: string; contentType: string; sectionCount: number; language: string } | null>(null);
 
     // Form state
     const [title, setTitle] = useState("");
@@ -110,7 +116,18 @@ const CreateContent = () => {
 
                 if (response.ok) {
                     setUploadProgress(100);
-                    toast({ title: "Success!", description: "Lesson generated and added to library." });
+                    const data = await response.json();
+                    const typeEmoji = data.contentType === 'play' ? '🎭' : data.contentType === 'novel' ? '📖' : '📄';
+                    setLastUpload({
+                        id: data.id,
+                        contentType: data.contentType,
+                        sectionCount: data.sectionCount ?? 0,
+                        language: data.language,
+                    });
+                    toast({
+                        title: "Upload Complete!",
+                        description: `${typeEmoji} ${data.contentType} detected · ${data.sectionCount} sections · ${data.language}`,
+                    });
                     setTitle("");
                     setContent("");
                     setFile(null);
@@ -377,6 +394,40 @@ const CreateContent = () => {
                                 </div>
                             </CardContent>
                         </Card>
+
+                        {lastUpload && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="p-6 rounded-[24px] bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 space-y-3"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                                    <p className="font-black text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
+                                        Upload successful
+                                    </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <Badge variant="secondary" className="font-bold">
+                                        {lastUpload.contentType === 'play' ? '🎭' : lastUpload.contentType === 'novel' ? '📖' : '📄'} {lastUpload.contentType}
+                                    </Badge>
+                                    <Badge variant="secondary" className="font-bold">
+                                        {lastUpload.sectionCount} sections
+                                    </Badge>
+                                    <Badge variant="secondary" className="font-bold">
+                                        {lastUpload.language}
+                                    </Badge>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    className="w-full rounded-xl font-bold gap-2"
+                                    onClick={() => navigate(`/teacher/reader/${lastUpload.id}`)}
+                                >
+                                    <BookOpen className="w-4 h-4" /> Preview in Reader
+                                    <ExternalLink className="w-3 h-3 ml-auto" />
+                                </Button>
+                            </motion.div>
+                        )}
 
                         <div className="p-8 rounded-[32px] bg-accent text-accent-foreground relative overflow-hidden">
                             <h4 className="font-black text-xs uppercase tracking-widest mb-2 flex items-center gap-2">

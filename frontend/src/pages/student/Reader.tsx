@@ -102,6 +102,8 @@ const AdaptiveReader = () => {
     const [focusMode,          setFocusMode]           = useState(false);
     const [loading,            setLoading]             = useState(true);
     const [lesson,             setLesson]              = useState<any>(null);
+    const [intro,              setIntro]               = useState<string | null>(null);
+    const [showIntro,          setShowIntro]           = useState(true);
     const [sections,           setSections]            = useState<Section[]>([]);
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
     const [showQuizPrompt,     setShowQuizPrompt]      = useState(false);
@@ -213,6 +215,10 @@ const AdaptiveReader = () => {
                 const data = await response.json();
 
                 setLesson({ title: data.title, author: data.author, difficulty: data.difficulty || "Adaptive" });
+                if (data.introduction) {
+                    setIntro(data.introduction);
+                    setShowIntro(true);
+                }
                 if (data.contentType) setContentType(data.contentType);
 
                 if (data.sections && Array.isArray(data.sections) && data.sections.length > 0) {
@@ -435,11 +441,7 @@ const AdaptiveReader = () => {
         <DashboardLayout role="student">
             <div
                 className={`max-w-4xl mx-auto transition-all duration-500 pb-24 ${focusMode ? "pt-0" : "pt-4"}`}
-                style={{ lineHeight: adaptation.lineSpacing, fontSize: `${adaptation.fontSize}em` }}
-            >
-
-                {/* ── Top Controls ── */}
-                <AnimatePresence>
+                    style={{ lineHeight: adaptation.lineSpacing, fontSize: `${adaptation.fontSize}em`, fontFamily: "OpenDyslexic, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
                     {!focusMode && (
                         <motion.div
                             initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
@@ -521,7 +523,7 @@ const AdaptiveReader = () => {
                             </div>
                         ) : (
                             /* Novel / Generic: flat chapter navigation */
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-wrap">
                                 <BookOpen className="w-4 h-4 text-primary shrink-0" />
                                 {sections.map((sec, idx) => (
                                     <button
@@ -537,13 +539,44 @@ const AdaptiveReader = () => {
                                                 : "bg-background border border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
                                             }`}
                                     >
-                                        {sec.title}
+                                        {/* Use generic "Chapter" or "Part" naming instead of full title */}
+                                        {idx === 0 && sections.length > 1 ? "Intro" : `Chapter ${idx}`}
                                     </button>
                                 ))}
                             </div>
                         )}
                     </div>
                 )}
+
+                {/* ── Introduction Modal ── */}
+                <AnimatePresence>
+                    {showIntro && intro && !focusMode && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            transition={{ type: "spring", damping: 20 }}
+                            className="mb-6 p-6 rounded-3xl bg-gradient-to-br from-primary/5 to-accent/5 border-2 border-primary/20 shadow-lg"
+                        >
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                    <h3 className="text-sm font-black uppercase tracking-widest text-primary mb-2">About This Book</h3>
+                                    <p className="text-base font-medium text-foreground/80 leading-relaxed">
+                                        {intro}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="shrink-0"
+                                    onClick={() => setShowIntro(false)}
+                                >
+                                    <span className="text-lg">×</span>
+                                </Button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* ── Overall Progress ── */}
                 {!focusMode && totalSections > 1 && (
@@ -590,7 +623,9 @@ const AdaptiveReader = () => {
                                 {totalSections > 1 && (
                                     <>
                                         <span className="text-muted-foreground">·</span>
-                                        <span className="text-sm font-bold text-primary">{currentSection.title}</span>
+                                        <span className="text-sm font-bold text-primary">
+                                            {currentSectionIndex === 0 && sections.length > 1 ? "Introduction" : `Chapter ${currentSectionIndex}`}
+                                        </span>
                                     </>
                                 )}
                             </div>
@@ -737,7 +772,9 @@ const AdaptiveReader = () => {
                                 <ChevronLeft className="w-4 h-4" /> Previous
                             </Button>
                             <div className="text-center">
-                                <p className="text-sm font-black text-muted-foreground">{currentSection.title}</p>
+                                <p className="text-sm font-black text-muted-foreground">
+                                    {currentSectionIndex === 0 && sections.length > 1 ? "Introduction" : `Chapter ${currentSectionIndex}`}
+                                </p>
                             </div>
                             <Button
                                 className="rounded-xl px-6 font-bold gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
