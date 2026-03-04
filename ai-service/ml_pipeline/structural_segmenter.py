@@ -29,10 +29,16 @@ def _uid() -> str:
 # English play headings
 _ACT_RE      = re.compile(r"\bACT\s+([IVX]+|\d+)\b", re.IGNORECASE)
 _SCENE_RE    = re.compile(r"\bSCENE\s+([IVX]+|\d+)\b", re.IGNORECASE)
+# Abbreviated scene (e.g. Folger Shakespeare "SC. 2")
+_SCENE_SC_RE = re.compile(r"\bSC\.\s*(\d+|[IVX]+)\b", re.IGNORECASE)
 
 # French play headings
 _ACTE_RE     = re.compile(r"\bACTE\s+([IVX]+|\d+)\b", re.IGNORECASE)
 _SCENE_FR_RE = re.compile(r"\bSC[ÈE]NE\s+([IVX]+|\d+)\b", re.IGNORECASE)
+
+# Running-header detector: lines starting with a page number followed by text
+# (e.g. "9 MACBETH ACT 1. SC. 2 DUNCAN MALCOLM...") — must NOT be treated as headings
+_RUNNING_HEADER_RE = re.compile(r"^\d{1,4}\s+\S")
 
 # English novel headings
 _CHAPTER_RE  = re.compile(
@@ -137,11 +143,15 @@ class StructuralSegmenter:
 
     def _match_heading(self, text: str, doc_type: str) -> Tuple[str, bool]:
         """Check first 30 chars for heading patterns."""
+        # Skip running headers (page-number-prefixed lines like "9 MACBETH ACT 1. SC. 2 DUNCAN...")
+        if _RUNNING_HEADER_RE.match(text.strip()):
+            return "none", False
         t = text[:30]
         if doc_type == "play":
             if _ACT_RE.search(t):      return "act",   True
             if _ACTE_RE.search(t):     return "act",   True
             if _SCENE_RE.search(t):    return "scene", True
+            if _SCENE_SC_RE.search(t): return "scene", True
             if _SCENE_FR_RE.search(t): return "scene", True
         else:
             if _CHAPTER_RE.search(t):  return "chapter", True
@@ -221,6 +231,11 @@ class StructuralSegmenter:
             if not stripped:
                 continue
 
+            # Skip running headers: page-number-prefixed lines
+            # (e.g. "15 Macbeth ACT 1. SC. 3 SECOND WITCH FIRST WITCH...")
+            if re.match(r"^\d{1,4}\s+\S", stripped):
+                continue
+
             # Stage direction: entire line wrapped in () or []
             if _STAGE_INLINE_RE.match(stripped):
                 blocks.append({
@@ -245,6 +260,9 @@ class StructuralSegmenter:
 
             # Append to last dialogue block if mid-speech
             if blocks and blocks[-1]["type"] == "dialogue":
+                # Skip bare page numbers (e.g. "5", "12") slipping into speech
+                if re.match(r"^\d{1,4}$", stripped):
+                    continue
                 sep = " " if blocks[-1]["content"] else ""
                 blocks[-1]["content"] += sep + stripped
                 continue

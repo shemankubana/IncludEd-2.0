@@ -322,15 +322,19 @@ const SpeechBubble: React.FC<BubbleProps> = ({
 
 // ── Stage Direction ────────────────────────────────────────────────────────────
 
-const StageDirectionCard: React.FC<{ text: string }> = ({ text }) => (
+const StageDirectionCard: React.FC<{ text: string; isNarrative?: boolean }> = ({ text, isNarrative }) => (
     <motion.div
         key={text}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0  }}
         exit={{   opacity: 0, y: -10 }}
-        className="w-full flex items-center justify-center py-4 px-6 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/40 italic text-sm text-gray-500 dark:text-gray-400"
+        className={`w-full py-4 px-6 rounded-2xl ${
+            isNarrative
+                ? "border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/20 text-gray-700 dark:text-gray-300 text-base leading-relaxed"
+                : "border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/40 italic text-sm text-gray-500 dark:text-gray-400 flex items-center justify-center"
+        }`}
     >
-        [{text}]
+        {isNarrative ? text : `[${text}]`}
     </motion.div>
 );
 
@@ -424,7 +428,9 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
         : null;
 
     const colours    = charName ? getCharColour(charName, colourMap.current) : CHAR_PALETTE[0];
-    const isStageDir = current.type === "stage_direction";
+    const isStageDir = current.type === "stage_direction"
+        || current.type === "narrative"
+        || current.type === "paragraph";
 
     return (
         <div className="flex flex-col gap-4 w-full">
@@ -477,6 +483,12 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
             </div>
 
             {/* Scene area */}
+            {/* For narrative/paragraph blocks, show full-width text without an avatar */}
+            {(current.type === "narrative" || current.type === "paragraph") ? (
+                <AnimatePresence mode="wait">
+                    <StageDirectionCard key={`narr-${currentIdx}`} text={current.content} isNarrative />
+                </AnimatePresence>
+            ) : (
             <div className="flex items-start gap-6 min-h-[200px]">
                 <div className="flex-shrink-0 flex items-center justify-center w-32 md:w-40 pt-2">
                     <AnimatePresence mode="wait">
@@ -494,10 +506,10 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
                                 transition={{ type: "spring", stiffness: 400, damping: 25 }}
                             >
                                 <Avatar
-                                    name={charName || "NARRATOR"}
+                                    name={charName!}
                                     colours={colours}
                                     isSpeaking={isAutoPlaying}
-                                    initials={(charName || "N").slice(0, 2)}
+                                    initials={charName!.slice(0, 2)}
                                     emotion={currentEmotion}
                                     anim={currentAnim}
                                 />
@@ -516,7 +528,7 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
                                 text={current.content}
                                 colours={colours}
                                 dyslexicFont={dyslexicFont}
-                                charName={charName || "NARRATOR"}
+                                charName={charName!}
                                 emotion={currentEmotion}
                                 intensity={currentIntensity}
                             />
@@ -524,6 +536,7 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
                     </AnimatePresence>
                 </div>
             </div>
+            )}
 
             {/* Controls */}
             <div className="flex items-center justify-between gap-3 pt-2">

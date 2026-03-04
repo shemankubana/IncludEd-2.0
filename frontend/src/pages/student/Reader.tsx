@@ -25,7 +25,6 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
-import LiteratureViewer from "@/components/literature/LiteratureViewer";
 import PlayDialogueUI, { type DialogueLine } from "@/components/play/PlayDialogueUI";
 import { useTelemetry } from "@/hooks/useTelemetry";
 import { useRLAdaptation, RL_ACTIONS } from "@/hooks/useRLAdaptation";
@@ -95,7 +94,7 @@ function syllabify(text: string): string {
 const AdaptiveReader = () => {
     const navigate  = useNavigate();
     const { id }    = useParams();
-    const { user, profile } = useAuth();
+    const { user, profile, dyslexicMode } = useAuth();
 
     // Reader state
     const [isPlaying,          setIsPlaying]          = useState(false);
@@ -373,39 +372,69 @@ const AdaptiveReader = () => {
     const dialogueLines: DialogueLine[] = (() => {
         if (contentType !== "play") return [];
         if (currentSection.dialogue && currentSection.dialogue.length > 0) {
-            return currentSection.dialogue;
+            // Filter page-number artifacts and running-header lines baked into stored dialogue
+            // (e.g. bare "5", or "15 Macbeth ACT 1. SC. 3 SECOND WITCH FIRST WITCH...")
+            return currentSection.dialogue.filter((d: DialogueLine) => {
+                const c = d.content?.trim() || "";
+                if (c.length <= 5) return false;
+                if (/^\d+$/.test(c)) return false;           // bare page number
+                if (/^\d{1,4}\s+\S/.test(c)) return false;  // running header
+                return true;
+            });
         }
         // Parse from raw content (fallback for legacy data)
         return (currentSection.content || "").split("\n").reduce<DialogueLine[]>((acc, line) => {
             const trimmed = line.trim();
-            if (!trimmed) return acc;
+            // Skip empty lines and bare page numbers
+            if (!trimmed || /^\d+$/.test(trimmed)) return acc;
             // Match "CHARACTER: dialogue" or "CHARACTER. dialogue"
             const charMatch = trimmed.match(/^([A-Z][A-Z\s'\.]{1,28}[A-Z])[:.]\s+(.*)/);
-            if (charMatch) {
+            if (charMatch && charMatch[2].trim().length > 5) {
                 acc.push({ type: "dialogue", character: charMatch[1].trim(), content: charMatch[2] });
             } else if (/^[\[(].+[\])]$/.test(trimmed)) {
                 acc.push({ type: "stage_direction", content: trimmed.slice(1, -1) });
-            } else if (trimmed.length > 2) {
+            } else if (trimmed.length > 15) {
                 acc.push({ type: "paragraph", content: trimmed });
             }
             return acc;
         }, []);
     })();
 
+    // ── Helper: extract clean Act / Scene from messy ML titles ───────────────
+    // e.g. "9 MACBETH ACT 1. SC. 2 DUNCAN MALCOLM..." → { act: "Act 1", scene: "Scene 2" }
+    function parseActScene(title: string): { act: string; scene: string } {
+        const actM   = title.match(/ACT\s+(\d+|[IVX]+)/i);
+        const sceneM = title.match(/SC(?:ENE)?\.?\s*(\d+|[IVX]+)/i);
+        return {
+            act:   actM   ? `Act ${actM[1]}`     : "Prologue",
+            scene: sceneM ? `Scene ${sceneM[1]}` : "",
+        };
+    }
+
     // ── Act/Scene group navigation for plays ─────────────────────────────────
     const sectionGroups = useMemo(() => {
         if (contentType !== "play") return null;
         const groups: { actTitle: string; scenes: { idx: number; sceneTitle: string }[] }[] = [];
         sections.forEach((sec, idx) => {
-            const parts = sec.title.split(/\s*[-–—]\s*/);
-            const actTitle   = parts[0]?.trim() || sec.title;
-            const sceneTitle = parts[1]?.trim() || `Scene ${idx + 1}`;
-            const existing = groups.find(g => g.actTitle === actTitle);
+            const { act, scene } = parseActScene(sec.title);
+            const sceneLabel = scene || `Part ${idx + 1}`;
+            const existing = groups.find(g => g.actTitle === act);
             if (existing) {
-                existing.scenes.push({ idx, sceneTitle });
+                // Only add the first occurrence of each scene to the nav
+                if (!existing.scenes.some(s => s.sceneTitle === sceneLabel)) {
+                    existing.scenes.push({ idx, sceneTitle: sceneLabel });
+                }
             } else {
-                groups.push({ actTitle, scenes: [{ idx, sceneTitle }] });
+                groups.push({ actTitle: act, scenes: [{ idx, sceneTitle: sceneLabel }] });
             }
+        });
+        // Sort scenes within each act by numeric value
+        groups.forEach(g => {
+            g.scenes.sort((a, b) => {
+                const na = parseInt(a.sceneTitle.replace(/\D/g, ""), 10) || 0;
+                const nb = parseInt(b.sceneTitle.replace(/\D/g, ""), 10) || 0;
+                return na - nb;
+            });
         });
         return groups;
     }, [sections, contentType]);
@@ -413,10 +442,10 @@ const AdaptiveReader = () => {
     // ── Extract act/scene for PlayDialogueUI header ───────────────────────────
     const { actTitle, sceneTitle } = useMemo(() => {
         if (contentType !== "play") return { actTitle: undefined, sceneTitle: currentSection.title };
-        const parts = currentSection.title.split(/\s*[-–—]\s*/);
+        const { act, scene } = parseActScene(currentSection.title);
         return {
-            actTitle:   parts[0]?.trim() || undefined,
-            sceneTitle: parts[1]?.trim() || currentSection.title,
+            actTitle:   act   || undefined,
+            sceneTitle: scene || currentSection.title,
         };
     }, [currentSection.title, contentType]);
 
@@ -441,7 +470,9 @@ const AdaptiveReader = () => {
         <DashboardLayout role="student">
             <div
                 className={`max-w-4xl mx-auto transition-all duration-500 pb-24 ${focusMode ? "pt-0" : "pt-4"}`}
-                    style={{ lineHeight: adaptation.lineSpacing, fontSize: `${adaptation.fontSize}em`, fontFamily: "OpenDyslexic, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
+                style={{ lineHeight: adaptation.lineSpacing, fontSize: `${adaptation.fontSize}em`, fontFamily: dyslexicMode ? "OpenDyslexic, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" : "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
+            >
+                <AnimatePresence>
                     {!focusMode && (
                         <motion.div
                             initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
@@ -525,7 +556,7 @@ const AdaptiveReader = () => {
                             /* Novel / Generic: flat chapter navigation */
                             <div className="flex items-center gap-3 flex-wrap">
                                 <BookOpen className="w-4 h-4 text-primary shrink-0" />
-                                {sections.map((sec, idx) => (
+                                {sections.map((_, idx) => (
                                     <button
                                         key={idx}
                                         onClick={() => {
@@ -539,8 +570,7 @@ const AdaptiveReader = () => {
                                                 : "bg-background border border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
                                             }`}
                                     >
-                                        {/* Use generic "Chapter" or "Part" naming instead of full title */}
-                                        {idx === 0 && sections.length > 1 ? "Intro" : `Chapter ${idx}`}
+                                        {`Chapter ${idx + 1}`}
                                     </button>
                                 ))}
                             </div>
@@ -624,7 +654,7 @@ const AdaptiveReader = () => {
                                     <>
                                         <span className="text-muted-foreground">·</span>
                                         <span className="text-sm font-bold text-primary">
-                                            {currentSectionIndex === 0 && sections.length > 1 ? "Introduction" : `Chapter ${currentSectionIndex}`}
+                                            {`Chapter ${currentSectionIndex + 1}`}
                                         </span>
                                     </>
                                 )}
@@ -645,52 +675,20 @@ const AdaptiveReader = () => {
 
                     {/* Reading Content */}
                     <CardContent className="p-8 md:p-12">
-                        {contentType === "play" ? (
-                            dialogueLines.length > 0 ? (
-                                <PlayDialogueUI
-                                    lines={dialogueLines}
-                                    actTitle={actTitle}
-                                    sceneTitle={sceneTitle}
-                                    dyslexicFont={adaptation.isSyllabified}
-                                    autoAdvance={adaptation.isTTSEnabled}
-                                    onComplete={handleNextSection}
-                                />
-                            ) : (
-                                <LiteratureViewer
-                                    data={{
-                                        document_type: "play",
-                                        title: lesson?.title || "Literature",
-                                        confidence: 1.0,
-                                        units: [],
-                                        flat_units: sections,
-                                    }}
-                                />
-                            )
-                        ) : contentType === "novel" ? (
-                            <div className="space-y-6">
-                                <h2 className="text-3xl font-black tracking-tight text-center py-4 border-b border-border/30 mb-8">
-                                    {currentSection.title}
-                                </h2>
-                                <div
-                                    className={`text-xl leading-[2] font-medium text-foreground/90 tracking-wide ${
-                                        adaptation.simplifyLevel > 0 ? "text-lg" : ""
-                                    }`}
-                                    style={{ lineHeight: adaptation.lineSpacing }}
-                                >
-                                    {displayText
-                                        .replace(/\n{3,}/g, "\n\n")   // collapse excess blank lines
-                                        .split("\n\n")
-                                        .filter(p => p.trim().length > 0)
-                                        .map((para, i) => (
-                                            <p key={i} className="mb-6 indent-8">{para.trim()}</p>
-                                        ))
-                                    }
-                                </div>
-                            </div>
-                        ) : (
-                            /* Generic / word-highlight renderer */
+                        {contentType === "play" && dialogueLines.length > 0 ? (
+                            /* Play with parsed dialogue lines → animated bubbles */
+                            <PlayDialogueUI
+                                lines={dialogueLines}
+                                actTitle={actTitle}
+                                sceneTitle={sceneTitle}
+                                dyslexicFont={adaptation.isSyllabified}
+                                autoAdvance={adaptation.isTTSEnabled}
+                                onComplete={handleNextSection}
+                            />
+                        ) : contentType === "generic" ? (
+                            /* Generic → word-highlight renderer */
                             <div
-                                className="reading-area leading-[2.2] text-xl md:text-2xl font-medium tracking-wide text-foreground/90 select-text whitespace-pre-wrap"
+                                className="reading-area leading-[2.2] text-xl md:text-2xl font-medium tracking-wide text-foreground/90 select-text"
                                 style={{ lineHeight: adaptation.lineSpacing }}
                             >
                                 {displayWords.map((word: string, idx: number) => (
@@ -708,6 +706,32 @@ const AdaptiveReader = () => {
                                         {word}{" "}
                                     </motion.span>
                                 ))}
+                            </div>
+                        ) : displayText.trim().length > 0 ? (
+                            /* Novel / play-without-dialogue → clean dyslexia-friendly paragraphs */
+                            <div className="space-y-2">
+                                <div
+                                    className="text-xl leading-[2] font-medium text-foreground/90 tracking-wide"
+                                    style={{ lineHeight: adaptation.lineSpacing }}
+                                >
+                                    {displayText
+                                        .replace(/\n{3,}/g, "\n\n")
+                                        .split("\n\n")
+                                        .filter(p => p.trim().length > 0)
+                                        .map((para, i) => (
+                                            <p key={i} className="mb-6 indent-8">{para.trim()}</p>
+                                        ))
+                                    }
+                                </div>
+                            </div>
+                        ) : (
+                            /* Empty section — use Next to continue */
+                            <div className="flex flex-col items-center justify-center py-16 gap-4 text-muted-foreground">
+                                <BookOpen className="w-12 h-12 opacity-30" />
+                                <p className="text-sm font-bold uppercase tracking-widest opacity-50">
+                                    {actTitle && sceneTitle ? `${actTitle} · ${sceneTitle}` : "Transition"}
+                                </p>
+                                <p className="text-base font-medium opacity-40">Press Next to continue reading</p>
                             </div>
                         )}
                     </CardContent>
@@ -773,7 +797,7 @@ const AdaptiveReader = () => {
                             </Button>
                             <div className="text-center">
                                 <p className="text-sm font-black text-muted-foreground">
-                                    {currentSectionIndex === 0 && sections.length > 1 ? "Introduction" : `Chapter ${currentSectionIndex}`}
+                                    {`Chapter ${currentSectionIndex + 1} of ${totalSections}`}
                                 </p>
                             </div>
                             <Button

@@ -18,14 +18,12 @@ import os
 import asyncio
 from dotenv import load_dotenv
 
-from services.tts_service import TTSService
-from services.accessibility_adapter import FreeAccessibilityAdapter
-from services.rl_agent_service    import RLAgentService
-from services.attention_monitor   import AttentionMonitor
-from services.session_manager     import SessionManager
-from services.tts_service         import TTSService
-from services.video_service       import VideoService
-from services.ollama_service      import OllamaService
+import time
+from services.tts_service                import TTSService
+from services.accessibility_adapter      import FreeAccessibilityAdapter
+from services.rl_agent_service           import RLAgentService
+from services.smart_question_generator   import SmartQuestionGenerator
+from services.ollama_service             import OllamaService
 from ml_pipeline import LiteratureAnalyzer
 
 # ML pipeline singleton (reused across requests)
@@ -43,13 +41,11 @@ app.add_middleware(
 )
 
 # Service singletons
-question_gen = SmartQuestionGenerator()
+question_gen          = SmartQuestionGenerator()
 accessibility_adapter = FreeAccessibilityAdapter()
-rl_agent = RLAgentService()
-session_manager = SessionManager()
-tts_service = TTSService()
-video_service = VideoService()
-ollama_service = OllamaService()
+rl_agent              = RLAgentService()
+tts_service           = TTSService()
+ollama_service        = OllamaService()
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
@@ -63,6 +59,7 @@ class AnalyzeTextRequest(BaseModel):
 class AnalyzeResponse(BaseModel):
     document_type: str
     title: str
+    author: Optional[str] = None
     confidence: float
     units: List[Dict[str, Any]]
     flat_units: List[Dict[str, Any]]
@@ -92,12 +89,12 @@ async def analyze_pdf(
     return AnalyzeResponse(
         document_type = result.document_type,
         title         = result.title,
+        author        = result.author,
         confidence    = result.confidence,
         units         = result.units,
         flat_units    = result.flat_units,
         questions     = result.questions,
         metadata      = result.metadata,
-        language      = result.language,
     )
 
 
@@ -111,14 +108,79 @@ async def reanalyze_text(req: AnalyzeTextRequest):
         req.question_count,
     )
     return AnalyzeResponse(
-        document_type=result.document_type,
-        title=result.title,
-        confidence=result.confidence,
-        units=result.units,
-        flat_units=result.flat_units,
-        questions=result.questions,
-        metadata=result.metadata,
+        document_type = result.document_type,
+        title         = result.title,
+        author        = result.author,
+        confidence    = result.confidence,
+        units         = result.units,
+        flat_units    = result.flat_units,
+        questions     = result.questions,
+        metadata      = result.metadata,
     )
+
+# ── Introduction Generation ───────────────────────────────────────────────────
+
+class IntroductionRequest(BaseModel):
+    title:           str
+    author:          str
+    content_summary: str = ""
+    doc_type:        str = "generic"   # "play" | "novel" | "generic"
+    language:        str = "en"        # "en" | "fr"
+
+
+@app.post("/introduction/generate", tags=["literature"])
+async def generate_introduction(req: IntroductionRequest):
+    """
+    Generate a short student-friendly introduction for a book.
+    Tries Ollama first; falls back to a structured template.
+    """
+    doc_label_en = {"play": "play", "novel": "novel"}.get(req.doc_type, "text")
+    doc_label_fr = {"play": "pièce de théâtre", "novel": "roman"}.get(req.doc_type, "texte")
+
+    # ── Try Ollama (local LLM) ────────────────────────────────────────────────
+    try:
+        if req.language == "fr":
+            prompt = (
+                f"Écris une courte introduction (3-4 phrases) de la {doc_label_fr} "
+                f'"{req.title}" écrite par {req.author}. '
+                f"L'introduction doit être simple, engageante et adaptée aux élèves du secondaire. "
+                f"Voici un extrait du début : {req.content_summary[:500]}"
+            )
+        else:
+            prompt = (
+                f'Write a short introduction (3-4 sentences) for the {doc_label_en} '
+                f'"{req.title}" written by {req.author}. '
+                f"Keep it simple, engaging, and suitable for secondary school students. "
+                f"Here is an excerpt from the beginning: {req.content_summary[:500]}"
+            )
+        result = await ollama_service.generate(prompt, max_tokens=200)
+        if result and len(result.strip()) > 30:
+            return {"introduction": result.strip()}
+    except Exception:
+        pass  # fall through to template
+
+    # ── Template fallback ────────────────────────────────────────────────────
+    snippet = req.content_summary[:200].strip().rstrip(".") + "…" if req.content_summary else ""
+
+    if req.language == "fr":
+        intro = (
+            f'"{req.title}" est une {doc_label_fr} écrite par {req.author}. '
+            f"Ce texte vous emmène dans une histoire fascinante pleine de personnages mémorables et de moments captivants. "
+        )
+        if snippet:
+            intro += f'Elle commence ainsi : « {snippet} » '
+        intro += "Bonne lecture !"
+    else:
+        intro = (
+            f'"{req.title}" is a {doc_label_en} written by {req.author}. '
+            f"This text takes you on a fascinating journey with memorable characters and captivating moments. "
+        )
+        if snippet:
+            intro += f'It begins: "{snippet}" '
+        intro += "Enjoy reading!"
+
+    return {"introduction": intro}
+
 
 # ── Helper Endpoints ──
 
@@ -147,13 +209,11 @@ async def end_session(request: Any):
 
 @app.get("/health", tags=["system"])
 async def health():
-    ea = get_emotion_analyzer()
     return {
-        "status":              "healthy",
-        "version":             "2.1.0",
-        "rl_model_ready":      rl_agent.model_ready,
-        "emotion_ml_ready":    ea.ml_ready,
-        "timestamp":           time.time(),
+        "status":         "healthy",
+        "version":        "2.1.0",
+        "rl_model_ready": rl_agent.model_ready,
+        "timestamp":      time.time(),
     }
 
 

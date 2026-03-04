@@ -104,37 +104,37 @@ router.post('/:literatureId', authenticateToken, async (req, res) => {
     }
 });
 
-// POST /api/progress/:literatureId/complete — mark lesson complete + award XP
+// POST /api/progress/:literatureId/complete — mark lesson complete + award XP + quiz badge
 router.post('/:literatureId/complete', authenticateToken, async (req, res) => {
     try {
-        const progress = await LessonProgress.findOne({
-            where: { userId: req.user.userId, literatureId: req.params.literatureId }
+        const { score, total, badge: quizBadge } = req.body;
+
+        const [progress] = await LessonProgress.findOrCreate({
+            where: { userId: req.user.userId, literatureId: req.params.literatureId },
+            defaults: { status: 'in_progress', currentSection: 0 }
         });
 
-        if (!progress) {
-            return res.status(404).json({ error: 'No progress record found. Start reading first.' });
-        }
-
-        if (progress.xpAwarded) {
-            return res.json({ success: true, xpAwarded: 0, message: 'XP already awarded for this lesson.' });
-        }
+        // Calculate XP: base per lesson + quiz bonus
+        const quizBonus = (score && total) ? Math.round((score / total) * 200) : 0;
+        const xpGain = progress.xpAwarded ? quizBonus : XP_PER_LESSON + quizBonus;
 
         await progress.update({ status: 'completed', completedAt: new Date(), xpAwarded: true });
 
         // Update student stats
         const stats = await getOrCreateStats(req.user.userId, req.body.schoolId);
-        const newXp = stats.xp + XP_PER_LESSON;
-        const newLevel = calcLevel(newXp);
-        const newCompleted = stats.completedLessons + 1;
+        const newXp       = stats.xp + xpGain;
+        const newLevel    = calcLevel(newXp);
+        const newCompleted = progress.xpAwarded ? stats.completedLessons : stats.completedLessons + 1;
 
-        await stats.update({
-            xp: newXp,
-            level: newLevel,
-            completedLessons: newCompleted,
-            badges: calcBadges({ ...stats.toJSON(), xp: newXp, completedLessons: newCompleted })
-        });
+        // Merge quiz badge into the badges array
+        let baseBadges = calcBadges({ ...stats.toJSON(), xp: newXp, completedLessons: newCompleted });
+        if (quizBadge && !baseBadges.includes(quizBadge)) {
+            baseBadges = [...baseBadges, quizBadge];
+        }
 
-        res.json({ success: true, xpAwarded: XP_PER_LESSON, newXp, newLevel });
+        await stats.update({ xp: newXp, level: newLevel, completedLessons: newCompleted, badges: baseBadges });
+
+        res.json({ success: true, xpAwarded: xpGain, newXp, newLevel, badges: baseBadges });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

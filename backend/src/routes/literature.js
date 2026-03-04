@@ -105,12 +105,18 @@ router.post('/upload', authenticateToken, upload.fields([
             wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
           }));
 
-          await literature.update({
+          // Use AI-extracted author if current one is unknown
+          const aiAuthor = aiResp.data.author;
+          const updatePayload = {
             contentType: aiContentType,
             sections:    aiSections,
             language:    detectedLang,
             status:      'ready',
-          });
+          };
+          if (aiAuthor && (!literature.author || literature.author === 'Unknown')) {
+            updatePayload.author = aiAuthor;
+          }
+          await literature.update(updatePayload);
           console.log(`✅ ML update: ${literature.title} → ${aiContentType} (${aiSections.length} sections)`);
 
           // Save AI questions
@@ -132,12 +138,13 @@ router.post('/upload', authenticateToken, upload.fields([
             console.log(`✅ Saved ${quizRecords.length} AI questions for: ${literature.title}`);
           }
 
-          // Generate AI introduction
+          // Generate AI introduction — use first body section content, not raw front matter
+          const firstBodyContent = aiSections.find(s => s.content?.trim().length > 50)?.content || '';
           try {
             const introResp = await axios.post(`${AI_SERVICE_URL}/introduction/generate`, {
               title: literature.title,
-              author: literature.author,
-              content_summary: (originalContent || '').slice(0, 1000),
+              author: updatePayload.author || literature.author,
+              content_summary: firstBodyContent.slice(0, 1000),
               doc_type: aiContentType,
               language: langCode === 'fr' ? 'fr' : 'en'
             }, { timeout: 60000 });

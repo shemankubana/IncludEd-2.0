@@ -26,5 +26,32 @@
       "mean_reward_novel": 83.20742647058823,
       "mean_reward_play": 81.80124999999992
     }
+  },
+  {
+    "version": "v2.0",
+    "model_version": "v2",
+    "trained_at": "2026-03-04T14:05:04.805423",
+    "total_timesteps": 500000,
+    "n_envs": 8,
+    "seed": 42,
+    "duration_s": 549.3,
+    "eval_mean_reward": 79.06042499999995,
+    "eval_std_reward": 21.526970264226176,
+    "eval_mean_attention": 0.9973607010454714,
+    "attention_gain_pct": 3.27,
+    "cohens_d": 0.5522,
+    "observation_dims": 9,
+    "action_dims": 6,
+    "model_file": "/Users/ivanshema/Documents/IncludEd-2.0/rl-engine/ppo_included_agent.zip",
+    "action_distribution": {
+      "Keep Original": 41.0,
+      "Syllable Break": 34.0,
+      "Attention Break": 25.0
+    },
+    "content_rewards": {
+      "mean_reward_generic": 80.24719594594593,
+      "mean_reward_novel": 80.19091216216214,
+      "mean_reward_play": 75.76278846153835
+    }
   }
 ]

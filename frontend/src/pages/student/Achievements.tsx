@@ -1,72 +1,108 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-    Trophy,
-    Award,
-    Star,
-    Flame,
-    Zap,
-    Shield,
-    Anchor,
-    Rocket,
-    Lock,
-    CheckCircle2
+    Trophy, Award, Star, Flame, Zap, Shield, Anchor, Rocket, Lock, CheckCircle2, Loader2
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/lib/api";
+
+// All possible badges. `key` must match what the backend stores in StudentStats.badges[]
+const ALL_BADGES = [
+    {
+        key:         "first_lesson",
+        title:       "First Steps",
+        description: "Complete your first lesson.",
+        icon:        <Rocket className="w-8 h-8" />,
+        color:       "bg-primary/20 text-primary",
+    },
+    {
+        key:         "streak_3",
+        title:       "3-Day Streak",
+        description: "Read for 3 days in a row.",
+        icon:        <Flame className="w-8 h-8" />,
+        color:       "bg-amber-500/20 text-amber-500",
+    },
+    {
+        key:         "streak_7",
+        title:       "Reading Streak",
+        description: "Read for 7 days in a row.",
+        icon:        <Flame className="w-8 h-8" />,
+        color:       "bg-orange-500/20 text-orange-500",
+    },
+    {
+        key:         "bookworm",
+        title:       "Bookworm",
+        description: "Complete 5 lessons.",
+        icon:        <Anchor className="w-8 h-8" />,
+        color:       "bg-cyan-500/20 text-cyan-500",
+    },
+    {
+        key:         "xp_1000",
+        title:       "XP Milestone",
+        description: "Earn 1,000 XP.",
+        icon:        <Zap className="w-8 h-8" />,
+        color:       "bg-yellow-500/20 text-yellow-500",
+    },
+    {
+        key:         "quiz_perfect",
+        title:       "Perfect Score",
+        description: "Score 100% on a quiz.",
+        icon:        <Trophy className="w-8 h-8" />,
+        color:       "bg-primary/20 text-primary",
+    },
+    {
+        key:         "quiz_master",
+        title:       "Quiz Master",
+        description: "Score 80%+ on a quiz.",
+        icon:        <Star className="w-8 h-8" />,
+        color:       "bg-purple-500/20 text-purple-500",
+    },
+    {
+        key:         "story_reader",
+        title:       "Story Reader",
+        description: "Score 60%+ on a quiz.",
+        icon:        <Shield className="w-8 h-8" />,
+        color:       "bg-green-500/20 text-green-500",
+    },
+];
 
 const AchievementHall = () => {
-    const achievements = [
-        {
-            id: 1,
-            title: "First Steps",
-            description: "Complete your first lesson.",
-            icon: <Rocket className="w-8 h-8" />,
-            unlocked: true,
-            color: "bg-primary/20 text-primary"
-        },
-        {
-            id: 2,
-            title: "Reading Streak",
-            description: "Read for 5 days in a row.",
-            icon: <Flame className="w-8 h-8" />,
-            unlocked: true,
-            color: "bg-amber/20 text-amber"
-        },
-        {
-            id: 3,
-            title: "Sea Explorer",
-            description: "Complete 'The Old Man and the Sea'.",
-            icon: <Anchor className="w-8 h-8" />,
-            unlocked: true,
-            color: "bg-cyan/20 text-cyan"
-        },
-        {
-            id: 4,
-            title: "Quiz Master",
-            description: "Get 100% on 5 quizzes.",
-            icon: <Star className="w-8 h-8" />,
-            unlocked: false,
-            color: "bg-secondary text-muted-foreground"
-        },
-        {
-            id: 5,
-            title: "Word Smith",
-            description: "Learn 50 new vocabulary words.",
-            icon: <Zap className="w-8 h-8" />,
-            unlocked: false,
-            color: "bg-secondary text-muted-foreground"
-        },
-        {
-            id: 6,
-            title: "Focus Guard",
-            description: "Use Focus Mode for 2 hours.",
-            icon: <Shield className="w-8 h-8" />,
-            unlocked: false,
-            color: "bg-secondary text-muted-foreground"
-        },
-    ];
+    const { user } = useAuth();
+    const [stats,   setStats]   = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            if (!user) return;
+            try {
+                const idToken = await user.getIdToken();
+                const res = await fetch(`${API_BASE}/api/auth/me`, {
+                    headers: { Authorization: `Bearer ${idToken}` },
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setStats(data.stats || {});
+                }
+            } catch { /* stats are optional */ }
+            finally { setLoading(false); }
+        };
+        fetchStats();
+    }, [user]);
+
+    const earnedBadges: string[] = stats?.badges || [];
+    const level          = stats?.level          || 1;
+    const xp             = stats?.xp             || 0;
+    const completedCount = stats?.completedLessons || 0;
+    const xpToNextLevel  = level * 500;
+    const xpThisLevel    = xp - (level - 1) * 500;
+    const levelPct       = Math.min(100, Math.round((xpThisLevel / 500) * 100));
+
+    const badges = ALL_BADGES.map((b) => ({ ...b, unlocked: earnedBadges.includes(b.key) }));
+    const unlockedCount = badges.filter((b) => b.unlocked).length;
 
     return (
         <DashboardLayout role="student">
@@ -88,40 +124,49 @@ const AchievementHall = () => {
                 </section>
 
                 {/* Level Progress */}
-                <Card className="rounded-[40px] border-2 border-primary/10 overflow-hidden bg-primary/5 p-8">
-                    <div className="flex flex-col md:flex-row items-center gap-8">
-                        <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-white text-3xl font-black shadow-xl ring-8 ring-white dark:ring-primary-foreground/10 shrink-0">
-                            8
-                        </div>
-                        <div className="flex-1 w-full space-y-4 text-center md:text-left">
-                            <div className="flex justify-between items-end">
-                                <div>
-                                    <h3 className="text-xl font-bold">Explorer Level</h3>
-                                    <p className="text-sm text-muted-foreground font-medium">Next Milestone: Level 10 (Master Explorer)</p>
-                                </div>
-                                <span className="text-sm font-black text-primary">85% to Level 9</span>
-                            </div>
-                            <Progress value={85} className="h-4 rounded-full bg-white dark:bg-black/20" />
-                        </div>
+                {loading ? (
+                    <div className="flex justify-center py-8">
+                        <Loader2 className="w-8 h-8 text-primary animate-spin" />
                     </div>
-                </Card>
+                ) : (
+                    <Card className="rounded-[40px] border-2 border-primary/10 overflow-hidden bg-primary/5 p-8">
+                        <div className="flex flex-col md:flex-row items-center gap-8">
+                            <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-white text-3xl font-black shadow-xl ring-8 ring-white dark:ring-primary-foreground/10 shrink-0">
+                                {level}
+                            </div>
+                            <div className="flex-1 w-full space-y-4 text-center md:text-left">
+                                <div className="flex justify-between items-end">
+                                    <div>
+                                        <h3 className="text-xl font-bold">Level {level} Explorer</h3>
+                                        <p className="text-sm text-muted-foreground font-medium">
+                                            {xp} XP earned · {xpToNextLevel - xp} XP to Level {level + 1}
+                                        </p>
+                                    </div>
+                                    <span className="text-sm font-black text-primary">{levelPct}% to Level {level + 1}</span>
+                                </div>
+                                <Progress value={levelPct} className="h-4 rounded-full bg-white dark:bg-black/20" />
+                            </div>
+                        </div>
+                    </Card>
+                )}
 
                 {/* Badge Grid */}
                 <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                     <TooltipProvider>
-                        {achievements.map((badge, idx) => (
+                        {badges.map((badge, idx) => (
                             <motion.div
-                                key={badge.id}
+                                key={badge.key}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: idx * 0.05 }}
                             >
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Card className={`rounded-[32px] aspect-square flex flex-col items-center justify-center p-6 border-2 transition-all cursor-help relative group ${badge.unlocked
+                                        <Card className={`rounded-[32px] aspect-square flex flex-col items-center justify-center p-6 border-2 transition-all cursor-help relative group ${
+                                            badge.unlocked
                                                 ? "border-primary/20 bg-card hover:border-primary hover:shadow-2xl"
                                                 : "border-dashed border-muted bg-secondary/30 grayscale"
-                                            }`}>
+                                        }`}>
                                             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110 ${badge.color}`}>
                                                 {badge.unlocked ? badge.icon : <Lock className="w-8 h-8 opacity-40" />}
                                             </div>
@@ -146,9 +191,9 @@ const AchievementHall = () => {
                 {/* Statistics Row */}
                 <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {[
-                        { label: "Badges Earned", value: "3 / 12", color: "text-primary" },
-                        { label: "Course Mastered", value: "2", color: "text-cyan" },
-                        { label: "Global Rank", value: "#42", color: "text-amber" },
+                        { label: "Badges Earned",    value: `${unlockedCount} / ${badges.length}`, color: "text-primary" },
+                        { label: "Lessons Completed", value: String(completedCount),               color: "text-cyan-500" },
+                        { label: "Total XP",          value: `${xp} XP`,                          color: "text-amber-500" },
                     ].map((stat, i) => (
                         <div key={i} className="p-8 rounded-[32px] bg-secondary/20 border border-border text-center">
                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">{stat.label}</p>

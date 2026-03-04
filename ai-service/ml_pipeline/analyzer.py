@@ -48,6 +48,7 @@ class AnalysisResult:
     metadata:      Dict[str, Any]       # pages, chars, processing_time_ms, signals
     classification: Optional[ClassificationResult] = None
     language:      str = "en"           # detected language: "en" | "fr"
+    author:        Optional[str] = None # extracted author name (None = unknown)
 
 
 # ── Analyzer ───────────────────────────────────────────────────────────────────
@@ -132,8 +133,9 @@ class LiteratureAnalyzer:
         # ── Step 4: Classify ───────────────────────────────────────────────────
         clf = self._classifier.classify(body_blocks)
 
-        # ── Step 5: Infer title ────────────────────────────────────────────────
-        title = self._infer_title(all_blocks, doc, filename)
+        # ── Step 5: Infer title + author ──────────────────────────────────────
+        title  = self._infer_title(all_blocks, doc, filename)
+        author = self._infer_author(all_blocks, doc)
 
         # ── Step 6: Segment + emotion tagging ─────────────────────────────────
         units = self._segmenter.segment(
@@ -161,6 +163,7 @@ class LiteratureAnalyzer:
         return AnalysisResult(
             document_type  = clf.type,
             title          = title,
+            author         = author,
             confidence     = clf.confidence,
             units          = units,
             flat_units     = flat_units,
@@ -318,6 +321,36 @@ class LiteratureAnalyzer:
             filename.replace("_", " ").replace("-", " ")
             .rsplit(".", 1)[0].title()
         )
+
+    def _infer_author(
+        self,
+        all_blocks: List[Dict[str, Any]],
+        doc:        "fitz.Document",
+    ) -> Optional[str]:
+        """Try to extract the author from PDF metadata or title-page text."""
+        import re as _re
+
+        # 1. PDF metadata
+        try:
+            meta = doc.metadata
+            if meta and meta.get("author", "").strip():
+                return meta["author"].strip()
+        except Exception:
+            pass
+
+        # 2. "by <Name>" pattern on the first 5 pages
+        _by_re = _re.compile(r"^\s*by\s+([A-Z][a-zA-Z\s\.\-']{2,50})\s*$", _re.IGNORECASE)
+        for block in all_blocks:
+            if block.get("_page", 99) > 4 or block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    txt = span.get("text", "").strip()
+                    m = _by_re.match(txt)
+                    if m:
+                        return m.group(1).strip()
+
+        return None
 
     def _extract_first_content(
         self, units: List[Dict[str, Any]], doc_type: str
