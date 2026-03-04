@@ -1,0 +1,362 @@
+/**
+ * DyslexiaRenderer.tsx
+ * ====================
+ * Enhanced dyslexia rendering layer for text content.
+ *
+ * Features:
+ *   - Bionic Reading (bold first syllables for faster decoding)
+ *   - Syllable color-coding for long words
+ *   - Reading ruler (highlight current line)
+ *   - Alternating line backgrounds (subtle gray/white bands)
+ *   - OpenDyslexic font toggle
+ *   - Adjustable letter/word spacing
+ *   - Line length limiter (max 60 chars)
+ */
+
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import { Eye, Type, Minus, Plus, Ruler, Palette } from "lucide-react";
+
+// ── Bionic reading: bold the first part of each word ─────────────────────────
+
+function bionicWord(word: string): React.ReactNode {
+    if (word.length <= 1) return word;
+    // Bold first ~40% of word (or at least 1 char)
+    const boldLen = Math.max(1, Math.ceil(word.length * 0.4));
+    const bold = word.slice(0, boldLen);
+    const rest = word.slice(boldLen);
+    return (
+        <span>
+            <strong style={{ fontWeight: 800 }}>{bold}</strong>{rest}
+        </span>
+    );
+}
+
+function bionicText(text: string): React.ReactNode {
+    const words = text.split(/(\s+)/);
+    return words.map((segment, i) => {
+        if (/^\s+$/.test(segment)) return segment;
+        return <React.Fragment key={i}>{bionicWord(segment)}</React.Fragment>;
+    });
+}
+
+// ── Syllable color-coding for hard words ─────────────────────────────────────
+
+const SYLLABLE_COLORS = [
+    "hsl(210, 70%, 50%)",  // blue
+    "hsl(340, 65%, 50%)",  // rose
+    "hsl(160, 60%, 40%)",  // teal
+    "hsl(30, 70%, 50%)",   // orange
+    "hsl(270, 55%, 55%)",  // purple
+];
+
+function estimateSyllables(word: string): string[] {
+    // Simple syllable estimation
+    const clean = word.toLowerCase().replace(/[^a-z]/g, "");
+    if (clean.length <= 3) return [word];
+
+    const syllables: string[] = [];
+    let current = "";
+    let prevVowel = false;
+    const vowels = "aeiouy";
+
+    for (let i = 0; i < clean.length; i++) {
+        current += word[i] || clean[i];
+        const isVowel = vowels.includes(clean[i]);
+
+        if (isVowel && !prevVowel && syllables.length > 0) {
+            // Start new syllable at vowel transitions
+            if (current.length > 1) {
+                const split = Math.max(1, current.length - 1);
+                syllables[syllables.length - 1] += current.slice(0, split);
+                current = current.slice(split);
+            }
+        }
+
+        if (!isVowel && prevVowel && current.length >= 2) {
+            syllables.push(current);
+            current = "";
+        }
+
+        prevVowel = isVowel;
+    }
+
+    if (current) {
+        if (syllables.length > 0 && current.length <= 1) {
+            syllables[syllables.length - 1] += current;
+        } else {
+            syllables.push(current);
+        }
+    }
+
+    return syllables.length > 0 ? syllables : [word];
+}
+
+function syllableColorWord(word: string): React.ReactNode {
+    const clean = word.replace(/[^a-zA-Z]/g, "");
+    if (clean.length < 6) return word; // Only color long words
+
+    const syllables = estimateSyllables(word);
+    if (syllables.length <= 1) return word;
+
+    return (
+        <span className="syllable-colored">
+            {syllables.map((syl, i) => (
+                <span
+                    key={i}
+                    style={{
+                        color: SYLLABLE_COLORS[i % SYLLABLE_COLORS.length],
+                        fontWeight: 600,
+                    }}
+                >
+                    {syl}
+                </span>
+            ))}
+        </span>
+    );
+}
+
+function syllableColorText(text: string): React.ReactNode {
+    const words = text.split(/(\s+)/);
+    return words.map((segment, i) => {
+        if (/^\s+$/.test(segment)) return segment;
+        return <React.Fragment key={i}>{syllableColorWord(segment)}</React.Fragment>;
+    });
+}
+
+// ── Reading ruler (follows mouse/focus) ──────────────────────────────────────
+
+const ReadingRuler: React.FC<{ containerRef: React.RefObject<HTMLDivElement | null> }> = ({
+    containerRef,
+}) => {
+    const [rulerY, setRulerY] = useState<number | null>(null);
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const rect = container.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            setRulerY(y);
+        };
+
+        container.addEventListener("mousemove", handleMouseMove, { passive: true });
+        return () => container.removeEventListener("mousemove", handleMouseMove);
+    }, [containerRef]);
+
+    if (rulerY === null) return null;
+
+    return (
+        <>
+            {/* Highlight band */}
+            <div
+                className="reading-ruler__highlight"
+                style={{
+                    top: rulerY - 16,
+                    height: 32,
+                }}
+            />
+            {/* Dim above */}
+            <div
+                className="reading-ruler__dim reading-ruler__dim--top"
+                style={{ height: Math.max(0, rulerY - 16) }}
+            />
+            {/* Dim below */}
+            <div
+                className="reading-ruler__dim reading-ruler__dim--bottom"
+                style={{ top: rulerY + 16 }}
+            />
+        </>
+    );
+};
+
+// ── Main DyslexiaRenderer ────────────────────────────────────────────────────
+
+export interface DyslexiaSettings {
+    bionicReading: boolean;
+    syllableColors: boolean;
+    readingRuler: boolean;
+    alternatingLines: boolean;
+    openDyslexicFont: boolean;
+    letterSpacing: number;   // px
+    wordSpacing: number;     // px
+    lineHeight: number;      // multiplier
+    fontSize: number;        // rem
+}
+
+export const DEFAULT_DYSLEXIA_SETTINGS: DyslexiaSettings = {
+    bionicReading: false,
+    syllableColors: false,
+    readingRuler: false,
+    alternatingLines: false,
+    openDyslexicFont: false,
+    letterSpacing: 1,
+    wordSpacing: 3,
+    lineHeight: 2.0,
+    fontSize: 1.1,
+};
+
+interface DyslexiaRendererProps {
+    text: string;
+    settings: DyslexiaSettings;
+    className?: string;
+}
+
+export const DyslexiaText: React.FC<DyslexiaRendererProps> = ({
+    text,
+    settings,
+    className = "",
+}) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // Process text through rendering pipeline
+    let rendered: React.ReactNode;
+    if (settings.bionicReading) {
+        rendered = bionicText(text);
+    } else if (settings.syllableColors) {
+        rendered = syllableColorText(text);
+    } else {
+        rendered = text;
+    }
+
+    // Split into lines for alternating backgrounds
+    const lines = text.split(/\n/);
+
+    const style: React.CSSProperties = {
+        fontFamily: settings.openDyslexicFont
+            ? "'OpenDyslexic', 'Comic Sans MS', sans-serif"
+            : "inherit",
+        letterSpacing: `${settings.letterSpacing}px`,
+        wordSpacing: `${settings.wordSpacing}px`,
+        lineHeight: settings.lineHeight,
+        fontSize: `${settings.fontSize}rem`,
+    };
+
+    return (
+        <div
+            ref={containerRef}
+            className={`dyslexia-renderer ${className} ${settings.alternatingLines ? "dyslexia-renderer--alt-lines" : ""}`}
+            style={{ ...style, position: "relative" }}
+        >
+            {settings.readingRuler && <ReadingRuler containerRef={containerRef} />}
+            <p className="dyslexia-renderer__text">{rendered}</p>
+        </div>
+    );
+};
+
+// ── Settings control panel ───────────────────────────────────────────────────
+
+interface DyslexiaControlsProps {
+    settings: DyslexiaSettings;
+    onChange: (settings: DyslexiaSettings) => void;
+}
+
+export const DyslexiaControls: React.FC<DyslexiaControlsProps> = ({
+    settings,
+    onChange,
+}) => {
+    const [expanded, setExpanded] = useState(false);
+
+    const toggle = (key: keyof DyslexiaSettings) => {
+        onChange({ ...settings, [key]: !settings[key] });
+    };
+
+    const adjust = (key: keyof DyslexiaSettings, delta: number) => {
+        const val = (settings[key] as number) + delta;
+        onChange({ ...settings, [key]: Math.max(0, val) });
+    };
+
+    return (
+        <div className="dyslexia-controls">
+            <button
+                className="dyslexia-controls__toggle"
+                onClick={() => setExpanded(v => !v)}
+            >
+                <Eye size={16} />
+                Reading Settings
+            </button>
+
+            {expanded && (
+                <div className="dyslexia-controls__panel">
+                    <label className="dyslexia-controls__option">
+                        <input
+                            type="checkbox"
+                            checked={settings.bionicReading}
+                            onChange={() => toggle("bionicReading")}
+                        />
+                        <Type size={14} />
+                        Bionic Reading (bold starts)
+                    </label>
+
+                    <label className="dyslexia-controls__option">
+                        <input
+                            type="checkbox"
+                            checked={settings.syllableColors}
+                            onChange={() => toggle("syllableColors")}
+                        />
+                        <Palette size={14} />
+                        Color-coded syllables
+                    </label>
+
+                    <label className="dyslexia-controls__option">
+                        <input
+                            type="checkbox"
+                            checked={settings.readingRuler}
+                            onChange={() => toggle("readingRuler")}
+                        />
+                        <Ruler size={14} />
+                        Reading ruler
+                    </label>
+
+                    <label className="dyslexia-controls__option">
+                        <input
+                            type="checkbox"
+                            checked={settings.alternatingLines}
+                            onChange={() => toggle("alternatingLines")}
+                        />
+                        Alternating line backgrounds
+                    </label>
+
+                    <label className="dyslexia-controls__option">
+                        <input
+                            type="checkbox"
+                            checked={settings.openDyslexicFont}
+                            onChange={() => toggle("openDyslexicFont")}
+                        />
+                        OpenDyslexic font
+                    </label>
+
+                    <div className="dyslexia-controls__slider">
+                        <span>Font size</span>
+                        <button onClick={() => adjust("fontSize", -0.1)}><Minus size={12} /></button>
+                        <span>{settings.fontSize.toFixed(1)}</span>
+                        <button onClick={() => adjust("fontSize", 0.1)}><Plus size={12} /></button>
+                    </div>
+
+                    <div className="dyslexia-controls__slider">
+                        <span>Line height</span>
+                        <button onClick={() => adjust("lineHeight", -0.1)}><Minus size={12} /></button>
+                        <span>{settings.lineHeight.toFixed(1)}</span>
+                        <button onClick={() => adjust("lineHeight", 0.1)}><Plus size={12} /></button>
+                    </div>
+
+                    <div className="dyslexia-controls__slider">
+                        <span>Letter spacing</span>
+                        <button onClick={() => adjust("letterSpacing", -0.5)}><Minus size={12} /></button>
+                        <span>{settings.letterSpacing}px</span>
+                        <button onClick={() => adjust("letterSpacing", 0.5)}><Plus size={12} /></button>
+                    </div>
+
+                    <div className="dyslexia-controls__slider">
+                        <span>Word spacing</span>
+                        <button onClick={() => adjust("wordSpacing", -1)}><Minus size={12} /></button>
+                        <span>{settings.wordSpacing}px</span>
+                        <button onClick={() => adjust("wordSpacing", 1)}><Plus size={12} /></button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default DyslexiaText;

@@ -22,7 +22,7 @@ import type { BlockItem, SceneNode, UnitNode } from "./ScriptNavBar";
 interface ScriptDisplayProps {
     unit: UnitNode | null;
     scene: SceneNode | null;
-    docType: "play" | "novel" | "generic";
+    docType: "play" | "novel" | "poem" | "generic";
 }
 
 // Generate a consistent color from a character name

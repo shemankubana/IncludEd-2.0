@@ -21,6 +21,7 @@ from .front_matter_detector import FrontMatterDetector, detect_front_matter, fil
 from .analyzer              import LiteratureAnalyzer, AnalysisResult
 from .emotion_analyzer      import EmotionAnalyzer, get_emotion_analyzer, EMOTION_TO_ANIM
 from .language_detector     import LanguageDetector, get_language_detector, detect_language
+from .book_brain            import BookBrain, BookBrainResult
 
 __all__ = [
     "ContentClassifier",
@@ -37,4 +38,6 @@ __all__ = [
     "LanguageDetector",
     "get_language_detector",
     "detect_language",
+    "BookBrain",
+    "BookBrainResult",
 ]

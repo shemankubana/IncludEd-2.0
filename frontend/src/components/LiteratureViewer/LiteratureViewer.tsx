@@ -1,33 +1,74 @@
 /**
  * LiteratureViewer.tsx
  * ====================
- * Main composite component.
+ * Main composite component — integrates all v3.0 features:
  *
- * Usage (with existing JSON data):
- *   <LiteratureViewer analysisData={analyzeResponse} />
- *
- * Usage (with file upload flow, handled by parent page):
- *   <LiteratureViewer analysisData={null} />  ← shows upload zone
+ *   - ScriptNavBar:          Act/Scene/Chapter/Stanza navigation
+ *   - ScriptDisplay:         Play & novel rendering
+ *   - PoemDisplay:           Centered verse for poems
+ *   - HighlightToUnderstand: Context-aware simplification popup
+ *   - CharacterMap:          Interactive character relationship graph
+ *   - VocabularySidebar:     Difficulty-sorted vocabulary with mastery tracking
+ *   - DyslexiaControls:      Bionic reading, reading ruler, syllable colors, spacing
+ *   - ADHDChunkingEngine:    Timed segments with micro-quizzes & gamification
+ *   - QuestionsPanel:        Comprehension questions
  */
 
 import React, { useState, useCallback } from "react";
 import ScriptNavBar, { type UnitNode, type SceneNode } from "./ScriptNavBar";
 import ScriptDisplay from "./ScriptDisplay";
+import PoemDisplay from "./PoemDisplay";
+import HighlightToUnderstand from "./HighlightToUnderstand";
+import CharacterMap from "./CharacterMap";
+import VocabularySidebar from "./VocabularySidebar";
+import { DyslexiaControls, DEFAULT_DYSLEXIA_SETTINGS, type DyslexiaSettings } from "./DyslexiaRenderer";
+import ADHDChunkingEngine from "./ADHDChunkingEngine";
 import "./LiteratureViewer.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+export interface BookBrainData {
+    difficulty_map: Array<{
+        unit_title: string;
+        section_title: string;
+        section_id: string;
+        overall_difficulty: number;
+        predicted_struggle: boolean;
+        estimated_read_minutes: number;
+        [key: string]: any;
+    }>;
+    vocabulary: Array<{
+        word: string;
+        frequency: number;
+        syllables: number;
+        difficulty: number;
+        contexts: string[];
+        archaic?: boolean;
+        modern_meaning?: string;
+    }>;
+    characters: Array<{
+        name: string;
+        name_upper: string;
+        line_count: number;
+        scene_count: number;
+        importance: "major" | "minor" | "background";
+        relationships: Array<{ character: string; co_appearances: number }>;
+        scenes: string[];
+    }>;
+    summary_stats: Record<string, any>;
+    struggle_zones: Array<Record<string, any>>;
+}
+
 export interface AnalyzeResponse {
-    document_type: "play" | "novel" | "generic";
+    document_type: "play" | "novel" | "poem" | "generic";
     title: string;
-    confidence: float;
+    confidence: number;
     units: UnitNode[];
     questions: QuestionData[];
     metadata: Record<string, unknown>;
+    author?: string;
+    book_brain?: BookBrainData | null;
 }
-
-// Allow float in TS (number alias for readability)
-type float = number;
 
 export interface QuestionData {
     question: string;
@@ -39,8 +80,13 @@ export interface QuestionData {
 
 interface LiteratureViewerProps {
     analysisData: AnalyzeResponse | null;
-    /** Show questions panel below the viewer */
     showQuestions?: boolean;
+    /** Enable ADHD chunking mode */
+    adhdMode?: boolean;
+    /** Student ID for personalization */
+    studentId?: string;
+    /** Book ID for comprehension tracking */
+    bookId?: string;
 }
 
 // ── Questions Panel ────────────────────────────────────────────────────────────
@@ -154,9 +200,13 @@ const QuestionsPanel: React.FC<{ questions: QuestionData[] }> = ({ questions }) 
 const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
     analysisData,
     showQuestions = true,
+    adhdMode = false,
+    studentId,
+    bookId,
 }) => {
     const [selectedActId, setSelectedActId] = useState<string | null>(null);
     const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
+    const [dyslexiaSettings, setDyslexiaSettings] = useState<DyslexiaSettings>(DEFAULT_DYSLEXIA_SETTINGS);
 
     // Auto-select first act + scene when data arrives
     const [prevData, setPrevData] = useState<AnalyzeResponse | null>(null);
@@ -172,7 +222,6 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
 
     const handleActSelect = useCallback((id: string) => {
         setSelectedActId(id);
-        // Auto-select first child scene
         const unit = analysisData?.units.find((u) => u.id === id);
         const firstScene = unit?.children[0];
         setSelectedSceneId(firstScene?.id ?? null);
@@ -196,7 +245,18 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
         activeUnit?.children.find((s) => s.id === selectedSceneId) ?? null;
 
     const docType = analysisData.document_type;
+    const isPoem = docType === "poem";
     const badgeCls = `lit-badge lit-badge--${docType}`;
+
+    const bookBrain = analysisData.book_brain;
+
+    // Get current section content for ADHD chunking
+    const currentContent = (() => {
+        if (!activeScene) return "";
+        if (activeScene.content) return activeScene.content;
+        const blocks = activeScene.blocks ?? [];
+        return blocks.map(b => b.content || "").join("\n\n");
+    })();
 
     return (
         <div className="literature-viewer" id="literature-viewer-root">
@@ -204,12 +264,20 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
             <header className="lit-header">
                 <h1 className="lit-title">{analysisData.title}</h1>
                 <span className={badgeCls}>
-                    {docType === "play" ? "🎭" : docType === "novel" ? "📖" : "📄"} {docType}
+                    {docType === "play" ? "🎭" : docType === "novel" ? "📖" : docType === "poem" ? "📜" : "📄"} {docType}
                 </span>
                 <span className="lit-confidence">
                     {Math.round(analysisData.confidence * 100)}% confident
                 </span>
             </header>
+
+            {/* ── Dyslexia Controls ── */}
+            <div style={{ padding: "0.5rem 1.5rem" }}>
+                <DyslexiaControls
+                    settings={dyslexiaSettings}
+                    onChange={setDyslexiaSettings}
+                />
+            </div>
 
             {/* ── Navigation ── */}
             <ScriptNavBar
@@ -222,11 +290,72 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
             />
 
             {/* ── Content ── */}
-            <ScriptDisplay
-                unit={activeUnit}
-                scene={activeScene}
+            <div style={{
+                fontFamily: dyslexiaSettings.openDyslexicFont
+                    ? "'OpenDyslexic', 'Comic Sans MS', sans-serif"
+                    : "inherit",
+                letterSpacing: `${dyslexiaSettings.letterSpacing}px`,
+                wordSpacing: `${dyslexiaSettings.wordSpacing}px`,
+                lineHeight: dyslexiaSettings.lineHeight,
+                fontSize: `${dyslexiaSettings.fontSize}rem`,
+            }}>
+                {isPoem ? (
+                    <PoemDisplay
+                        unit={activeUnit}
+                        scene={activeScene}
+                    />
+                ) : adhdMode && currentContent ? (
+                    <ADHDChunkingEngine
+                        fullContent={currentContent}
+                        enabled={true}
+                        renderContent={(content) => (
+                            <ScriptDisplay
+                                unit={activeUnit}
+                                scene={{
+                                    ...(activeScene || { id: "", title: "", blocks: [] }),
+                                    content,
+                                    blocks: content.split("\n\n").filter(Boolean).map(p => ({
+                                        type: "paragraph" as const,
+                                        content: p,
+                                    })),
+                                }}
+                                docType={docType}
+                            />
+                        )}
+                    />
+                ) : (
+                    <ScriptDisplay
+                        unit={activeUnit}
+                        scene={activeScene}
+                        docType={docType}
+                    />
+                )}
+            </div>
+
+            {/* ── Highlight-to-Understand (always active) ── */}
+            <HighlightToUnderstand
+                bookTitle={analysisData.title}
+                author={analysisData.author || ""}
                 docType={docType}
+                language={(analysisData.metadata?.language as string) || "en"}
+                studentId={studentId}
+                bookId={bookId}
             />
+
+            {/* ── Character Map (from Book Brain) ── */}
+            {bookBrain && bookBrain.characters.length > 0 && (
+                <CharacterMap
+                    characters={bookBrain.characters}
+                    title={analysisData.title}
+                />
+            )}
+
+            {/* ── Vocabulary Sidebar (from Book Brain) ── */}
+            {bookBrain && bookBrain.vocabulary.length > 0 && (
+                <VocabularySidebar
+                    vocabulary={bookBrain.vocabulary}
+                />
+            )}
 
             {/* ── Questions ── */}
             {showQuestions && analysisData.questions.length > 0 && (

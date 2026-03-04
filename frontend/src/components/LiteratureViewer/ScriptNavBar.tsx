@@ -17,7 +17,7 @@ import { ChevronDown, BookOpen, Theater } from "lucide-react";
 
 // ── Types mirror the AnalyzeResponse shape ─────────────────────────────────────
 export interface BlockItem {
-    type: "dialogue" | "stage_direction" | "paragraph";
+    type: "dialogue" | "stage_direction" | "paragraph" | "verse_line";
     character?: string | null;
     content: string;
 }
@@ -44,7 +44,7 @@ export interface UnitNode {
 
 interface ScriptNavBarProps {
     units: UnitNode[];
-    docType: "play" | "novel" | "generic";
+    docType: "play" | "novel" | "poem" | "generic";
     selectedActId: string | null;
     selectedSceneId: string | null;
     onActSelect: (id: string) => void;
