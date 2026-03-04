@@ -1,0 +1,85 @@
+{
+  "nav": {
+    "exit_reader": "Exit Reader",
+    "quiz": "Quiz",
+    "dashboard": "Dashboard",
+    "lessons": "Lessons",
+    "achievements": "Achievements"
+  },
+  "reader": {
+    "adaptive_engine_active": "Adaptive Engine Active",
+    "analysing": "Analysing...",
+    "focus_mode": "Focus Mode",
+    "focus_mode_on": "Focus Mode On",
+    "attention": "Attention",
+    "rl_adaptation_applied": "RL Adaptation Applied",
+    "ppo_model": "PPO Model",
+    "rule_based": "Rule-Based",
+    "previous": "Previous",
+    "next": "Next",
+    "finish_quiz": "Finish & Quiz",
+    "voice_activity": "Voice Activity",
+    "preparing_lesson": "Preparing your adaptive lesson...",
+    "attention_support": "Attention Support Active",
+    "content_chunked": "Content chunked into smaller sections for better focus.",
+    "chapter_of": "{{current}} / {{total}}"
+  },
+  "quiz": {
+    "checkpoint": "Checkpoint!",
+    "knowledge_check": "Ready for a quick knowledge check? Earn +200 XP!",
+    "lets_go": "Let's Go!",
+    "later": "Later"
+  },
+  "play": {
+    "previous": "Previous",
+    "next": "Next",
+    "finish_scene": "Finish Scene",
+    "auto_play": "Auto-Play",
+    "auto_play_on": "Auto-Play On",
+    "dyslexic_font": "Dyslexic Font",
+    "no_dialogue": "No dialogue lines available."
+  },
+  "teacher": {
+    "dashboard": "Teacher Dashboard",
+    "upload_content": "Upload Content",
+    "my_content": "My Content",
+    "analytics": "Analytics",
+    "students": "Students",
+    "invite_student": "Invite Student"
+  },
+  "analytics": {
+    "attention_trend": "Attention & Quiz Trend",
+    "rl_distribution": "RL Action Distribution",
+    "disability_breakdown": "Disability Profile Distribution",
+    "ab_comparison": "A/B: RL Model vs Rule-Based",
+    "comprehension": "Comprehension Improvement",
+    "pre_adaptation": "Pre-Adaptation",
+    "post_adaptation": "Post-Adaptation",
+    "sessions": "Sessions",
+    "no_data": "No analytics data available yet."
+  },
+  "disability": {
+    "none": "No disability",
+    "dyslexia": "Dyslexia",
+    "adhd": "ADHD",
+    "both": "Dyslexia + ADHD"
+  },
+  "actions": {
+    "0": "Keep Original",
+    "1": "Light Simplification",
+    "2": "Heavy Simplification",
+    "3": "TTS + Highlights",
+    "4": "Syllable Break",
+    "5": "Attention Break"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "back": "Back"
+  }
+}

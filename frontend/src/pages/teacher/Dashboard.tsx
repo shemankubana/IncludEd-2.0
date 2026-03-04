@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
+import AnalyticsCharts from "@/components/teacher/AnalyticsCharts";
 
 const TeacherDashboard = () => {
     const { user, profile } = useAuth();
@@ -31,6 +32,7 @@ const TeacherDashboard = () => {
     const [stats, setStats] = useState<any[]>([]);
     const [students, setStudents] = useState<any[]>([]);
     const [content, setContent] = useState<any[]>([]);
+    const [analyticsData, setAnalyticsData] = useState<any>(null);
     const [inviteEmail, setInviteEmail] = useState("");
     const [isInviting, setIsInviting] = useState(false);
     const { toast } = useToast();
@@ -45,6 +47,9 @@ const TeacherDashboard = () => {
 
                 const response = await fetch(`${baseUrl}/api/analytics/class`, { headers });
                 const data = await response.json();
+
+                // Store full analytics data for charts
+                setAnalyticsData(data);
 
                 setStats([
                     { label: "Active Students", value: data.overview?.totalStudents || "0", icon: <Users className="w-5 h-5" />, trend: "Total enrolled" },
@@ -241,18 +246,20 @@ const TeacherDashboard = () => {
                     </TabsContent>
 
                     <TabsContent value="analytics">
-                        <Card className="rounded-[48px] border-2 border-dashed border-border p-20 bg-secondary/10 flex flex-col items-center justify-center text-center space-y-6">
-                            <div className="w-20 h-20 rounded-3xl bg-background border border-border flex items-center justify-center shadow-xl mb-4">
-                                <TrendingUp className="w-10 h-10 text-primary" />
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-xl font-black tracking-tight">Class Analytics</h3>
+                                    <p className="text-sm text-muted-foreground font-medium">
+                                        RL reward trends, attention scores, and comprehension improvement across your class.
+                                    </p>
+                                </div>
                             </div>
-                            <div className="space-y-2">
-                                <h3 className="text-2xl font-black tracking-tight">Performance Deep-Dive</h3>
-                                <p className="text-muted-foreground font-medium max-w-sm">
-                                    We're calibrating the RL Engine visuals. Charts showing student mastery over time will appear here.
-                                </p>
-                            </div>
-                            <Button className="rounded-2xl font-bold h-12 px-8">Upgrade Analytics View</Button>
-                        </Card>
+                            <AnalyticsCharts
+                                classData={analyticsData}
+                                loading={loading}
+                            />
+                        </div>
                     </TabsContent>
 
                     <TabsContent value="content">

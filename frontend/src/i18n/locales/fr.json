@@ -1,0 +1,85 @@
+{
+  "nav": {
+    "exit_reader": "Quitter la lecture",
+    "quiz": "Quiz",
+    "dashboard": "Tableau de bord",
+    "lessons": "Leçons",
+    "achievements": "Récompenses"
+  },
+  "reader": {
+    "adaptive_engine_active": "Moteur adaptatif actif",
+    "analysing": "Analyse en cours...",
+    "focus_mode": "Mode concentration",
+    "focus_mode_on": "Mode concentration activé",
+    "attention": "Attention",
+    "rl_adaptation_applied": "Adaptation RL appliquée",
+    "ppo_model": "Modèle PPO",
+    "rule_based": "Basé sur des règles",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "finish_quiz": "Terminer & Quiz",
+    "voice_activity": "Activité vocale",
+    "preparing_lesson": "Préparation de votre leçon adaptative...",
+    "attention_support": "Soutien à l'attention activé",
+    "content_chunked": "Contenu divisé en petites sections pour une meilleure concentration.",
+    "chapter_of": "{{current}} / {{total}}"
+  },
+  "quiz": {
+    "checkpoint": "Point de contrôle!",
+    "knowledge_check": "Prêt pour une vérification rapide des connaissances? Gagnez +200 XP!",
+    "lets_go": "Allons-y!",
+    "later": "Plus tard"
+  },
+  "play": {
+    "previous": "Précédent",
+    "next": "Suivant",
+    "finish_scene": "Terminer la scène",
+    "auto_play": "Lecture auto",
+    "auto_play_on": "Lecture auto activée",
+    "dyslexic_font": "Police dyslexique",
+    "no_dialogue": "Aucune ligne de dialogue disponible."
+  },
+  "teacher": {
+    "dashboard": "Tableau de bord enseignant",
+    "upload_content": "Télécharger du contenu",
+    "my_content": "Mon contenu",
+    "analytics": "Analyses",
+    "students": "Élèves",
+    "invite_student": "Inviter un élève"
+  },
+  "analytics": {
+    "attention_trend": "Tendance de l'attention et des quiz",
+    "rl_distribution": "Distribution des actions RL",
+    "disability_breakdown": "Répartition des profils de handicap",
+    "ab_comparison": "A/B: Modèle RL vs Basé sur règles",
+    "comprehension": "Amélioration de la compréhension",
+    "pre_adaptation": "Pré-adaptation",
+    "post_adaptation": "Post-adaptation",
+    "sessions": "Sessions",
+    "no_data": "Aucune donnée analytique disponible pour l'instant."
+  },
+  "disability": {
+    "none": "Pas de handicap",
+    "dyslexia": "Dyslexie",
+    "adhd": "TDAH",
+    "both": "Dyslexie + TDAH"
+  },
+  "actions": {
+    "0": "Garder l'original",
+    "1": "Simplification légère",
+    "2": "Simplification lourde",
+    "3": "Synthèse vocale + Surlignage",
+    "4": "Découpe syllabique",
+    "5": "Pause attention"
+  },
+  "common": {
+    "loading": "Chargement...",
+    "error": "Quelque chose s'est mal passé",
+    "save": "Sauvegarder",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "view": "Voir",
+    "back": "Retour"
+  }
+}

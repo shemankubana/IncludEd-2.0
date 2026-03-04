@@ -1,0 +1,30 @@
+[
+  {
+    "version": "v1.0",
+    "model_version": "v2",
+    "trained_at": "2026-03-04T09:57:50.689540",
+    "total_timesteps": 300000,
+    "n_envs": 8,
+    "seed": 42,
+    "duration_s": 314.3,
+    "eval_mean_reward": 80.26884999999996,
+    "eval_std_reward": 20.626471232132804,
+    "eval_mean_attention": 0.9974941900260085,
+    "attention_gain_pct": 3.1,
+    "cohens_d": 0.559,
+    "observation_dims": 9,
+    "action_dims": 6,
+    "model_file": "/Users/ivanshema/Documents/IncludEd-2.0/rl-engine/ppo_included_agent.zip",
+    "action_distribution": {
+      "Keep Original": 37.0,
+      "TTS + Highlights": 0.0,
+      "Syllable Break": 31.0,
+      "Attention Break": 32.0
+    },
+    "content_rewards": {
+      "mean_reward_generic": 75.09958333333331,
+      "mean_reward_novel": 83.20742647058823,
+      "mean_reward_play": 81.80124999999992
+    }
+  }
+]

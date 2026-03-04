@@ -1,21 +1,33 @@
+# ── Web Framework ──────────────────────────────────────────────────────────────
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 python-dotenv==1.0.0
 pydantic>=2.8.2
+aiofiles==23.2.1
+requests==2.31.0
+
+# ── PDF Processing ─────────────────────────────────────────────────────────────
 pymupdf==1.23.8
+
+# ── ML / NLP ───────────────────────────────────────────────────────────────────
 numpy==1.26.3
-transformers==4.36.2
 torch>=2.2.0
+transformers>=4.38.0          # HuggingFace Transformers (DistilRoBERTa, FLAN-T5)
+sentencepiece>=0.1.99         # Required for T5Tokenizer
 sentence-transformers==2.3.1
 spacy==3.7.2
 nltk==3.8.1
+scikit-learn==1.4.0
+joblib==1.3.2
 textstat==0.7.3
+
+# ── Language Detection ─────────────────────────────────────────────────────────
+langdetect==1.0.9             # Fast EN/FR/multi-language detection
+
+# ── RL ─────────────────────────────────────────────────────────────────────────
 stable-baselines3==2.2.1
 gymnasium==0.29.1
 shimmy>=0.2.1
+
+# ── TTS ────────────────────────────────────────────────────────────────────────
 edge-tts==6.1.9
-openai-whisper==20231117
-aiofiles==23.2.1
-requests==2.31.0
-scikit-learn==1.4.0
-joblib==1.3.2

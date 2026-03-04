@@ -47,8 +47,15 @@ router.post('/upload', authenticateToken, upload.fields([
 
         if (aiResp.data) {
           finalContentType = aiResp.data.document_type;
-          finalSections = aiResp.data.flat_units;
-          console.log(`✅ AI Analyzer success: ${finalContentType} (${finalSections.length} flat units)`);
+          // Map flat_units → sections, normalising the dialogue field
+          // (Python returns "dialogue" for plays after the blocks→dialogue fix)
+          finalSections = (aiResp.data.flat_units || []).map(unit => ({
+            title:    unit.title   || 'Section',
+            content:  unit.content || '',
+            dialogue: unit.dialogue || unit.blocks || [],  // play dialogue lines
+            wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
+          }));
+          console.log(`✅ AI Analyzer success: ${finalContentType} (${finalSections.length} sections)`);
         }
       } catch (err) {
         console.error('⚠️ AI Analyzer call failed:', err.message);
@@ -243,7 +250,7 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Re-process existing literature (regenerate sections + contentType)
+// Re-process existing literature using ML analyzer (front matter removal + re-classification)
 router.post('/:id/reprocess', authenticateToken, async (req, res) => {
   try {
     const literature = await Literature.findByPk(req.params.id);
@@ -252,8 +259,37 @@ router.post('/:id/reprocess', authenticateToken, async (req, res) => {
     const textToProcess = literature.originalContent || literature.adaptedContent;
     if (!textToProcess) return res.status(400).json({ error: 'No content to process' });
 
-    const { splitIntoChapters } = await import('../services/chapterSplitter.js');
-    const { contentType, sections } = await splitIntoChapters(textToProcess);
+    let contentType, sections;
+
+    // Try ML analyzer first (applies front-matter filtering + French pattern support)
+    try {
+      const aiResp = await axios.post(`${AI_SERVICE_URL}/reanalyze-text`, {
+        text: textToProcess,
+        filename: `${literature.title}.txt`,
+        generate_questions: false,
+      }, { timeout: 15000 });
+
+      if (aiResp.data && aiResp.data.flat_units?.length > 0) {
+        contentType = aiResp.data.document_type;
+        sections = aiResp.data.flat_units.map(unit => ({
+          title:    unit.title   || 'Section',
+          content:  unit.content || '',
+          dialogue: unit.dialogue || unit.blocks || [],
+          wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
+        }));
+        console.log(`🧠 ML re-process: ${literature.title} → ${contentType} (${sections.length} sections)`);
+      }
+    } catch (err) {
+      console.warn('⚠️ ML analyzer unavailable, falling back to basic splitter:', err.message);
+    }
+
+    // Fallback to basic splitter if AI service unavailable
+    if (!sections) {
+      const { splitIntoChapters } = await import('../services/chapterSplitter.js');
+      const result = await splitIntoChapters(textToProcess);
+      contentType = result.contentType;
+      sections    = result.sections;
+    }
 
     await literature.update({ contentType, sections });
     console.log(`♻️  Re-processed: ${literature.title} → ${contentType} (${sections.length} sections)`);
@@ -262,7 +298,7 @@ router.post('/:id/reprocess', authenticateToken, async (req, res) => {
       success: true,
       contentType,
       sectionCount: sections.length,
-      sections: sections.map(s => ({ title: s.title, hasDialogue: !!s.dialogue }))
+      sections: sections.map(s => ({ title: s.title, hasDialogue: !!(s.dialogue?.length) })),
     });
   } catch (error) {
     console.error('❌ Reprocess error:', error);

@@ -1,11 +1,11 @@
 """
-RL Agent Service (Updated)
-===========================
-Wraps the trained PPO model (ppo_included_agent.zip) with an 8-dim state
-and 6-action space aligned with the IncludEd research proposal.
+RL Agent Service v2
+====================
+Wraps the trained PPO model with flexible state support:
+  - v2 model: 9-dim state (adds content_type at index 8)
+  - v1 model: 8-dim state (backward compatible)
 
-Falls back to an evidence-based rule-based heuristic when the model file
-is not present (e.g., before first training run).
+Falls back to rule-based heuristic when no trained model is available.
 """
 
 import numpy as np
@@ -45,6 +45,7 @@ class RLAgentService:
         self.model       = None
         self.model_path  = None
         self.model_ready = False
+        self._obs_dim    = 8   # default; updated after model load
         self._load_model()
 
     # ── Model lifecycle ───────────────────────────────────────────────────────
@@ -58,25 +59,27 @@ class RLAgentService:
                     from stable_baselines3 import PPO
                     model = PPO.load(path)
 
-                    # Validate the observation space matches our 8-dim state
+                    # Accept 8-dim (v1) or 9-dim (v2) observation spaces
                     obs_dim = model.observation_space.shape[0]
-                    if obs_dim != 8:
+                    if obs_dim not in (8, 9):
                         print(
                             f"⚠️  RL Agent: skipping {path} — observation space is "
-                            f"{obs_dim}-dim, expected 8-dim. Train a new model with "
-                            f"rl-engine/train_model.py to enable ML predictions."
+                            f"{obs_dim}-dim (expected 8 or 9). Retrain with "
+                            f"rl-engine/train_model.py."
                         )
                         continue
 
-                    self.model      = model
-                    self.model_path = path
+                    self.model       = model
+                    self.model_path  = path
                     self.model_ready = True
-                    print(f"✅ RL Agent: loaded model from {path}")
+                    self._obs_dim    = obs_dim
+                    print(f"✅ RL Agent: loaded {obs_dim}-dim model from {path}")
                     return
                 except Exception as e:
                     print(f"⚠️  RL Agent: failed to load {path}: {e}")
 
         print("⚠️  RL Agent: no compatible model found — using rule-based fallback.")
+        self._obs_dim = 8
 
     def reload_model(self):
         """Hot-reload the model (e.g., after a new training run)."""
@@ -88,28 +91,42 @@ class RLAgentService:
     # ── Prediction ────────────────────────────────────────────────────────────
 
     def predict_from_state_vector(
-        self, state_vector: List[float]
+        self,
+        state_vector:  List[float],
+        content_type:  float = 0.5,  # 0.0=generic, 0.5=novel, 1.0=play (v2 only)
     ) -> Tuple[int, str]:
         """
-        Predict the best pedagogical action from a raw 8-dim state vector.
+        Predict the best pedagogical action from a state vector.
 
         Args:
-            state_vector: [reading_speed, mouse_dwell, scroll_hesitation,
+            state_vector: 8-dim [reading_speed, mouse_dwell, scroll_hesitation,
                            backtrack_freq, attention_score, disability_type,
                            text_difficulty, session_fatigue]
+                          OR 9-dim (include content_type as last element)
+            content_type: content type encoding for v2 models (appended if needed)
 
         Returns:
             (action_id, action_label)
         """
-        if len(state_vector) != 8:
-            raise ValueError(f"Expected 8-dim state, got {len(state_vector)}")
+        if len(state_vector) not in (8, 9):
+            raise ValueError(
+                f"Expected 8 or 9-dim state, got {len(state_vector)}"
+            )
 
         if self.model_ready:
-            obs = np.array(state_vector, dtype=np.float32)
+            vec = list(state_vector)
+            # Pad 8-dim → 9-dim if v2 model loaded
+            if self._obs_dim == 9 and len(vec) == 8:
+                vec.append(content_type)
+            # Trim 9-dim → 8-dim if v1 model loaded
+            elif self._obs_dim == 8 and len(vec) == 9:
+                vec = vec[:8]
+
+            obs = np.array(vec, dtype=np.float32)
             action, _ = self.model.predict(obs, deterministic=True)
             action_id = int(action)
         else:
-            action_id = self._rule_based_fallback(state_vector)
+            action_id = self._rule_based_fallback(state_vector[:8])
 
         return action_id, ACTION_LABELS.get(action_id, "Unknown")
 
@@ -187,14 +204,17 @@ class RLAgentService:
         return DISABILITY_NONE
 
     def status(self) -> Dict:
+        labels_8 = [
+            "reading_speed", "mouse_dwell", "scroll_hesitation",
+            "backtrack_freq", "attention_score", "disability_type",
+            "text_difficulty", "session_fatigue",
+        ]
+        labels_9 = labels_8 + ["content_type"]
         return {
-            "model_loaded": self.model_ready,
-            "model_path":   self.model_path,
-            "action_space": ACTION_LABELS,
-            "state_dims":   8,
-            "state_labels": [
-                "reading_speed", "mouse_dwell", "scroll_hesitation",
-                "backtrack_freq", "attention_score", "disability_type",
-                "text_difficulty", "session_fatigue",
-            ],
+            "model_loaded":  self.model_ready,
+            "model_path":    self.model_path,
+            "action_space":  ACTION_LABELS,
+            "state_dims":    self._obs_dim,
+            "model_version": "v2" if self._obs_dim == 9 else "v1",
+            "state_labels":  labels_9 if self._obs_dim == 9 else labels_8,
         }

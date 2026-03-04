@@ -6,10 +6,12 @@ LiteratureAnalyzer — Main orchestrator.
 Pipeline:
   1. Open PDF with PyMuPDF (fitz).
   2. Extract span-level block data (with page numbers injected).
-  3. ContentClassifier → doc_type, confidence.
-  4. StructuralSegmenter → structured hierarchy (Act>Scene or Chapter>Section).
-  5. PedagogicalQuestionGenerator → questions for the first scene/chapter.
-  6. Return AnalysisResult dataclass.
+  3. FrontMatterDetector → remove front/back matter pages.
+  4. LanguageDetector → detect EN/FR.
+  5. ContentClassifier → doc_type (play|novel|generic), confidence.
+  6. StructuralSegmenter → hierarchical structure with emotion tagging.
+  7. PedagogicalQuestionGenerator → per-unit questions.
+  8. Return AnalysisResult.
 """
 
 from __future__ import annotations
@@ -26,9 +28,11 @@ except ImportError:
     _FITZ_OK = False
     print("⚠️  PyMuPDF (fitz) not installed. Run: pip install pymupdf")
 
-from .content_classifier   import ContentClassifier, ClassificationResult
-from .structural_segmenter import StructuralSegmenter
-from .question_generator   import PedagogicalQuestionGenerator
+from .content_classifier    import ContentClassifier, ClassificationResult
+from .structural_segmenter  import StructuralSegmenter
+from .question_generator    import PedagogicalQuestionGenerator
+from .front_matter_detector import FrontMatterDetector, filter_body_blocks
+from .language_detector     import get_language_detector
 
 
 # ── Result dataclass ───────────────────────────────────────────────────────────
@@ -39,10 +43,11 @@ class AnalysisResult:
     title:         str
     confidence:    float
     units:         List[Dict[str, Any]] # hierarchical structure
-    flat_units:    List[Dict[str, Any]] # flat structure for basic readers
+    flat_units:    List[Dict[str, Any]] # flat for basic readers
     questions:     List[Dict[str, Any]]
     metadata:      Dict[str, Any]       # pages, chars, processing_time_ms, signals
     classification: Optional[ClassificationResult] = None
+    language:      str = "en"           # detected language: "en" | "fr"
 
 
 # ── Analyzer ───────────────────────────────────────────────────────────────────
@@ -58,17 +63,16 @@ class LiteratureAnalyzer:
     >>> analyzer = LiteratureAnalyzer()
     >>> result = analyzer.analyze(pdf_bytes, filename="macbeth.pdf")
     >>> result.document_type  # "play"
-    >>> result.units          # [ { "id": ..., "title": "ACT I", "children": [...] } ]
-
-    Generate questions (requires Ollama or falls back to templates):
-    >>> result = analyzer.analyze(pdf_bytes, generate_questions=True, question_count=5)
-    >>> result.questions      # [ {question, options, correctAnswer, explanation} ]
+    >>> result.language       # "en"
+    >>> result.units[0]["children"][0]["blocks"][0]["emotion"]  # "anger"
     """
 
     def __init__(self):
-        self._classifier  = ContentClassifier()
-        self._segmenter   = StructuralSegmenter()
-        self._qgen        = PedagogicalQuestionGenerator()
+        self._classifier       = ContentClassifier()
+        self._segmenter        = StructuralSegmenter()
+        self._qgen             = PedagogicalQuestionGenerator()
+        self._front_matter_det = FrontMatterDetector()
+        self._lang_detector    = get_language_detector()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -80,7 +84,7 @@ class LiteratureAnalyzer:
         question_count:     int  = 5,
     ) -> AnalysisResult:
         """
-        Analyze a PDF from its raw bytes.
+        Analyze a PDF from raw bytes.
 
         Parameters
         ----------
@@ -89,18 +93,9 @@ class LiteratureAnalyzer:
         filename:
             Original filename used for title inference.
         generate_questions:
-            If True, generate pedagogical questions for the first content unit.
+            If True, generate pedagogical questions for first content unit.
         question_count:
             Number of questions to generate.
-
-        Returns
-        -------
-        AnalysisResult dataclass.
-
-        Raises
-        ------
-        ImportError  – if PyMuPDF is not installed.
-        ValueError   – if the PDF is unreadable or contains < 50 chars.
         """
         if not _FITZ_OK:
             raise ImportError(
@@ -112,25 +107,43 @@ class LiteratureAnalyzer:
         # ── Step 1: Open & extract ─────────────────────────────────────────────
         doc   = fitz.open(stream=pdf_bytes, filetype="pdf")
         pages = doc.page_count
-        all_blocks, total_chars = self._extract_all_blocks(doc)
+        all_blocks, total_chars = self._extract_blocks(doc)
 
         if total_chars < 50:
             raise ValueError(
                 "Extracted text is too short. The PDF may be scanned/image-based. "
-                "Pre-process it with OCR (e.g., pytesseract) first."
+                "Pre-process with OCR (e.g., pytesseract) first."
             )
 
-        # ── Step 2: Classify ───────────────────────────────────────────────────
-        clf = self._classifier.classify(all_blocks)
+        # ── Step 2: Remove front/back matter ──────────────────────────────────
+        body_blocks = self._front_matter_det.classify_blocks(all_blocks)
+        front_pages_removed = len(all_blocks) - len(body_blocks)
 
-        # ── Step 3: Infer title ────────────────────────────────────────────────
+        if len(body_blocks) < 10:
+            body_blocks = all_blocks
+            front_pages_removed = 0
+
+        # ── Step 3: Detect language ────────────────────────────────────────────
+        lang_result = self._lang_detector.detect_from_blocks(body_blocks)
+        language    = lang_result["language"]
+        lang_conf   = lang_result["confidence"]
+
+        # ── Step 4: Classify ───────────────────────────────────────────────────
+        clf = self._classifier.classify(body_blocks)
+
+        # ── Step 5: Infer title ────────────────────────────────────────────────
         title = self._infer_title(all_blocks, doc, filename)
 
-        # ── Step 4: Segment ────────────────────────────────────────────────────
-        units = self._segmenter.segment(all_blocks, doc_type=clf.type)
+        # ── Step 6: Segment + emotion tagging ─────────────────────────────────
+        units = self._segmenter.segment(
+            body_blocks,
+            doc_type     = clf.type,
+            language     = language,
+            add_emotions = True,
+        )
         flat_units = self._flatten_units(units, doc_type=clf.type)
 
-        # ── Step 5: Generate questions ─────────────────────────────────────────
+        # ── Step 7: Generate questions ─────────────────────────────────────────
         questions: List[Dict[str, Any]] = []
         if generate_questions:
             sample_content = self._extract_first_content(units, clf.type)
@@ -139,6 +152,7 @@ class LiteratureAnalyzer:
                     content  = sample_content,
                     doc_type = clf.type,
                     count    = question_count,
+                    language = language,
                 )
 
         elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
@@ -150,20 +164,23 @@ class LiteratureAnalyzer:
             units          = units,
             flat_units     = flat_units,
             questions      = questions,
+            language       = language,
             metadata       = {
-                "source_file":         filename,
-                "pages":               pages,
-                "total_chars":         total_chars,
-                "top_level_units":     len(units),
-                "processing_time_ms":  elapsed_ms,
-                "play_score":          clf.play_score,
-                "novel_score":         clf.novel_score,
-                "signals":             clf.signals,
+                "source_file":          filename,
+                "pages":                pages,
+                "total_chars":          total_chars,
+                "top_level_units":      len(units),
+                "processing_time_ms":   elapsed_ms,
+                "play_score":           clf.play_score,
+                "novel_score":          clf.novel_score,
+                "signals":              clf.signals,
+                "front_pages_removed":  front_pages_removed,
+                "language":             language,
+                "language_confidence":  lang_conf,
+                "language_method":      lang_result["method"],
             },
             classification = clf,
         )
-
-    # ── Private helpers ────────────────────────────────────────────────────────
 
     def analyze_text(
         self,
@@ -174,88 +191,91 @@ class LiteratureAnalyzer:
     ) -> AnalysisResult:
         """
         Analyze raw text content (no PDF available).
-        Synthetic blocks are created to reuse the classifier and segmenter logic.
+        Synthetic blocks reuse the classifier and segmenter logic.
         """
         start_time = time.monotonic()
-        
-        # 1. Synthesize blocks from text (simple paragraph-based)
-        # Without font metadata, segmentation will rely purely on regex headings.
-        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-        mock_blocks = []
-        for i, p in enumerate(paragraphs):
-            mock_blocks.append({
+
+        # ── Step 1: Detect language ────────────────────────────────────────────
+        lang_result = self._lang_detector.detect(text[:3000])
+        language    = lang_result["language"]
+
+        # ── Step 2: Synthesise blocks ──────────────────────────────────────────
+        paragraphs  = [p.strip() for p in text.split("\n\n") if p.strip()]
+        mock_blocks = [
+            {
                 "type": 0,
                 "_page": 0,
                 "lines": [{
                     "spans": [{
-                        "text": p,
-                        "size": 12.0,  # Default body size
-                        "flags": 0,
-                        "font": "System"
+                        "text": p, "size": 12.0, "flags": 0, "font": "System"
                     }]
-                }]
-            })
+                }],
+            }
+            for p in paragraphs
+        ]
 
-        # 2. Classify
+        # ── Step 3: Classify ───────────────────────────────────────────────────
         clf_result = self._classifier.classify(mock_blocks)
-        doc_type = clf_result.type
+        doc_type   = clf_result.type
 
-        # 3. Segment (Regex-based hierarchy)
-        units = self._segmenter.segment(mock_blocks, doc_type)
+        # ── Step 4: Segment ────────────────────────────────────────────────────
+        units = self._segmenter.segment(
+            mock_blocks,
+            doc_type     = doc_type,
+            language     = language,
+            add_emotions = True,
+        )
         flat_units = self._flatten_units(units, doc_type)
 
-        # 4. Generate questions (optional)
+        # ── Step 5: Generate questions ─────────────────────────────────────────
         questions = []
         if generate_questions and units:
-            # Pick first unit's first child content for question context
-            context = ""
-            if units[0].get("children"):
-                context = units[0]["children"][0].get("content") or units[0]["children"][0].get("paragraphs", [""])[0]
-            elif units[0].get("content"):
-                context = units[0].get("content")
-            
+            context = self._extract_first_content(units, doc_type)
             if context:
-                questions = self._qgen.generate(context, doc_type, question_count)
+                questions = self._qgen.generate(
+                    context, doc_type, question_count, language
+                )
 
-        # 5. Build result
         process_ms = round((time.monotonic() - start_time) * 1000, 2)
-        
+
         return AnalysisResult(
-            document_type=doc_type,
-            title=filename.replace(".pdf", "").replace(".txt", ""),
-            confidence=clf_result.confidence,
-            units=units,
-            flat_units=flat_units,
-            questions=questions,
-            metadata={
-                "pages": 1,
-                "total_chars": len(text),
-                "top_level_units": len(units),
-                "processing_time_ms": process_ms,
+            document_type = doc_type,
+            title         = filename.replace(".pdf", "").replace(".txt", ""),
+            confidence    = clf_result.confidence,
+            units         = units,
+            flat_units    = flat_units,
+            questions     = questions,
+            language      = language,
+            metadata      = {
+                "pages":                1,
+                "total_chars":          len(text),
+                "top_level_units":      len(units),
+                "processing_time_ms":   process_ms,
                 "classification_signals": clf_result.signals,
-                "ml_probs": clf_result.ml_probabilities,
-                "mode": "text_only_reanalysis"
+                "ml_probs":             clf_result.ml_probabilities,
+                "mode":                 "text_only_reanalysis",
+                "language":             language,
+                "language_confidence":  lang_result["confidence"],
             },
-            classification=clf_result,
+            classification = clf_result,
         )
+
+    # ── Private helpers ────────────────────────────────────────────────────────
 
     def _extract_blocks(
         self, doc: "fitz.Document"
     ) -> tuple[List[Dict[str, Any]], int]:
-        """
-        Extract all text blocks from all pages.
-        Injects ``"_page"`` (0-indexed) into each block dict.
-        """
         all_blocks: List[Dict[str, Any]] = []
         total_chars = 0
 
         for page_idx in range(doc.page_count):
             page = doc[page_idx]
-            page_dict = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+            page_dict = page.get_text(
+                "dict", flags=fitz.TEXT_PRESERVE_WHITESPACE
+            )
             for block in page_dict.get("blocks", []):
                 block["_page"] = page_idx
                 all_blocks.append(block)
-                # Count chars in text blocks only
                 if block.get("type") == 0:
                     for line in block.get("lines", []):
                         for span in line.get("spans", []):
@@ -269,14 +289,8 @@ class LiteratureAnalyzer:
         doc:        "fitz.Document",
         filename:   str,
     ) -> str:
-        """
-        Heuristic title inference:
-        1. First page bold/large span on page 0.
-        2. PDF metadata title.
-        3. Filename stem.
-        """
-        # Collect spans from first page only
-        first_page_spans: List[tuple[float, str]] = []  # (size, text)
+        # Collect spans from page 0
+        first_page_spans: List[tuple[float, str]] = []
         for block in all_blocks:
             if block.get("_page", 99) != 0 or block.get("type") != 0:
                 continue
@@ -288,12 +302,10 @@ class LiteratureAnalyzer:
                         first_page_spans.append((size, text))
 
         if first_page_spans:
-            # Largest font on page 1 is likely the title
             best = max(first_page_spans, key=lambda x: x[0])
-            if best[0] > 14:  # Must be meaningfully larger than body text
+            if best[0] > 14:
                 return best[1]
 
-        # Fallback: PDF metadata
         try:
             meta = doc.metadata
             if meta and meta.get("title"):
@@ -301,16 +313,15 @@ class LiteratureAnalyzer:
         except Exception:
             pass
 
-        # Fallback: filename stem
-        return filename.replace("_", " ").replace("-", " ").rsplit(".", 1)[0].title()
+        return (
+            filename.replace("_", " ").replace("-", " ")
+            .rsplit(".", 1)[0].title()
+        )
 
     def _extract_first_content(
         self, units: List[Dict[str, Any]], doc_type: str
     ) -> str:
-        """
-        Pull a ~2000 char content sample from the first scene/chapter
-        for question generation.
-        """
+        """Pull ~2000 char content sample from first scene/chapter."""
         if not units:
             return ""
 
@@ -322,7 +333,7 @@ class LiteratureAnalyzer:
                 first_scene = children[0]
                 lines = []
                 for b in first_scene.get("blocks", []):
-                    c = b.get("character")
+                    c   = b.get("character")
                     txt = b.get("content", "")
                     if c:
                         lines.append(f"{c}: {txt}")
@@ -337,38 +348,55 @@ class LiteratureAnalyzer:
 
         return ""
 
-    def _flatten_units(self, units: List[Dict[str, Any]], doc_type: str) -> List[Dict[str, Any]]:
+    def _flatten_units(
+        self, units: List[Dict[str, Any]], doc_type: str
+    ) -> List[Dict[str, Any]]:
         """
-        Flatten nested hierarchy for backward compatibility with existing readers.
-        Expected format: List[{title, content, dialogue: List[DialogueLine]}]
+        Flatten nested hierarchy for backward compatibility.
+        Returns: List[{title, content, dialogue, language}]
         """
         flat = []
+
         if doc_type == "play":
             for act in units:
                 for scene in act.get("children", []):
                     full_content = []
                     for b in scene.get("blocks", []):
                         if b["type"] == "dialogue":
-                            full_content.append(f"{b['character']}: {b['content']}")
+                            full_content.append(
+                                f"{b['character']}: {b['content']}"
+                            )
                         elif b["type"] == "stage_direction":
                             full_content.append(f"[{b['content']}]")
                         else:
                             full_content.append(b["content"])
-                    
-                    scene_title = scene.get("title", "Scene")
-                    title = f"{act['title']} - {scene_title}" if not scene.get("inferred") else act['title']
-                    
+
+                    inferred = scene.get("inferred", False)
+                    title = (
+                        f"{act['title']} - {scene.get('title', 'Scene')}"
+                        if not inferred
+                        else act["title"]
+                    )
+
                     flat.append({
-                        "title": title,
-                        "content": "\n\n".join(full_content),
-                        "blocks": scene.get("blocks", [])
+                        "title":    title,
+                        "content":  "\n\n".join(full_content),
+                        "dialogue": scene.get("blocks", []),
                     })
         else:
             for chapter in units:
                 for section in chapter.get("children", []):
                     flat.append({
-                        "title": f"{chapter['title']} - {section['title']}" if section.get("title") else chapter['title'],
-                        "content": section.get("content", "") or "\n\n".join(section.get("paragraphs", [])),
-                        "dialogue": []
+                        "title":    (
+                            f"{chapter['title']} - {section['title']}"
+                            if section.get("title")
+                            else chapter["title"]
+                        ),
+                        "content":  (
+                            section.get("content", "")
+                            or "\n\n".join(section.get("paragraphs", []))
+                        ),
+                        "dialogue": [],
                     })
+
         return flat

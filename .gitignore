@@ -3,3 +3,4 @@ backend/node_modules
 frontend/.env
 backend/serviceAccountKey.json
 venv/
+text.txt

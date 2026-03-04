@@ -2,6 +2,7 @@ import admin, { auth } from '../config/firebase-admin.js';
 import { User } from '../models/User.js';
 import { School } from '../models/School.js';
 import { StudentStats } from '../models/StudentStats.js';
+import { StudentProfile } from '../models/StudentProfile.js';
 import { sequelize } from '../config/database.js';
 import dotenv from 'dotenv';
 
@@ -10,7 +11,7 @@ dotenv.config();
 const testUsers = [
     {
         email: 'admin@kps.rw',
-        password: 'password123',
+        password: 'Password123!',
         firstName: 'System',
         lastName: 'Admin',
         role: 'admin',
@@ -18,7 +19,7 @@ const testUsers = [
     },
     {
         email: 'teacher@kps.rw',
-        password: 'password123',
+        password: 'Password123!',
         firstName: 'John',
         lastName: 'Mugisha',
         role: 'teacher',
@@ -26,27 +27,59 @@ const testUsers = [
     },
     {
         email: 'student1@kps.rw',
-        password: 'password123',
+        password: 'Password123!',
         firstName: 'Aline',
         lastName: 'Uwase',
         role: 'student',
-        status: 'active'
+        status: 'active',
+        // Dyslexia profile — exercises syllable break + TTS actions
+        profile: {
+            gradeLevel: 'P4',
+            disabilityType: 'dyslexia',
+            disabilityTypeEncoded: 0.5,
+            dyslexiaScore: 72.0,
+            fontPreference: 'opendyslexic',
+            ttsEnabled: true,
+            lineSpacing: 2.0,
+            preferredLanguage: 'english'
+        }
     },
     {
         email: 'student2@kps.rw',
-        password: 'password123',
+        password: 'Password123!',
         firstName: 'Peter',
         lastName: 'Karekezi',
         role: 'student',
-        status: 'active'
+        status: 'active',
+        // ADHD profile — exercises attention break + heavy simplify actions
+        profile: {
+            gradeLevel: 'P5',
+            disabilityType: 'adhd',
+            disabilityTypeEncoded: 1.0,
+            adhdScore: 68.0,
+            fontPreference: 'arial',
+            ttsEnabled: false,
+            lineSpacing: 1.8,
+            preferredLanguage: 'english'
+        }
     },
     {
         email: 'student3@kps.rw',
-        password: 'password123',
+        password: 'Password123!',
         firstName: 'Grace',
         lastName: 'Inshuti',
         role: 'student',
-        status: 'active'
+        status: 'active',
+        // No disability — baseline/control group for thesis Cohen's d
+        profile: {
+            gradeLevel: 'P4',
+            disabilityType: 'none',
+            disabilityTypeEncoded: 0.0,
+            fontPreference: 'default',
+            ttsEnabled: false,
+            lineSpacing: 1.5,
+            preferredLanguage: 'french'
+        }
     }
 ];
 
@@ -117,9 +150,9 @@ async function seed() {
                 console.log(`   - Local user record created.`);
             }
 
-            // 3. Init student stats
+            // 3. Init student stats + profile
             if (userData.role === 'student') {
-                const [stats] = await StudentStats.findOrCreate({
+                await StudentStats.findOrCreate({
                     where: { userId: user.id },
                     defaults: {
                         schoolId: school.id,
@@ -129,10 +162,22 @@ async function seed() {
                     }
                 });
                 console.log(`   - Student stats initialized.`);
+
+                await StudentProfile.findOrCreate({
+                    where: { userId: user.id },
+                    defaults: { userId: user.id, ...userData.profile }
+                });
+                console.log(`   - Student profile initialized (disability: ${userData.profile.disabilityType}).`);
             }
         }
 
         console.log('\n✨ Seeding completed successfully!');
+        console.log('\n📋 Test Accounts:');
+        console.log('   admin@kps.rw       / Password123!  (admin)');
+        console.log('   teacher@kps.rw     / Password123!  (teacher)');
+        console.log('   student1@kps.rw    / Password123!  (dyslexia — Aline)');
+        console.log('   student2@kps.rw    / Password123!  (adhd — Peter)');
+        console.log('   student3@kps.rw    / Password123!  (none — Grace, control group)');
         process.exit(0);
     } catch (error) {
         console.error('\n❌ Seeding failed:', error);
