@@ -4,3 +4,12 @@ frontend/.env
 backend/serviceAccountKey.json
 venv/
 text.txt
+
+# ML Models & Large Binary Files (use cloud storage instead)
+*.zip
+*.joblib
+rl-engine/logs/
+ai-service/models/
+*.npz
+.DS_Store
+Screenshot*
