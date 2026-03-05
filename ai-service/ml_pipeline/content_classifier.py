@@ -37,6 +37,13 @@ _CHAPITRE_RE = re.compile(r"\bCHAPITRE\s+([\dIVX]+|[A-Z][a-z]+)?\b", re.IGNORECA
 _PARTIE_RE   = re.compile(r"\bPARTIE\s+([\dIVX]+|[A-Z][a-z]+)?\b", re.IGNORECASE)
 _SAID_FR_RE  = re.compile(r"\b(dit|répondit|murmura|cria|demanda|chuchota)\b")
 
+# Poem signals
+_STANZA_GAP_RE  = re.compile(r"\n\s*\n")  # double newlines between stanzas
+_RHYME_END_RE   = re.compile(r"[a-z]+[.!?,;]*\s*$", re.IGNORECASE)
+_VERSE_LINE_RE  = re.compile(r"^[A-Z][^.!?]{5,60}[,;:]?\s*$")  # Short capitalised lines typical of poetry
+_POEM_TITLE_RE  = re.compile(r"\b(POEM|SONNET|ODE|BALLAD|ELEGY|HAIKU|STANZA|VERSE|CANTO)\b", re.IGNORECASE)
+_POEM_FR_RE     = re.compile(r"\b(POÈME|SONNET|ODE|BALLADE|ÉLÉGIE|STROPHE|VERS|CHANT)\b", re.IGNORECASE)
+
 _WEIGHTS: Dict[str, Dict[str, float]] = {
     "play": {
         "act_heading":     8.0,
@@ -59,14 +66,21 @@ _WEIGHTS: Dict[str, Dict[str, float]] = {
         "said_fr_tag":     0.5,   # French
         "prose_sentence":  0.1,
     },
+    "poem": {
+        "poem_title":      10.0,
+        "poem_fr_title":   10.0,  # French
+        "verse_line":      0.3,   # short capitalised lines
+        "short_line_ratio": 8.0,  # high ratio of short lines
+    },
 }
 
 @dataclass
 class ClassificationResult:
-    type: str
+    type: str              # "play" | "novel" | "poem" | "generic"
     confidence: float
     play_score: float
     novel_score: float
+    poem_score: float = 0.0
     ml_probabilities: Dict[str, float] = field(default_factory=dict)
     signals: Dict[str, int] = field(default_factory=dict)
 
@@ -90,7 +104,7 @@ class ContentClassifier:
         except: pass
 
     def classify(self, all_blocks: List[Dict[str, Any]]) -> ClassificationResult:
-        play_score, novel_score = 0.0, 0.0
+        play_score, novel_score, poem_score = 0.0, 0.0, 0.0
         signals = {k: 0 for sub in _WEIGHTS.values() for k in sub}
         lines = self._extract_lines(all_blocks)
         full_text = " ".join(lines)
@@ -162,7 +176,26 @@ class ContentClassifier:
                 novel_score += _WEIGHTS["novel"]["prose_sentence"] * p_mult
                 signals["prose_sentence"] += 1
 
-        ml_probs = {"play": 0.0, "novel": 0.0, "generic": 0.0}
+            # ── Poem signals ──
+            if _POEM_TITLE_RE.search(t):
+                poem_score += _WEIGHTS["poem"]["poem_title"]
+                signals["poem_title"] += 1
+            if _POEM_FR_RE.search(t):
+                poem_score += _WEIGHTS["poem"]["poem_fr_title"]
+                signals["poem_fr_title"] += 1
+            if _VERSE_LINE_RE.match(t) and len(t.split()) <= 12:
+                poem_score += _WEIGHTS["poem"]["verse_line"]
+                signals["verse_line"] += 1
+
+        # Poem: high ratio of short lines (< 60 chars) is a strong signal
+        if line_count > 5:
+            short_lines = sum(1 for l in lines if len(l.strip()) < 60 and len(l.strip()) > 3)
+            short_ratio = short_lines / line_count
+            if short_ratio > 0.7:
+                poem_score += _WEIGHTS["poem"]["short_line_ratio"]
+                signals["short_line_ratio"] = int(short_ratio * 100)
+
+        ml_probs = {"play": 0.0, "novel": 0.0, "poem": 0.0, "generic": 0.0}
         if self.model and self.vectorizer and full_text:
             try:
                 vec = self.vectorizer.transform([full_text])
@@ -176,15 +209,22 @@ class ContentClassifier:
         en_play = (signals["act_heading"] >= 1 and signals["scene_heading"] >= 1) or signals["act_heading"] >= 3
         fr_play = (signals["acte_heading"] >= 1 and signals["scene_fr_heading"] >= 1) or signals["acte_heading"] >= 3
         if en_play or fr_play:
-            return ClassificationResult("play", 0.95, play_score, novel_score, ml_probs, signals)
+            return ClassificationResult("play", 0.95, play_score, novel_score, poem_score, ml_probs, signals)
 
-        total = play_score + novel_score
+        # STRICT OVERRIDE FOR POEMS
+        if signals.get("poem_title", 0) >= 1 or (poem_score > play_score and poem_score > novel_score and poem_score >= self.MIN_EVIDENCE):
+            total = play_score + novel_score + poem_score
+            conf = round(poem_score / max(total, 1), 3) if total > 0 else 0.8
+            return ClassificationResult("poem", max(conf, 0.7), play_score, novel_score, poem_score, ml_probs, signals)
+
+        total = play_score + novel_score + poem_score
         if total < self.MIN_EVIDENCE:
-            return ClassificationResult("generic", 0.5, play_score, novel_score, ml_probs, signals)
+            return ClassificationResult("generic", 0.5, play_score, novel_score, poem_score, ml_probs, signals)
 
-        doc_type = "play" if play_score > novel_score else "novel"
-        conf = round(max(play_score, novel_score) / total, 3)
-        return ClassificationResult(doc_type, conf, play_score, novel_score, ml_probs, signals)
+        scores = {"play": play_score, "novel": novel_score, "poem": poem_score}
+        doc_type = max(scores, key=scores.get)
+        conf = round(scores[doc_type] / total, 3)
+        return ClassificationResult(doc_type, conf, play_score, novel_score, poem_score, ml_probs, signals)
 
     def _extract_lines(self, blocks: List[Dict[str, Any]]) -> List[str]:
         lines = []

@@ -109,6 +109,9 @@ class StructuralSegmenter:
                 self._enrich_play_emotions(units, language)
             return units
 
+        if doc_type == "poem":
+            return self._build_poem_hierarchy(tokens)
+
         return self._build_novel_hierarchy(tokens)
 
     # ── Tokenisation ──────────────────────────────────────────────────────────
@@ -326,6 +329,97 @@ class StructuralSegmenter:
         """Merge paragraph list into a single content string."""
         for section in chapter["children"]:
             section["content"] = "\n\n".join(section.get("paragraphs", []))
+
+    # ── Poem hierarchy ─────────────────────────────────────────────────────────
+
+    def _build_poem_hierarchy(
+        self, tokens: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Build stanza-based hierarchy for poems.
+        Groups consecutive content lines into stanzas, separated by blank gaps
+        or heading tokens.
+        """
+        poems: List[Dict[str, Any]] = []
+        current_poem: Optional[Dict] = None
+        current_stanza: List[str] = []
+        stanza_num = 0
+
+        def flush_stanza():
+            nonlocal stanza_num
+            if current_poem is not None and current_stanza:
+                stanza_num += 1
+                current_poem["children"].append({
+                    "id":    _uid(),
+                    "title": f"Stanza {stanza_num}",
+                    "blocks": [
+                        {"type": "verse_line", "content": line}
+                        for line in current_stanza
+                    ],
+                    "content": "\n".join(current_stanza),
+                })
+                current_stanza.clear()
+
+        for tok in tokens:
+            if tok["type"] == "heading":
+                flush_stanza()
+                if current_poem and current_poem["children"]:
+                    poems.append(current_poem)
+                current_poem = {"id": _uid(), "title": tok["title"], "children": []}
+                stanza_num = 0
+            else:
+                text = tok.get("text", "").strip()
+                if not text:
+                    # Empty line = stanza break
+                    flush_stanza()
+                    continue
+
+                if current_poem is None:
+                    current_poem = {"id": _uid(), "title": "The Poem", "children": []}
+                current_stanza.append(text)
+
+        # Flush remaining
+        flush_stanza()
+        if current_poem and current_poem["children"]:
+            poems.append(current_poem)
+
+        if not poems:
+            # Fallback: treat all content as one poem
+            all_lines = [t["text"] for t in tokens if t["type"] == "content"]
+            stanzas = []
+            current: List[str] = []
+            for line in all_lines:
+                if not line.strip():
+                    if current:
+                        stanzas.append(current)
+                        current = []
+                else:
+                    current.append(line)
+            if current:
+                stanzas.append(current)
+
+            children = [
+                {
+                    "id": _uid(),
+                    "title": f"Stanza {i + 1}",
+                    "blocks": [{"type": "verse_line", "content": l} for l in st],
+                    "content": "\n".join(st),
+                }
+                for i, st in enumerate(stanzas)
+            ] if stanzas else [{
+                "id": _uid(),
+                "title": "Content",
+                "blocks": [{"type": "verse_line", "content": l} for l in all_lines],
+                "content": "\n".join(all_lines),
+            }]
+
+            poems = [{
+                "id": _uid(),
+                "title": "The Poem",
+                "children": children,
+            }]
+
+        return poems
 
     # ── Emotion enrichment ────────────────────────────────────────────────────
 
