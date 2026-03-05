@@ -195,6 +195,9 @@ class ContentClassifier:
                 poem_score += _WEIGHTS["poem"]["short_line_ratio"]
                 signals["short_line_ratio"] = int(short_ratio * 100)
 
+        # Check heuristic evidence BEFORE ML boost — sparse docs stay generic
+        heuristic_total = play_score + novel_score + poem_score
+
         ml_probs = {"play": 0.0, "novel": 0.0, "poem": 0.0, "generic": 0.0}
         if self.model and self.vectorizer and full_text:
             try:
@@ -218,7 +221,7 @@ class ContentClassifier:
             return ClassificationResult("poem", max(conf, 0.7), play_score, novel_score, poem_score, ml_probs, signals)
 
         total = play_score + novel_score + poem_score
-        if total < self.MIN_EVIDENCE:
+        if heuristic_total < self.MIN_EVIDENCE:
             return ClassificationResult("generic", 0.5, play_score, novel_score, poem_score, ml_probs, signals)
 
         scores = {"play": play_score, "novel": novel_score, "poem": poem_score}
