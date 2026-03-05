@@ -4,6 +4,7 @@ frontend/.env
 backend/serviceAccountKey.json
 venv/
 text.txt
+.env
 
 # ML Models & Large Binary Files (use cloud storage instead)
 *.zip
