@@ -16,7 +16,12 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections import namedtuple
 from typing import Any, Dict, List, Optional, Tuple
+
+# ── Data types ────────────────────────────────────────────────────────────────
+
+Span = namedtuple("Span", ["text", "size", "flags", "page"])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -114,6 +119,19 @@ class StructuralSegmenter:
 
         return self._build_novel_hierarchy(tokens)
 
+    # ── Heading threshold ───────────────────────────────────────────────────
+
+    @staticmethod
+    def _compute_heading_threshold(spans: List[Span]) -> float:
+        """Compute a font-size threshold above which text is likely a heading."""
+        if not spans:
+            return 14.0
+        sizes = sorted(s.size for s in spans)
+        n = len(sizes)
+        median = sizes[n // 2] if n % 2 else (sizes[n // 2 - 1] + sizes[n // 2]) / 2
+        max_size = sizes[-1]
+        return median + (max_size - median) * 0.5
+
     # ── Tokenisation ──────────────────────────────────────────────────────────
 
     def _tokenise(
@@ -196,7 +214,7 @@ class StructuralSegmenter:
                     if cur_act and cur_scene:
                         cur_act["children"].append(cur_scene)
                     if cur_act is None:
-                        cur_act = {"id": _uid(), "title": "ACT I", "children": []}
+                        cur_act = {"id": _uid(), "title": "ACT I", "children": [], "inferred": True}
                     cur_scene = {"id": _uid(), "title": tok["title"], "blocks": []}
 
             else:  # content token
@@ -242,8 +260,9 @@ class StructuralSegmenter:
             # Stage direction: entire line wrapped in () or []
             if _STAGE_INLINE_RE.match(stripped):
                 blocks.append({
-                    "type":    "stage_direction",
-                    "content": stripped.strip("[]()").strip(),
+                    "type":      "stage_direction",
+                    "character": None,
+                    "content":   stripped.strip("[]()").strip(),
                 })
                 continue
 
@@ -327,8 +346,11 @@ class StructuralSegmenter:
     @staticmethod
     def _finalize_chapter(chapter: Dict[str, Any]):
         """Merge paragraph list into a single content string."""
+        all_content = []
         for section in chapter["children"]:
             section["content"] = "\n\n".join(section.get("paragraphs", []))
+            all_content.append(section["content"])
+        chapter["content"] = "\n\n".join(all_content)
 
     # ── Poem hierarchy ─────────────────────────────────────────────────────────
 
