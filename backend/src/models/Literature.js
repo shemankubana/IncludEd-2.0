@@ -70,7 +70,7 @@ export const Literature = sequelize.define('Literature', {
     allowNull: true
   },
   contentType: {
-    type: DataTypes.ENUM('play', 'novel', 'generic'),
+    type: DataTypes.ENUM('play', 'novel', 'poem', 'generic'),
     defaultValue: 'generic'
   },
   difficulty: {

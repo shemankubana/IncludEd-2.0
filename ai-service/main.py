@@ -39,10 +39,12 @@ from services.learner_embedding          import LearnerEmbedding, SessionMetrics
 from services.comprehension_tracker      import ComprehensionTracker
 from services.teacher_intelligence       import TeacherIntelligence
 from ml_pipeline import LiteratureAnalyzer, BookBrain
+from ml_pipeline.quiz_generator import PedagogicalQuestionGenerator
 
 # ML pipeline singletons (reused across requests)
 _literature_analyzer = LiteratureAnalyzer()
 _book_brain          = BookBrain()
+_quiz_generator      = PedagogicalQuestionGenerator()
 
 load_dotenv()
 app = FastAPI(title="IncludEd AI Service", version="3.0.0")
@@ -369,6 +371,28 @@ async def generate_introduction(req: IntroductionRequest):
         intro += "Enjoy reading!"
 
     return {"introduction": intro}
+
+
+# ── Quiz Generation ─────────────────────────────────────────────────────────
+
+class QuizGenerateRequest(BaseModel):
+    content: str
+    doc_type: str = "generic"
+    count: int = 5
+    language: str = "en"
+
+
+@app.post("/quiz/generate", tags=["quiz"])
+async def quiz_generate(req: QuizGenerateRequest):
+    """On-demand quiz generation for specific content."""
+    questions = await asyncio.to_thread(
+        _quiz_generator.generate,
+        req.content,
+        req.doc_type,
+        req.count,
+        req.language,
+    )
+    return {"questions": questions}
 
 
 # ── Comprehension Tracking ───────────────────────────────────────────────────
