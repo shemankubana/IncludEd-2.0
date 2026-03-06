@@ -16,7 +16,7 @@
  *   - Never breaks immersion
  */
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { X, Volume2, BookmarkPlus, Lightbulb, BookOpen, Loader2 } from "lucide-react";
 
 const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
@@ -35,7 +35,24 @@ interface SimplificationResult {
         explanation: string;
     }>;
     cultural_context: string | null;
+    kinyarwanda_bridge: string | null;
     tier: "ollama" | "flan_t5" | "rule_based";
+}
+
+// Highlight category types for Phase 4 feedback loop
+export type HighlightCategory =
+    | "figurative_language"
+    | "archaic_idiom"
+    | "cultural_reference"
+    | "vocabulary_gap"
+    | "general";
+
+function detectHighlightCategory(result: SimplificationResult): HighlightCategory {
+    if ((result.literary_devices?.length ?? 0) > 0) return "figurative_language";
+    if (result.vocabulary?.some(v => v.type === "archaic")) return "archaic_idiom";
+    if (result.cultural_context || result.kinyarwanda_bridge) return "cultural_reference";
+    if ((result.vocabulary?.length ?? 0) > 0) return "vocabulary_gap";
+    return "general";
 }
 
 interface HighlightToUnderstandProps {
@@ -47,8 +64,12 @@ interface HighlightToUnderstandProps {
     language?: string;
     studentId?: string;
     bookId?: string;
+    // Phase 6: pre-tagged data for zero-latency archaic lookup + "see it again"
+    archiPhrases?: Array<{ word: string; modern_meaning: string }>;
+    bookVocabulary?: Array<{ word: string; modern_meaning?: string; contexts?: string[] }>;
     onVocabSave?: (word: string) => void;
     onTTSPlay?: (text: string) => void;
+    onHighlightCategorized?: (text: string, category: HighlightCategory) => void; // Phase 4
 }
 
 const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
@@ -60,8 +81,11 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
     language = "en",
     studentId,
     bookId,
+    archiPhrases,
+    bookVocabulary,
     onVocabSave,
     onTTSPlay,
+    onHighlightCategorized,
 }) => {
     const [visible, setVisible] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -92,8 +116,30 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
         setVisible(true);
         setShowDetails(false);
         setResult(null);
+
+        // Phase 6: zero-latency archaic phrase lookup before any AI call
+        const normalised = text.toLowerCase().trim();
+        const archiMatch = archiPhrases?.find(ap => {
+            const apLower = ap.word.toLowerCase();
+            return normalised.includes(apLower) || apLower.includes(normalised);
+        });
+        if (archiMatch) {
+            const instantResult: SimplificationResult = {
+                simple_version: `"${archiMatch.word}" means: ${archiMatch.modern_meaning}`,
+                author_intent: "This is an archaic phrase from the original text, pre-tagged by the book analysis engine.",
+                vocabulary: [{ word: archiMatch.word, meaning: archiMatch.modern_meaning, analogy: "" }],
+                literary_devices: [],
+                cultural_context: null,
+                kinyarwanda_bridge: null,
+                tier: "rule_based",
+            };
+            setResult(instantResult);
+            onHighlightCategorized?.(text, "archaic_idiom");
+            return; // skip AI call entirely
+        }
+
         fetchSimplification(text);
-    }, [bookTitle, author, docType, speaker, chapterContext, language, studentId]);
+    }, [bookTitle, author, docType, speaker, chapterContext, language, studentId, archiPhrases, onHighlightCategorized]);
 
     const fetchSimplification = async (text: string) => {
         setLoading(true);
@@ -117,6 +163,9 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
             if (resp.ok) {
                 const data = await resp.json();
                 setResult(data);
+                // Phase 4: categorize and report highlight type
+                const category = detectHighlightCategory(data);
+                onHighlightCategorized?.(text, category);
             }
         } catch {
             // Show basic fallback
@@ -126,12 +175,35 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
                 vocabulary: [],
                 literary_devices: [],
                 cultural_context: null,
+                kinyarwanda_bridge: null,
                 tier: "rule_based",
             });
         } finally {
             setLoading(false);
         }
     };
+
+    // Phase 6: "See it used again" — find up to 2 other context snippets from bookVocabulary
+    const seeItAgain = useMemo(() => {
+        if (!selectedText || !bookVocabulary?.length) return [];
+        const needle = selectedText.toLowerCase().trim().slice(0, 40);
+        const snippets: string[] = [];
+        const currentCtxStart = chapterContext.slice(0, 80).toLowerCase();
+        for (const v of bookVocabulary) {
+            if (!v.contexts?.length) continue;
+            const wordLower = v.word.toLowerCase();
+            // Match if vocabulary word overlaps with the highlighted text
+            if (!needle.includes(wordLower.slice(0, 5)) && !wordLower.includes(needle.slice(0, 5))) continue;
+            for (const ctx of v.contexts) {
+                if (snippets.length >= 2) break;
+                // Skip if it looks like the same context as the current chapter
+                if (ctx.toLowerCase().startsWith(currentCtxStart.slice(0, 30))) continue;
+                snippets.push(ctx.slice(0, 100) + (ctx.length > 100 ? "…" : ""));
+            }
+            if (snippets.length >= 2) break;
+        }
+        return snippets;
+    }, [selectedText, bookVocabulary, chapterContext]);
 
     const dismiss = useCallback(() => {
         setVisible(false);
@@ -255,6 +327,25 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
                             {result.cultural_context && (
                                 <div className="highlight-popup__cultural">
                                     <p><strong>Cultural note:</strong> {result.cultural_context}</p>
+                                </div>
+                            )}
+
+                            {/* Kinyarwanda bridge */}
+                            {result.kinyarwanda_bridge && (
+                                <div className="highlight-popup__cultural" style={{ borderLeft: "3px solid #16a34a" }}>
+                                    <p><strong>Rwanda connection:</strong> {result.kinyarwanda_bridge}</p>
+                                </div>
+                            )}
+
+                            {/* Phase 6: "See it used again" — other occurrences in the book */}
+                            {seeItAgain.length > 0 && (
+                                <div className="highlight-popup__see-again" style={{ marginTop: "10px" }}>
+                                    <p className="highlight-popup__section-title">See it used again:</p>
+                                    {seeItAgain.map((ctx, i) => (
+                                        <p key={i} style={{ fontSize: "11px", fontStyle: "italic", color: "#64748b", margin: "4px 0", paddingLeft: "8px", borderLeft: "2px solid #e2e8f0" }}>
+                                            "{ctx}"
+                                        </p>
+                                    ))}
                                 </div>
                             )}
                         </div>

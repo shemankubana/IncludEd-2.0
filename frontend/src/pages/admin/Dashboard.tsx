@@ -1,11 +1,13 @@
 import { motion } from "framer-motion";
-import { Users, UserCheck, ShieldCheck, GraduationCap, School } from "lucide-react";
+import { Users, UserCheck, ShieldCheck, GraduationCap, School, Mail, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const AdminDashboard = () => {
     const { user } = useAuth();

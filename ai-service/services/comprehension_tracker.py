@@ -18,10 +18,40 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
+
+# ── Theme keyword bank ────────────────────────────────────────────────────────
+# Maps theme label → keywords. Themes are marked "encountered" when keywords
+# appear in section text, "understood" once quiz score ≥ 0.7 on that section.
+
+_THEME_KEYWORDS: Dict[str, List[str]] = {
+    "Masculinity & Identity":   ["man", "strength", "weak", "pride", "honour", "honor", "warrior", "masculine", "wrestle", "efulefu"],
+    "Colonialism & Change":     ["white", "colonial", "missionary", "church", "district", "commissioner", "civilise", "christianity", "convert"],
+    "Tradition & Culture":      ["custom", "tradition", "ritual", "ceremony", "ancestor", "chi", "oracle", "egwugwu", "festival", "clan"],
+    "Fate & Free Will":         ["fate", "destiny", "chi", "chosen", "inevitable", "prophecy", "foretold"],
+    "Family & Loyalty":         ["father", "son", "daughter", "family", "loyalty", "betray", "clan", "kinship", "blood"],
+    "Power & Authority":        ["king", "chief", "power", "rule", "law", "court", "judge", "obey", "command", "authority"],
+    "Betrayal & Trust":         ["betray", "trust", "deceive", "false", "promise", "oath", "broke"],
+    "Ambition & Hubris":        ["ambition", "pride", "arrogance", "downfall", "overreach", "tragic flaw"],
+    "Love & Sacrifice":         ["love", "sacrifice", "devotion", "heart", "tender", "care", "grief"],
+    "Justice & Revenge":        ["justice", "revenge", "punish", "crime", "guilt", "innocent", "retribution"],
+    "War & Conflict":           ["war", "battle", "fight", "enemy", "blood", "sword", "kill", "conquer"],
+    "Appearance & Reality":     ["mask", "disguise", "seem", "appear", "truth", "hidden", "false", "pretend"],
+}
+
+
+def _extract_themes(text: str) -> List[str]:
+    """Return list of theme labels whose keywords appear in text."""
+    text_lower = text.lower()
+    found = []
+    for theme, keywords in _THEME_KEYWORDS.items():
+        if any(kw in text_lower for kw in keywords):
+            found.append(theme)
+    return found
 
 
 @dataclass
@@ -204,6 +234,7 @@ class ComprehensionTracker:
         time_spent_s: float = 0,
         quiz_score: Optional[float] = None,
         characters_seen: Optional[List[str]] = None,
+        section_text: str = "",
     ):
         """Record that a student read a section."""
         graph = self.get_or_create(student_id, book_id)
@@ -238,6 +269,20 @@ class ComprehensionTracker:
             for char in characters_seen:
                 current = graph.characters_encountered.get(char, 0)
                 graph.characters_encountered[char] = min(1.0, current + 0.1)
+
+        # Extract and update themes from section text (D4 — theme tracking)
+        if section_text:
+            detected = _extract_themes(section_text)
+            for theme in detected:
+                current_status = graph.themes_tracked.get(theme, "")
+                if current_status == "understood":
+                    pass  # Already at highest level
+                elif quiz_score is not None and quiz_score >= 0.7:
+                    graph.themes_tracked[theme] = "understood"
+                elif current_status == "encountered":
+                    graph.themes_tracked[theme] = "partial"
+                else:
+                    graph.themes_tracked[theme] = "encountered"
 
         self._save(student_id, book_id)
 
@@ -340,6 +385,7 @@ class ComprehensionTracker:
             "vocabulary_mastered": len(graph.vocab_mastered),
             "vocabulary_progress": round(vocab_progress, 2),
             "total_highlights": len(graph.highlights),
+            "recent_highlights": graph.highlights[-20:],  # last 20 for teacher common-pattern detection
             "struggle_predictions": graph.struggle_predictions,
             "last_session": graph.last_session,
         }

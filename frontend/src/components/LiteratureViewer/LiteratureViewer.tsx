@@ -14,7 +14,7 @@
  *   - QuestionsPanel:        Comprehension questions
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import ScriptNavBar, { type UnitNode, type SceneNode } from "./ScriptNavBar";
 import ScriptDisplay from "./ScriptDisplay";
 import PoemDisplay from "./PoemDisplay";
@@ -197,6 +197,8 @@ const QuestionsPanel: React.FC<{ questions: QuestionData[] }> = ({ questions }) 
 
 // ── Main LiteratureViewer ──────────────────────────────────────────────────────
 
+const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
+
 const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
     analysisData,
     showQuestions = true,
@@ -207,6 +209,26 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
     const [selectedActId, setSelectedActId] = useState<string | null>(null);
     const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
     const [dyslexiaSettings, setDyslexiaSettings] = useState<DyslexiaSettings>(DEFAULT_DYSLEXIA_SETTINGS);
+    const vocabPostRef = useRef(false); // prevent duplicate fire
+
+    const handleVocabSave = useCallback((word: string) => {
+        if (!studentId || !bookId) return;
+        fetch(`${AI_URL}/comprehension/vocab`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ student_id: studentId, book_id: bookId, word }),
+        }).catch(() => { /* fire-and-forget */ });
+    }, [studentId, bookId]);
+
+    const handleVocabMastered = useCallback((word: string) => {
+        if (!studentId || !bookId) return;
+        vocabPostRef.current = true;
+        fetch(`${AI_URL}/comprehension/vocab-mastered`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ student_id: studentId, book_id: bookId, word }),
+        }).catch(() => { /* fire-and-forget */ });
+    }, [studentId, bookId]);
 
     // Auto-select first act + scene when data arrives
     const [prevData, setPrevData] = useState<AnalyzeResponse | null>(null);
@@ -354,6 +376,8 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
             {bookBrain && bookBrain.vocabulary.length > 0 && (
                 <VocabularySidebar
                     vocabulary={bookBrain.vocabulary}
+                    onSaveWord={handleVocabSave}
+                    onMasterWord={handleVocabMastered}
                 />
             )}
 

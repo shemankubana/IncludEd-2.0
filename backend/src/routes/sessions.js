@@ -2,6 +2,7 @@ import express from 'express';
 import { Session } from '../models/Session.js';
 import { RLTrainingData } from '../models/RLTrainingData.js';
 import { StudentProfile } from '../models/StudentProfile.js';
+import { StudentStats } from '../models/StudentStats.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -77,6 +78,15 @@ router.patch('/:id', authenticateToken, async (req, res) => {
             rlActionsSummary,
             status,
         });
+
+        // Update total reading time in StudentStats
+        if (durationSeconds > 0) {
+            const statsRow = await StudentStats.findOne({ where: { userId: session.studentId } });
+            if (statsRow) {
+                const addedMinutes = Math.round(durationSeconds / 60);
+                await statsRow.update({ totalReadingTime: statsRow.totalReadingTime + addedMinutes });
+            }
+        }
 
         // Update student profile cumulative stats
         const profile = await StudentProfile.findOne({ where: { userId: session.studentId } });

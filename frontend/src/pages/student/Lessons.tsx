@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, BookOpen, Clock, Star, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Search, Filter, BookOpen, Clock, Star, Loader2, ArrowRight, CheckCircle2, PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,10 +17,10 @@ const difficultyColor: Record<string, string> = {
     advanced: "bg-rose-500/10 text-rose-700 dark:text-rose-400"
 };
 
-const StarRating = ({ lessonId, initialRating, ratingCount }: { lessonId: string, initialRating: number, ratingCount: number }) => {
+const StarRating = ({ lessonId, initialRating, ratingCount, initialUserRating = 0 }: { lessonId: string, initialRating: number, ratingCount: number, initialUserRating?: number }) => {
     const { user } = useAuth();
     const [hover, setHover] = useState(0);
-    const [userRating, setUserRating] = useState(0);
+    const [userRating, setUserRating] = useState(initialUserRating);
     const [avg, setAvg] = useState(initialRating);
     const [count, setCount] = useState(ratingCount);
     const [submitting, setSubmitting] = useState(false);
@@ -74,10 +75,13 @@ const StarRating = ({ lessonId, initialRating, ratingCount }: { lessonId: string
 
 const LessonLibrary = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [lessons, setLessons] = useState<any[]>([]);
+    const [progressMap, setProgressMap] = useState<Record<string, { percent: number; status: string; userRating: number }>>({});
     const [selectedCategory, setSelectedCategory] = useState("All");
-    const categories = ["All", "Literature", "Math", "Science", "History", "General"];
+    const [searchQuery, setSearchQuery] = useState("");
+    const categories = ["All", "In Progress", "Literature", "Math", "Science", "History", "General"];
 
     useEffect(() => {
         const fetchLessons = async () => {
@@ -87,23 +91,41 @@ const LessonLibrary = () => {
                 const headers = { "Authorization": `Bearer ${idToken}` };
                 const baseUrl = API_BASE;
 
-                const response = await fetch(`${baseUrl}/api/literature`, { headers });
-                const data = await response.json();
+                const [litRes, progressRes] = await Promise.all([
+                    fetch(`${baseUrl}/api/literature`, { headers }),
+                    fetch(`${baseUrl}/api/progress`, { headers }),
+                ]);
 
-                if (Array.isArray(data)) {
-                    setLessons(data.map((item: any) => ({
-                        id: item.id,
-                        title: item.title,
-                        subject: item.subject || "General",
-                        duration: item.estimatedMinutes ? `${item.estimatedMinutes}m` : "—",
-                        difficulty: item.difficulty || "beginner",
-                        rating: item.averageRating || 0,
-                        ratingCount: item.ratingCount || 0,
-                        image: item.imageUrl ? `${baseUrl}${item.imageUrl}` : null,
-                        xp: 500
-                    })));
-                } else {
-                    console.warn("Literature API did not return an array:", data);
+                if (litRes.ok) {
+                    const data = await litRes.json();
+                    if (Array.isArray(data)) {
+                        setLessons(data.map((item: any) => ({
+                            id: item.id,
+                            title: item.title,
+                            subject: item.subject || "General",
+                            duration: item.estimatedMinutes ? `${item.estimatedMinutes}m` : "—",
+                            difficulty: item.difficulty || "beginner",
+                            rating: item.averageRating || 0,
+                            ratingCount: item.ratingCount || 0,
+                            image: item.imageUrl ? `${baseUrl}${item.imageUrl}` : null,
+                            xp: 500,
+                            totalSections: item.sections?.length || 1,
+                        })));
+                    }
+                }
+
+                if (progressRes.ok) {
+                    const progressData = await progressRes.json();
+                    const map: Record<string, { percent: number; status: string; userRating: number }> = {};
+                    for (const p of progressData) {
+                        const litId = p.Literature?.id || p.literatureId;
+                        if (!litId) continue;
+                        const totalSections = p.Literature?.sections?.length || 1;
+                        const completedCount = p.completedSections?.length || 0;
+                        const percent = p.status === "completed" ? 100 : Math.round((completedCount / totalSections) * 100);
+                        map[litId] = { percent, status: p.status || "in_progress", userRating: p.rating || 0 };
+                    }
+                    setProgressMap(map);
                 }
 
             } catch (error) {
@@ -116,9 +138,14 @@ const LessonLibrary = () => {
         fetchLessons();
     }, [user]);
 
-    const filteredLessons = selectedCategory === "All"
-        ? lessons
-        : lessons.filter(l => l.subject === selectedCategory);
+    const filteredLessons = lessons.filter(l => {
+        const matchesCategory =
+            selectedCategory === "All" ? true :
+            selectedCategory === "In Progress" ? !!progressMap[l.id] :
+            l.subject === selectedCategory;
+        const matchesSearch = !searchQuery || l.title.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCategory && matchesSearch;
+    });
 
     if (loading) {
         return (
@@ -138,12 +165,18 @@ const LessonLibrary = () => {
                 <section className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-secondary/30 p-8 rounded-[40px] border border-border/50">
                     <div className="space-y-2">
                         <h1 className="text-3xl font-bold tracking-tight">Lesson Library</h1>
-                        <p className="text-muted-foreground font-medium">Explore interactive and adaptive lessons.</p>
+                        <p className="text-muted-foreground font-medium">
+                            {Object.keys(progressMap).length > 0
+                                ? `${Object.keys(progressMap).length} course${Object.keys(progressMap).length > 1 ? "s" : ""} in progress`
+                                : "Explore interactive and adaptive lessons."}
+                        </p>
                     </div>
 
                     <div className="relative w-full md:w-96 group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                         <Input
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
                             placeholder="Search for lessons, subjects..."
                             className="pl-12 h-14 rounded-2xl border-2 border-border focus:border-primary transition-all shadow-sm"
                         />
@@ -169,33 +202,58 @@ const LessonLibrary = () => {
 
                 {/* Lesson Grid */}
                 <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredLessons.map((lesson, idx) => (
-                        <motion.div
-                            key={lesson.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: idx * 0.05 }}
-                        >
-                            <Card className="rounded-[32px] border border-border overflow-hidden h-full flex flex-col group hover:scale-[1.02] transition-all cursor-pointer shadow-none hover:shadow-2xl hover:border-primary/20 bg-card/50 backdrop-blur-sm">
-                                <Link to={`/student/reader/${lesson.id}`} className="flex-1 flex flex-col">
-                                    <div className="aspect-[4/3] w-full flex items-center justify-center relative transition-colors bg-secondary/20">
+                    {filteredLessons.length === 0 && (
+                        <div className="col-span-full flex flex-col items-center justify-center py-20 gap-4 text-muted-foreground">
+                            <BookOpen className="w-12 h-12 opacity-30" />
+                            <p className="font-bold">No lessons found</p>
+                        </div>
+                    )}
+                    {filteredLessons.map((lesson, idx) => {
+                        const prog = progressMap[lesson.id];
+                        const isStarted = !!prog;
+                        const isCompleted = prog?.status === "completed";
+
+                        return (
+                            <motion.div
+                                key={lesson.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.05 }}
+                            >
+                                <Card className={`rounded-[32px] border overflow-hidden h-full flex flex-col group hover:scale-[1.02] transition-all cursor-pointer shadow-none hover:shadow-2xl bg-card/50 backdrop-blur-sm ${isStarted ? "border-primary/30 hover:border-primary/60" : "border-border hover:border-primary/20"}`}>
+                                    {/* Thumbnail */}
+                                    <div className="aspect-[4/3] w-full flex items-center justify-center relative transition-colors bg-secondary/20 overflow-hidden">
                                         {lesson.image ? (
                                             <img src={lesson.image} alt={lesson.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                                         ) : (
                                             <BookOpen className="w-20 h-20 opacity-40 group-hover:scale-110 transition-transform duration-500" />
                                         )}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-6">
-                                            <span className="text-white font-black text-xs uppercase tracking-widest">Start Reading</span>
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-5">
+                                            <span className="text-white font-black text-xs uppercase tracking-widest flex items-center gap-1.5">
+                                                {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <PlayCircle className="w-3.5 h-3.5" />}
+                                                {isCompleted ? "Review" : isStarted ? "Continue" : "Start Reading"}
+                                            </span>
                                         </div>
-                                        {/* Difficulty Badge overlaid on image */}
+                                        {/* Difficulty badge */}
                                         <div className="absolute top-3 left-3">
                                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${difficultyColor[lesson.difficulty] || difficultyColor.beginner}`}>
                                                 {lesson.difficulty}
                                             </span>
                                         </div>
+                                        {/* In-progress indicator */}
+                                        {isStarted && !isCompleted && (
+                                            <div className="absolute top-3 right-3 bg-primary text-primary-foreground text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                In Progress
+                                            </div>
+                                        )}
+                                        {isCompleted && (
+                                            <div className="absolute top-3 right-3 bg-emerald-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                                <CheckCircle2 className="w-2.5 h-2.5" /> Done
+                                            </div>
+                                        )}
                                     </div>
 
-                                    <CardHeader className="flex-1">
+                                    <CardHeader className="flex-1 pb-2">
                                         <div className="flex items-center justify-between mb-2">
                                             <Badge variant="secondary" className="rounded-lg font-black text-[10px] uppercase tracking-wider px-2.5 py-1">
                                                 {lesson.subject}
@@ -209,16 +267,45 @@ const LessonLibrary = () => {
                                         </CardTitle>
                                     </CardHeader>
 
-                                    <CardContent>
-                                        <div className="pt-4 border-t border-border/50 flex items-center justify-between">
-                                            <StarRating lessonId={lesson.id} initialRating={lesson.rating} ratingCount={lesson.ratingCount} />
+                                    <CardContent className="space-y-4">
+                                        {/* Progress bar — only if started */}
+                                        {isStarted && (
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                                    <span>{isCompleted ? "Completed" : "Progress"}</span>
+                                                    <span className={isCompleted ? "text-emerald-600" : "text-primary"}>{prog.percent}%</span>
+                                                </div>
+                                                <Progress
+                                                    value={prog.percent}
+                                                    className={`h-2 rounded-full ${isCompleted ? "[&>div]:bg-emerald-500" : ""}`}
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-3">
+                                            <StarRating lessonId={lesson.id} initialRating={lesson.rating} ratingCount={lesson.ratingCount} initialUserRating={prog?.userRating || 0} />
                                             <div className="text-sm font-black text-primary">+{lesson.xp} XP</div>
                                         </div>
+
+                                        {/* CTA button */}
+                                        <Button
+                                            onClick={() => navigate(`/student/reader/${lesson.id}`)}
+                                            variant={isStarted && !isCompleted ? "default" : "secondary"}
+                                            className="w-full rounded-2xl gap-2 font-black uppercase text-xs h-10 tracking-widest"
+                                        >
+                                            {isCompleted ? (
+                                                <><CheckCircle2 className="w-4 h-4" /> Review</>
+                                            ) : isStarted ? (
+                                                <>Continue <ArrowRight className="w-4 h-4" /></>
+                                            ) : (
+                                                <>Start Reading <ArrowRight className="w-4 h-4" /></>
+                                            )}
+                                        </Button>
                                     </CardContent>
-                                </Link>
-                            </Card>
-                        </motion.div>
-                    ))}
+                                </Card>
+                            </motion.div>
+                        );
+                    })}
                 </section>
 
             </div>

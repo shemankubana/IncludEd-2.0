@@ -26,6 +26,57 @@ from .ollama_service import OllamaService
 
 # ── Literary device detection ─────────────────────────────────────────────────
 
+# ── Kinyarwanda cultural bridge ──────────────────────────────────────────────
+# Maps Western literary concepts → Rwandan cultural parallels
+# Helps students from Rwanda connect unfamiliar ideas to lived experience.
+
+_KINYARWANDA_BRIDGE: Dict[str, str] = {
+    # Honour & family
+    "honour":        "Like *icyubahiro* (respect) in Rwandan culture — something earned through how you treat others.",
+    "honor":         "Like *icyubahiro* (respect) in Rwandan culture — something earned through how you treat others.",
+    "noble":         "Think of the *umwami* (king) and the respect shown to community elders.",
+    "loyalty":       "Like the loyalty of *inshuti* (close friends) who stand with you no matter what.",
+    "clan":          "Similar to *umuryango* — your extended family who share your identity and history.",
+    "tribe":         "Like *ubwoko* — the group you belong to that shapes your community ties.",
+    # Fate & nature
+    "destiny":       "Like *inzira* (the path) — Rwandans believe each person walks a path shaped by God (*Imana*).",
+    "fate":          "Similar to the Rwandan idea that *Imana* (God) guides every life's course.",
+    "harvest":       "Like the *isarura* — the season when families come together to gather crops from the hills.",
+    "drought":       "Like the *inzara* (hunger seasons) that families in rural Rwanda still endure.",
+    # Power & conflict
+    "tyranny":       "Like oppressive rule — Rwanda's history of *ubukuru bubi* (bad leadership) makes this very real.",
+    "exile":         "Like those forced to leave home — many Rwandans know exile from 1959 and 1994.",
+    "war":           "Like *intambara* — Rwanda's history makes the weight of war deeply understood.",
+    "betrayal":      "Like breaking *amasezerano* (a sworn agreement) — considered deeply shameful.",
+    # Social life
+    "feast":         "Like an *umuganda* celebration or wedding feast — a gathering of community with food and song.",
+    "market":        "Like the *amasoko* — where community members exchange goods and news.",
+    "elder":         "Like *umukuru* — the respected voice of wisdom in every Rwandan village.",
+    "ancestors":     "Like *imigabane y'ababyeyi* — the legacy and spirit of those who came before.",
+    # Love & relationships
+    "courtship":     "Like traditional *gusaba* — the formal process of asking a family for their daughter's hand.",
+    "jealousy":      "Like *ishyari* — the feeling of wanting what another person has.",
+    # Abstract concepts
+    "ambition":      "Like *ubushake* (strong desire) — the drive to achieve that many Rwandan students carry.",
+    "grief":         "Like *agahinda* — the deep sorrow felt when loss touches a family.",
+    "justice":       "Like *ubutabera* and the *gacaca* courts — where truth and community healing meet.",
+    "identity":      "Like *indangamuntu* (identity card) — but deeper, who you are inside, your values and story.",
+}
+
+
+def _get_kinyarwanda_bridge(text: str) -> Optional[str]:
+    """Find a Kinyarwanda cultural analogy for concepts in the text."""
+    text_lower = text.lower()
+    matches = []
+    for concept, bridge in _KINYARWANDA_BRIDGE.items():
+        if concept in text_lower:
+            matches.append(bridge)
+    if not matches:
+        return None
+    # Return the most relevant bridge (first match, keep it short)
+    return matches[0]
+
+
 _DEVICE_PATTERNS = [
     (r"\blike\s+(?:a|an)\s+\w+", "simile", "a comparison using 'like' or 'as'"),
     (r"\bas\s+\w+\s+as\b", "simile", "a comparison using 'like' or 'as'"),
@@ -87,9 +138,11 @@ class SimplificationService:
                 )
                 if result and result.get("simple_version"):
                     result["tier"] = "ollama"
-                    # Supplement with rule-based vocab
+                    # Supplement with rule-based vocab + Kinyarwanda bridge
                     result["vocabulary"] = self._extract_vocabulary(highlighted_text)
                     result["literary_devices"] = self._detect_devices(highlighted_text)
+                    if not result.get("kinyarwanda_bridge"):
+                        result["kinyarwanda_bridge"] = _get_kinyarwanda_bridge(highlighted_text)
                     return result
             except Exception as e:
                 print(f"Ollama simplification failed: {e}")
@@ -132,7 +185,8 @@ Réponds en JSON avec exactement ces clés:
 {{
   "simple_version": "Version simplifiée qui préserve le style littéraire (2-3 phrases)",
   "author_intent": "Pourquoi l'auteur a écrit cela ainsi (1-2 phrases)",
-  "cultural_context": "Contexte culturel si pertinent, sinon null"
+  "cultural_context": "Contexte culturel si pertinent, sinon null",
+  "kinyarwanda_bridge": "Analogie culturelle rwandaise si applicable (ex: comparer à imigabane, gacaca, icyubahiro), sinon null"
 }}
 
 Adapte pour {level_desc}. Préserve la voix littéraire."""
@@ -147,7 +201,8 @@ Respond in JSON with exactly these keys:
 {{
   "simple_version": "Simplified version that preserves literary voice (2-3 sentences)",
   "author_intent": "Why the author wrote it this way (1-2 sentences)",
-  "cultural_context": "Cultural context if relevant, otherwise null"
+  "cultural_context": "Cultural context if relevant, otherwise null",
+  "kinyarwanda_bridge": "Rwanda cultural connection if applicable (e.g. compare to umuganda, gacaca, icyubahiro, or another Rwandan concept), otherwise null"
 }}
 
 Adapt for {level_desc}. Preserve the literary voice — don't dumb it down."""
@@ -214,12 +269,16 @@ Adapt for {level_desc}. Preserve the literary voice — don't dumb it down."""
                 intent += f" by {author}"
             intent += "."
 
+        # Add Kinyarwanda cultural bridge if applicable
+        kinyarwanda_bridge = _get_kinyarwanda_bridge(text)
+
         return {
             "simple_version": simple_version,
             "author_intent": intent,
             "vocabulary": self._extract_vocabulary(text),
             "literary_devices": self._detect_devices(text),
             "cultural_context": None,
+            "kinyarwanda_bridge": kinyarwanda_bridge,
             "tier": "rule_based",
         }
 

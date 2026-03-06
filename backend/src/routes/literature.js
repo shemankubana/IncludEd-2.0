@@ -98,12 +98,32 @@ router.post('/upload', authenticateToken, upload.fields([
           const aiContentType = aiResp.data.document_type;
           const langCode = aiResp.data.language || 'en';
           const detectedLang = langCode === 'fr' ? 'french' : 'english';
-          const aiSections = aiResp.data.flat_units.map(unit => ({
-            title:    unit.title   || 'Section',
-            content:  unit.content || '',
-            dialogue: unit.dialogue || unit.blocks || [],
-            wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
-          }));
+
+          // Build a lookup from difficulty_map for per-section enriched metadata
+          const difficultyLookup = {};
+          for (const d of (aiResp.data.book_brain?.difficulty_map || [])) {
+            if (d.section_id)    difficultyLookup[d.section_id]    = d;
+            if (d.section_title) difficultyLookup[d.section_title] = d;
+          }
+
+          const aiSections = aiResp.data.flat_units.map(unit => {
+            const enrichment = difficultyLookup[unit.id] || difficultyLookup[unit.title] || {};
+            return {
+              title:    unit.title   || 'Section',
+              content:  unit.content || '',
+              dialogue: unit.dialogue || unit.blocks || [],
+              wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
+              // Enriched per-section metadata (Phase 1)
+              emotion:              enrichment.emotion              || 'neutral',
+              setting:              enrichment.setting              || '',
+              characters_present:   enrichment.characters_present   || [],
+              archaic_phrases:      enrichment.archaic_phrases      || [],
+              literary_devices:     enrichment.literary_devices     || [],
+              faction:              enrichment.faction              || '',
+              difficulty:           enrichment.overall_difficulty   || 0,
+              estimated_read_minutes: enrichment.estimated_read_minutes || 1,
+            };
+          });
 
           // Use AI-extracted author if current one is unknown
           const aiAuthor = aiResp.data.author;
@@ -116,6 +136,39 @@ router.post('/upload', authenticateToken, upload.fields([
           if (aiAuthor && (!literature.author || literature.author === 'Unknown')) {
             updatePayload.author = aiAuthor;
           }
+
+          // Store Book Brain pre-analysis (difficulty map, vocabulary, characters, struggle zones)
+          if (aiResp.data.book_brain) {
+            const bb = aiResp.data.book_brain;
+            updatePayload.bookBrain = {
+              vocabulary:           (bb.vocabulary    || []).slice(0, 80),
+              characters:           bb.characters    || [],
+              summary_stats:        bb.summary_stats || {},
+              struggle_zones:       bb.struggle_zones || [],
+              difficulty_map:       (bb.difficulty_map || []).filter(d => d.overall_difficulty > 0.4),
+              cultural_context_bank: bb.cultural_context_bank || [],
+            };
+          }
+
+          // Per-section simplification — process in small batches to avoid overwhelming AI service
+          console.log(`🔤 Simplifying ${aiSections.length} sections for: ${literature.title}`);
+          let simplifiedCount = 0;
+          for (const section of aiSections) {
+            if (!section.content || section.content.trim().length === 0) continue;
+            try {
+              const sResp = await axios.post(`${AI_SERVICE_URL}/adapt-text`, {
+                text: section.content.slice(0, 3000), // cap per-section to avoid slow Ollama calls
+                doc_type: aiContentType,
+              }, { timeout: 15000 });
+              if (sResp.data?.adaptedText && sResp.data.adaptedText !== section.content.slice(0, 3000)) {
+                section.simplified_content = sResp.data.adaptedText;
+                simplifiedCount++;
+              }
+            } catch (_) { /* non-critical — section still readable without simplified_content */ }
+          }
+          console.log(`✅ Simplified ${simplifiedCount}/${aiSections.length} sections`);
+          updatePayload.sections = aiSections; // re-assign with simplified_content added
+
           await literature.update(updatePayload);
           console.log(`✅ ML update: ${literature.title} → ${aiContentType} (${aiSections.length} sections)`);
 
@@ -321,12 +374,29 @@ router.post('/:id/reprocess', authenticateToken, async (req, res) => {
         contentType = aiResp.data.document_type;
         const langCode = aiResp.data.language || 'en';
         detectedLanguage = langCode === 'fr' ? 'french' : 'english';
-        sections = aiResp.data.flat_units.map(unit => ({
-          title:    unit.title   || 'Section',
-          content:  unit.content || '',
-          dialogue: unit.dialogue || unit.blocks || [],
-          wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
-        }));
+        // Build enrichment lookup from book_brain difficulty_map
+        const reprocessLookup = {};
+        for (const d of (aiResp.data.book_brain?.difficulty_map || [])) {
+          if (d.section_id)    reprocessLookup[d.section_id]    = d;
+          if (d.section_title) reprocessLookup[d.section_title] = d;
+        }
+        sections = aiResp.data.flat_units.map(unit => {
+          const enrichment = reprocessLookup[unit.id] || reprocessLookup[unit.title] || {};
+          return {
+            title:    unit.title   || 'Section',
+            content:  unit.content || '',
+            dialogue: unit.dialogue || unit.blocks || [],
+            wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
+            emotion:              enrichment.emotion              || 'neutral',
+            setting:              enrichment.setting              || '',
+            characters_present:   enrichment.characters_present   || [],
+            archaic_phrases:      enrichment.archaic_phrases      || [],
+            literary_devices:     enrichment.literary_devices     || [],
+            faction:              enrichment.faction              || '',
+            difficulty:           enrichment.overall_difficulty   || 0,
+            estimated_read_minutes: enrichment.estimated_read_minutes || 1,
+          };
+        });
         console.log(`🧠 ML re-process: ${literature.title} → ${contentType} (${sections.length} sections, lang=${detectedLanguage})`);
       }
     } catch (err) {
@@ -354,6 +424,45 @@ router.post('/:id/reprocess', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Reprocess error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Backfill per-section simplified_content for already-uploaded literature
+router.post('/:id/simplify-sections', authenticateToken, async (req, res) => {
+  try {
+    const literature = await Literature.findByPk(req.params.id);
+    if (!literature) return res.status(404).json({ error: 'Not found' });
+
+    const sections = literature.sections;
+    if (!sections || sections.length === 0) {
+      return res.status(400).json({ error: 'No sections to simplify' });
+    }
+
+    const contentType = literature.contentType || 'generic';
+    let simplifiedCount = 0;
+    const updatedSections = [...sections];
+
+    for (const section of updatedSections) {
+      if (!section.content || section.content.trim().length === 0) continue;
+      try {
+        const sResp = await axios.post(`${AI_SERVICE_URL}/adapt-text`, {
+          text: section.content.slice(0, 3000),
+          doc_type: contentType,
+        }, { timeout: 15000 });
+        if (sResp.data?.adaptedText) {
+          section.simplified_content = sResp.data.adaptedText;
+          simplifiedCount++;
+        }
+      } catch (_) { /* skip failed section */ }
+    }
+
+    await literature.update({ sections: updatedSections });
+    console.log(`✅ Backfilled ${simplifiedCount}/${updatedSections.length} sections for: ${literature.title}`);
+
+    res.json({ success: true, simplifiedCount, totalSections: updatedSections.length });
+  } catch (error) {
+    console.error('❌ Simplify sections error:', error);
     res.status(500).json({ error: error.message });
   }
 });

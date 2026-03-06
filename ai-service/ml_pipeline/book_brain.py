@@ -71,6 +71,43 @@ _LITERARY_DEVICE_PATTERNS = [
     (r"[.!?]\s*[.!?]", "ellipsis"),
 ]
 
+# Emotion keyword bank — lightweight, no ML models needed
+_EMOTION_KEYWORDS: Dict[str, List[str]] = {
+    "joy":      ["laugh", "smile", "happy", "joy", "delight", "celebrate", "cheer", "merry", "glad", "rejoice", "feast", "dance", "sing", "triumph", "victory"],
+    "anger":    ["anger", "rage", "furious", "wrath", "hate", "fury", "curse", "shout", "scream", "violent", "bitter", "wrathful", "indignant", "hostile"],
+    "fear":     ["fear", "terror", "dread", "tremble", "horror", "afraid", "ghost", "witch", "dark", "death", "flee", "cower", "shiver", "nightmare", "ominous"],
+    "sadness":  ["weep", "cry", "mourn", "grief", "tears", "sad", "sorrow", "lament", "wail", "despair", "misery", "anguish", "pity", "loss", "bereaved"],
+    "surprise": ["shock", "sudden", "unexpected", "astonish", "gasp", "startle", "amaze", "wonder", "discover", "reveal", "exclaim"],
+    "disgust":  ["disgust", "filth", "vile", "corrupt", "rotten", "shame", "foul", "wicked", "loathe", "abhor", "repulse"],
+    "tension":  ["confront", "threaten", "danger", "warn", "challenge", "defy", "accuse", "suspect", "conflict", "betray", "ambush", "sword", "knife"],
+}
+
+# Setting patterns — stage directions and location keywords
+_SETTING_RE = re.compile(
+    r"(?:^\s*\[([^\]]+)\]|"          # [stage direction]
+    r"^\s*\(([^)]+)\)|"              # (stage direction)
+    r"\b(?:in|at|near|inside|outside|within|before|upon)\s+"
+    r"(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*))",
+    re.MULTILINE,
+)
+
+# Cultural context bank — pre-built notes for challenging literary concepts
+# Mapped to Rwandan/East African student context
+_CULTURAL_CONTEXT_BANK: List[Dict[str, str]] = [
+    {"phrase": "honour thy father",     "context_note": "In Igbo culture (like Rwanda), respect for parents and elders is a core value."},
+    {"phrase": "chi",                   "context_note": "Chi is a personal spirit/guardian in Igbo belief — similar to the concept of umwuka in Kinyarwanda tradition."},
+    {"phrase": "efulefu",               "context_note": "Efulefu means a worthless, hollow man in Igbo — someone who abandons their community's values."},
+    {"phrase": "egwugwu",               "context_note": "Egwugwu are masked spirit figures representing ancestors. Think of them like the guardians of community law and tradition."},
+    {"phrase": "bride price",           "context_note": "Like inkwano (bride wealth) in Rwanda, this is a gift from the groom's family to honor the bride's family."},
+    {"phrase": "oracle",                "context_note": "A sacred voice believed to speak for the gods — similar to traditional spiritual advisors in Rwandan culture."},
+    {"phrase": "wherefore art thou",    "context_note": "'Wherefore' means 'why', not 'where'. Juliet is asking why Romeo must be a Montague (her enemy), not asking where he is."},
+    {"phrase": "to be or not to be",    "context_note": "Hamlet is contemplating whether life is worth living when facing great suffering — a universal human question."},
+    {"phrase": "the quality of mercy",  "context_note": "Shakespeare argues that showing mercy (forgiveness) is more powerful than strict law — a divine quality."},
+    {"phrase": "district commissioner", "context_note": "The representative of British colonial authority in Nigeria — like administrative officials imposed during colonization."},
+    {"phrase": "white man",             "context_note": "In this colonial-era context, refers to European missionaries and administrators who came to change African traditions."},
+    {"phrase": "pale faced",            "context_note": "A description used to emphasize cultural difference between African and European characters."},
+]
+
 
 def _syllable_count(word: str) -> int:
     """Estimate syllable count for English word."""
@@ -88,6 +125,54 @@ def _syllable_count(word: str) -> int:
     if word.endswith("e") and count > 1:
         count -= 1
     return max(1, count)
+
+
+def _detect_emotion(text: str) -> str:
+    """Detect the dominant emotion in a text chunk using keyword matching."""
+    text_lower = text.lower()
+    scores: Dict[str, int] = {emotion: 0 for emotion in _EMOTION_KEYWORDS}
+    for emotion, keywords in _EMOTION_KEYWORDS.items():
+        for kw in keywords:
+            if kw in text_lower:
+                scores[emotion] += 1
+    best_score = max(scores.values())
+    if best_score == 0:
+        return "neutral"
+    return max(scores, key=lambda e: scores[e])
+
+
+def _detect_setting(text: str) -> str:
+    """Extract the first detectable setting from text (stage directions or location phrases)."""
+    for match in _SETTING_RE.finditer(text):
+        direction = match.group(1) or match.group(2)
+        location = match.group(3)
+        if direction and len(direction) < 80:
+            return direction.strip()
+        if location:
+            return location.strip()
+    return ""
+
+
+def _archaic_phrases_in(text: str) -> List[Dict[str, str]]:
+    """Return list of archaic words found in text with their modern meanings."""
+    text_lower = text.lower()
+    found = []
+    seen: set = set()
+    for word, modern in _ARCHAIC_WORDS.items():
+        if word in text_lower and word not in seen:
+            seen.add(word)
+            found.append({"word": word, "modern_meaning": modern})
+    return found
+
+
+def _characters_present_in(text: str, char_names: List[str]) -> List[str]:
+    """Return which known character names appear in the given text."""
+    text_lower = text.lower()
+    present = []
+    for name in char_names:
+        if name.lower() in text_lower or name.upper() in text:
+            present.append(name)
+    return present
 
 
 def _flesch_kincaid_grade(text: str) -> float:
@@ -268,19 +353,37 @@ def _extract_vocabulary(
 # ── Difficulty mapping ────────────────────────────────────────────────────────
 
 def _compute_difficulty_map(
-    units: List[Dict[str, Any]], doc_type: str
+    units: List[Dict[str, Any]],
+    doc_type: str,
+    char_names: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
-    """Compute per-unit difficulty scores."""
+    """Compute per-unit difficulty scores with enriched per-chunk metadata."""
     difficulty_map: List[Dict[str, Any]] = []
+    char_names = char_names or []
 
     if doc_type == "play":
         for act in units:
+            # Detect faction from act-level character lists (heuristic: first scene speaker)
+            act_chars: List[str] = []
+            for scene in act.get("children", []):
+                for block in scene.get("blocks", []):
+                    if block.get("type") == "dialogue" and block.get("character"):
+                        act_chars.append(block["character"])
+
             for scene in act.get("children", []):
                 text_parts = []
+                scene_chars_present: List[str] = []
+                scene_factions: Counter = Counter()
                 for block in scene.get("blocks", []):
                     text_parts.append(block.get("content", ""))
-                full_text = " ".join(text_parts)
+                    if block.get("type") == "dialogue" and block.get("character"):
+                        c = block["character"].strip().title()
+                        if c not in scene_chars_present:
+                            scene_chars_present.append(c)
+                        if block.get("faction"):
+                            scene_factions[block["faction"]] += 1
 
+                full_text = " ".join(text_parts)
                 if not full_text.strip():
                     continue
 
@@ -288,27 +391,24 @@ def _compute_difficulty_map(
                 word_count = len(words)
                 fk_grade = _flesch_kincaid_grade(full_text)
 
-                # Count archaic words
                 archaic_count = sum(
                     1 for w in words
                     if w.lower().strip(".,!?;:'\"()") in _ARCHAIC_WORDS
                 )
-
-                # Count long words (3+ syllables)
                 long_words = sum(1 for w in words if _syllable_count(w) >= 3)
 
-                # Detect literary devices
                 devices_found = []
                 for pattern, device_name in _LITERARY_DEVICE_PATTERNS:
                     if re.search(pattern, full_text, re.IGNORECASE):
                         devices_found.append(device_name)
 
-                # Composite difficulty [0, 1]
                 vocab_difficulty = min(1.0, (archaic_count / max(word_count, 1)) * 10 + (long_words / max(word_count, 1)) * 3)
                 syntax_difficulty = min(1.0, fk_grade / 15)
                 conceptual = min(1.0, len(devices_found) * 0.2)
-
                 overall = 0.4 * vocab_difficulty + 0.35 * syntax_difficulty + 0.25 * conceptual
+
+                # Dominant faction in this scene
+                dominant_faction = scene_factions.most_common(1)[0][0] if scene_factions else ""
 
                 difficulty_map.append({
                     "unit_title": act.get("title", ""),
@@ -325,6 +425,12 @@ def _compute_difficulty_map(
                     "literary_devices": devices_found,
                     "predicted_struggle": overall > 0.6,
                     "estimated_read_minutes": max(1, round(word_count / 150, 1)),
+                    # Enriched per-chunk metadata
+                    "emotion": _detect_emotion(full_text),
+                    "setting": _detect_setting(full_text),
+                    "characters_present": scene_chars_present[:10],
+                    "archaic_phrases": _archaic_phrases_in(full_text),
+                    "faction": dominant_faction,
                 })
     else:
         for chapter in units:
@@ -363,6 +469,12 @@ def _compute_difficulty_map(
                     "literary_devices": devices_found,
                     "predicted_struggle": overall > 0.6,
                     "estimated_read_minutes": max(1, round(word_count / 150, 1)),
+                    # Enriched per-chunk metadata
+                    "emotion": _detect_emotion(content),
+                    "setting": _detect_setting(content),
+                    "characters_present": _characters_present_in(content, char_names),
+                    "archaic_phrases": _archaic_phrases_in(content),
+                    "faction": "",
                 })
 
     return difficulty_map
@@ -373,11 +485,12 @@ def _compute_difficulty_map(
 @dataclass
 class BookBrainResult:
     """Complete pre-analysis for a book."""
-    difficulty_map:  List[Dict[str, Any]]
-    vocabulary:      List[Dict[str, Any]]
-    characters:      List[Dict[str, Any]]
-    summary_stats:   Dict[str, Any]
-    struggle_zones:  List[Dict[str, Any]]
+    difficulty_map:       List[Dict[str, Any]]
+    vocabulary:           List[Dict[str, Any]]
+    characters:           List[Dict[str, Any]]
+    summary_stats:        Dict[str, Any]
+    struggle_zones:       List[Dict[str, Any]]
+    cultural_context_bank: List[Dict[str, str]]  # Pre-built cross-cultural notes
 
 
 class BookBrain:
@@ -397,14 +510,15 @@ class BookBrain:
         title: str = "",
         author: str = "",
     ) -> BookBrainResult:
-        # 1. Difficulty mapping
-        difficulty_map = _compute_difficulty_map(units, doc_type)
-
-        # 2. Vocabulary extraction
-        vocabulary = _extract_vocabulary(units, doc_type, language)
-
-        # 3. Character graph
+        # 1. Character graph first (needed for per-chunk character detection)
         characters = _extract_characters_from_units(units, doc_type)
+        char_names = [c["name"] for c in characters]
+
+        # 2. Difficulty mapping (enriched with emotion, setting, characters_present, etc.)
+        difficulty_map = _compute_difficulty_map(units, doc_type, char_names)
+
+        # 3. Vocabulary extraction
+        vocabulary = _extract_vocabulary(units, doc_type, language)
 
         # 4. Summary statistics
         total_words = sum(d["word_count"] for d in difficulty_map)
@@ -422,9 +536,23 @@ class BookBrain:
                 "section_id": d["section_id"],
                 "overall_difficulty": d["overall_difficulty"],
                 "reason": self._struggle_reason(d),
+                "emotion": d.get("emotion", "neutral"),
             }
             for d in difficulty_map
             if d.get("predicted_struggle", False)
+        ]
+
+        # 6. Cultural context bank — filter to phrases that appear in this book
+        all_text = " ".join(
+            d.get("section_title", "") + " " + str(d.get("archaic_phrases", ""))
+            for d in difficulty_map
+        ).lower()
+        # Also check full archaic phrases from vocab
+        archaic_vocab_words = {v["word"] for v in vocabulary if v.get("archaic")}
+        cultural_context_bank = [
+            entry for entry in _CULTURAL_CONTEXT_BANK
+            if any(word in all_text for word in entry["phrase"].lower().split())
+            or any(word in archaic_vocab_words for word in entry["phrase"].lower().split())
         ]
 
         summary_stats = {
@@ -441,6 +569,8 @@ class BookBrain:
             "major_characters": len([c for c in characters if c["importance"] == "major"]),
             "struggle_zone_count": len(struggle_zones),
             "archaic_words_present": any(v.get("archaic") for v in vocabulary),
+            "emotions_detected": list({d.get("emotion", "neutral") for d in difficulty_map if d.get("emotion") != "neutral"}),
+            "cultural_context_count": len(cultural_context_bank),
         }
 
         return BookBrainResult(
@@ -449,6 +579,7 @@ class BookBrain:
             characters=characters,
             summary_stats=summary_stats,
             struggle_zones=struggle_zones,
+            cultural_context_bank=cultural_context_bank,
         )
 
     def _struggle_reason(self, d: Dict[str, Any]) -> str:

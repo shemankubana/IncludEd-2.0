@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,7 +16,11 @@ import {
     Link as LinkIcon,
     Trash2,
     BookOpen,
-    Plus
+    Plus,
+    Brain,
+    ShieldAlert,
+    CheckCircle2,
+    Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +40,14 @@ const TeacherDashboard = () => {
     const [analyticsData, setAnalyticsData] = useState<any>(null);
     const [inviteEmail, setInviteEmail] = useState("");
     const [isInviting, setIsInviting] = useState(false);
+    const [intelligenceData, setIntelligenceData] = useState<{
+        summaries: any[];
+        alerts: any[];
+        loading: boolean;
+    }>({ summaries: [], alerts: [], loading: false });
     const { toast } = useToast();
+
+    const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
 
     useEffect(() => {
         const fetchAnalytics = async () => {
@@ -83,6 +94,131 @@ const TeacherDashboard = () => {
 
         fetchAnalytics();
     }, [user]);
+
+    // ── Fetch Teacher Intelligence (NL summaries + alerts) ─────────────────────
+    const fetchIntelligence = useCallback(async () => {
+        if (!user || students.length === 0) return;
+        setIntelligenceData(prev => ({ ...prev, loading: true }));
+        try {
+            const idToken = await user.getIdToken();
+            const headers = { "Authorization": `Bearer ${idToken}` };
+            const baseUrl = API_BASE;
+
+            // Get all content to find the most recent book
+            const contentRes = await fetch(`${baseUrl}/api/literature/my-content`, { headers });
+            const contentData = await contentRes.json();
+            const latestBook = Array.isArray(contentData) && contentData.length > 0 ? contentData[0] : null;
+            const bookTitle = latestBook?.title || "";
+            const bookId = latestBook?.id || "";
+
+            // Generate summaries for each student using AI service
+            const summaryPromises = students.slice(0, 10).map(async (student: any) => {
+                // Build a minimal comprehension data from what we have
+                const compData = {
+                    chapters_read: Math.max(1, Math.floor(student.progress / 10)),
+                    average_comprehension: student.progress / 100,
+                    vocabulary_progress: student.progress / 100,
+                    characters_understood: {},
+                    literary_devices_seen: {},
+                    chapters_needing_revisit: student.progress < 50 ? [{ title: "Recent chapter", score: student.progress / 100 }] : [],
+                    total_highlights: 0,
+                    total_time_minutes: 0,
+                };
+                const profileData = {
+                    persistence: student.progress > 60 ? 0.7 : 0.4,
+                    frustration_level: student.progress < 40 ? 0.6 : 0.3,
+                    preferred_adaptations: [],
+                    best_time_of_day: "9am-noon",
+                };
+
+                try {
+                    const res = await fetch(`${AI_URL}/teacher/student-summary`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            student_name: student.name,
+                            student_id: student.name.replace(/\s+/g, "_").toLowerCase(),
+                            book_id: bookId,
+                            class_average_chapter: Math.floor(
+                                students.reduce((a: number, s: any) => a + Math.floor(s.progress / 10), 0) / Math.max(students.length, 1)
+                            ),
+                        }),
+                    });
+                    if (res.ok) return await res.json();
+                } catch { /* use fallback */ }
+
+                // Fallback: construct summary locally
+                return {
+                    student_name: student.name,
+                    summary: `${student.name} has completed ${student.progress}% of the assigned reading.`,
+                    strengths: student.progress > 70 ? ["strong comprehension"] : [],
+                    areas_for_growth: student.progress < 50 ? ["pacing", "comprehension"] : [],
+                    recommendation: student.progress < 50
+                        ? `Recommended: Check in with ${student.name} and offer additional support.`
+                        : `${student.name} is on track. Continue current approach.`,
+                    risk_level: student.progress < 40 ? "high" : student.progress < 65 ? "medium" : "low",
+                    chapters_behind: 0,
+                };
+            });
+
+            const summaries = await Promise.all(summaryPromises);
+
+            // Generate class-wide alerts
+            let alerts: any[] = [];
+            try {
+                const alertsRes = await fetch(`${AI_URL}/teacher/class-alerts`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        student_summaries: summaries,
+                        book_title: bookTitle,
+                    }),
+                });
+                if (alertsRes.ok) {
+                    const alertsData = await alertsRes.json();
+                    alerts = alertsData.alerts || [];
+                }
+            } catch { /* alerts optional */ }
+
+            // Fetch per-student highlights and detect common passages (D6)
+            try {
+                const allHighlights: any[] = [];
+                await Promise.all(
+                    students.slice(0, 10).map(async (student: any) => {
+                        const studentId = student.name.replace(/\s+/g, "_").toLowerCase();
+                        const compRes = await fetch(
+                            `${AI_URL}/comprehension/summary?student_id=${encodeURIComponent(studentId)}&book_id=${encodeURIComponent(bookId)}`
+                        ).catch(() => null);
+                        if (!compRes?.ok) return;
+                        const compData = await compRes.json();
+                        // comprehension summary doesn't expose raw highlights, so we use
+                        // the student name + highlight count as a proxy signal — the full
+                        // highlight list would need a dedicated backend endpoint per student.
+                        // For now we attach whatever the summary exposes.
+                        (compData.recent_highlights || []).forEach((h: any) => {
+                            allHighlights.push({ ...h, student_name: student.name });
+                        });
+                    })
+                );
+                if (allHighlights.length > 0) {
+                    const hlRes = await fetch(`${AI_URL}/teacher/common-highlights`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ highlights: allHighlights, book_title: bookTitle }),
+                    });
+                    if (hlRes.ok) {
+                        const hlData = await hlRes.json();
+                        alerts = [...alerts, ...(hlData.alerts || [])];
+                    }
+                }
+            } catch { /* common-highlight alerts optional */ }
+
+            setIntelligenceData({ summaries, alerts, loading: false });
+        } catch (err) {
+            console.error("Intelligence fetch failed:", err);
+            setIntelligenceData(prev => ({ ...prev, loading: false }));
+        }
+    }, [user, students, AI_URL]);
 
     const handleInvite = async () => {
         if (!inviteEmail) return;
@@ -194,9 +330,13 @@ const TeacherDashboard = () => {
                 <Tabs defaultValue="students" className="space-y-8">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <TabsList className="bg-secondary/50 p-1.5 rounded-2xl h-14 w-fit border border-border">
-                            <TabsTrigger value="students" className="rounded-xl font-black text-sm px-8 data-[state=active]:bg-background data-[state=active]:shadow-lg">Student Roster</TabsTrigger>
-                            <TabsTrigger value="analytics" className="rounded-xl font-black text-sm px-8 data-[state=active]:bg-background data-[state=active]:shadow-lg">Class Analytics</TabsTrigger>
-                            <TabsTrigger value="content" className="rounded-xl font-black text-sm px-8 data-[state=active]:bg-background data-[state=active]:shadow-lg">My Content</TabsTrigger>
+                            <TabsTrigger value="students" className="rounded-xl font-black text-sm px-6 data-[state=active]:bg-background data-[state=active]:shadow-lg">Student Roster</TabsTrigger>
+                            <TabsTrigger value="analytics" className="rounded-xl font-black text-sm px-6 data-[state=active]:bg-background data-[state=active]:shadow-lg">Class Analytics</TabsTrigger>
+                            <TabsTrigger value="intelligence" className="rounded-xl font-black text-sm px-6 data-[state=active]:bg-background data-[state=active]:shadow-lg gap-2 flex items-center" onClick={() => { if (intelligenceData.summaries.length === 0) fetchIntelligence(); }}>
+                                <Brain className="w-3.5 h-3.5" />
+                                AI Insights
+                            </TabsTrigger>
+                            <TabsTrigger value="content" className="rounded-xl font-black text-sm px-6 data-[state=active]:bg-background data-[state=active]:shadow-lg">My Content</TabsTrigger>
                         </TabsList>
 
                         <div className="flex items-center gap-3">
@@ -261,6 +401,158 @@ const TeacherDashboard = () => {
                                 loading={loading}
                             />
                         </div>
+                    </TabsContent>
+
+                    <TabsContent value="intelligence">
+                        {intelligenceData.loading ? (
+                            <div className="flex items-center justify-center py-20">
+                                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                                <span className="ml-3 font-bold text-muted-foreground">Analysing student data...</span>
+                            </div>
+                        ) : intelligenceData.summaries.length === 0 ? (
+                            <div className="text-center py-20 space-y-4">
+                                <Brain className="w-12 h-12 text-muted-foreground mx-auto" />
+                                <p className="text-muted-foreground font-medium">No intelligence data yet.</p>
+                                <p className="text-sm text-muted-foreground">Add students to your class roster to generate AI-powered insights.</p>
+                                <button
+                                    className="mt-4 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm"
+                                    onClick={fetchIntelligence}
+                                >
+                                    Generate Insights
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-8">
+                                {/* Class-wide alerts */}
+                                {intelligenceData.alerts.length > 0 && (
+                                    <section>
+                                        <h3 className="text-lg font-black mb-4 flex items-center gap-2">
+                                            <ShieldAlert className="w-5 h-5 text-amber-500" />
+                                            Class Alerts
+                                        </h3>
+                                        <div className="space-y-3">
+                                            {intelligenceData.alerts.map((alert: any, i: number) => (
+                                                <motion.div
+                                                    key={i}
+                                                    initial={{ opacity: 0, x: -20 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: i * 0.1 }}
+                                                    className={`rounded-2xl border p-4 flex gap-4 ${
+                                                        alert.severity === "urgent"
+                                                            ? "border-red-400/40 bg-red-500/5"
+                                                            : alert.severity === "warning"
+                                                            ? "border-amber-400/40 bg-amber-500/5"
+                                                            : "border-blue-400/40 bg-blue-500/5"
+                                                    }`}
+                                                >
+                                                    {alert.severity === "urgent" ? (
+                                                        <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                                                    ) : alert.severity === "warning" ? (
+                                                        <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                                    ) : (
+                                                        <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                                                    )}
+                                                    <div className="flex-1">
+                                                        <p className="font-bold text-sm">{alert.message}</p>
+                                                        <p className="text-xs text-muted-foreground mt-1">{alert.suggested_action}</p>
+                                                        {alert.affected_students?.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1 mt-2">
+                                                                {alert.affected_students.map((name: string, j: number) => (
+                                                                    <span key={j} className="text-[10px] font-bold px-2 py-0.5 bg-background rounded-lg border border-border">
+                                                                        {name}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {/* Per-student NL summaries */}
+                                <section>
+                                    <h3 className="text-lg font-black mb-4 flex items-center gap-2">
+                                        <Users className="w-5 h-5 text-primary" />
+                                        Student Summaries
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        {intelligenceData.summaries.map((s: any, i: number) => (
+                                            <motion.div
+                                                key={i}
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                transition={{ delay: i * 0.08 }}
+                                            >
+                                                <Card className={`rounded-[28px] border-2 ${
+                                                    s.risk_level === "high"
+                                                        ? "border-red-400/40"
+                                                        : s.risk_level === "medium"
+                                                        ? "border-amber-400/40"
+                                                        : "border-green-400/40"
+                                                }`}>
+                                                    <CardContent className="p-5 space-y-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-black ${
+                                                                s.risk_level === "high"
+                                                                    ? "bg-red-500/10 text-red-600"
+                                                                    : s.risk_level === "medium"
+                                                                    ? "bg-amber-500/10 text-amber-600"
+                                                                    : "bg-green-500/10 text-green-600"
+                                                            }`}>
+                                                                {s.student_name?.charAt(0) || "?"}
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="font-black text-sm">{s.student_name}</h4>
+                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg ${
+                                                                    s.risk_level === "high"
+                                                                        ? "bg-red-500/10 text-red-600"
+                                                                        : s.risk_level === "medium"
+                                                                        ? "bg-amber-500/10 text-amber-600"
+                                                                        : "bg-green-500/10 text-green-600"
+                                                                }`}>
+                                                                    {s.risk_level} risk
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <p className="text-sm text-muted-foreground leading-relaxed">{s.summary}</p>
+
+                                                        {s.recommendation && (
+                                                            <div className="bg-secondary/40 rounded-xl p-3">
+                                                                <p className="text-xs font-bold text-primary uppercase tracking-widest mb-1">Recommended action</p>
+                                                                <p className="text-xs leading-relaxed">{s.recommendation}</p>
+                                                            </div>
+                                                        )}
+
+                                                        {s.strengths?.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {s.strengths.slice(0, 3).map((str: string, j: number) => (
+                                                                    <span key={j} className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-700 rounded-lg">
+                                                                        <CheckCircle2 className="w-2.5 h-2.5 inline mr-1" />
+                                                                        {str}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </CardContent>
+                                                </Card>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                </section>
+
+                                <div className="text-center">
+                                    <button
+                                        className="text-xs font-bold text-muted-foreground underline"
+                                        onClick={fetchIntelligence}
+                                    >
+                                        Refresh insights
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </TabsContent>
 
                     <TabsContent value="content">

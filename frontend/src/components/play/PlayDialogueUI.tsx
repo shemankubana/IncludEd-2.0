@@ -62,6 +62,9 @@ interface PlayDialogueUIProps {
     autoAdvanceDelay?: number;
     dyslexicFont?: boolean;
     onComplete?: () => void;
+    // Phase 2 enrichment
+    charactersOnStage?: string[];          // from section.characters_present
+    characterFactions?: Record<string, string>; // char_name → faction label
 }
 
 // ── Emotion config ─────────────────────────────────────────────────────────────
@@ -109,9 +112,32 @@ const CHAR_PALETTE = [
     { bg: "#065F46", text: "#FFFFFF", bubble: "#D1FAE5" },
 ];
 
-function getCharColour(name: string, map: Map<string, (typeof CHAR_PALETTE)[number]>) {
+// Faction-based palettes — characters of the same faction share a hue family
+const FACTION_PALETTES: Record<string, (typeof CHAR_PALETTE)[number]> = {
+    montague:  { bg: "#1D4ED8", text: "#FFFFFF", bubble: "#DBEAFE" },
+    capulet:   { bg: "#B91C1C", text: "#FFFFFF", bubble: "#FEE2E2" },
+    roman:     { bg: "#7C3AED", text: "#FFFFFF", bubble: "#EDE9FE" },
+    plebeian:  { bg: "#065F46", text: "#FFFFFF", bubble: "#D1FAE5" },
+    okonkwo:   { bg: "#92400E", text: "#FFFFFF", bubble: "#FEF3C7" },
+    colonist:  { bg: "#374151", text: "#FFFFFF", bubble: "#F3F4F6" },
+    danish:    { bg: "#1E3A5F", text: "#FFFFFF", bubble: "#DBEAFE" },
+    ghost:     { bg: "#4B5563", text: "#FFFFFF", bubble: "#F9FAFB" },
+};
+
+function getCharColour(
+    name: string,
+    map: Map<string, (typeof CHAR_PALETTE)[number]>,
+    factions?: Record<string, string>,
+) {
     if (!map.has(name)) {
-        map.set(name, CHAR_PALETTE[map.size % CHAR_PALETTE.length]);
+        // If faction is known, use faction palette variant
+        const faction = factions?.[name]?.toLowerCase().replace(/\s+/g, "_") ?? "";
+        const factionColour = faction ? FACTION_PALETTES[faction] : null;
+        if (factionColour) {
+            map.set(name, factionColour);
+        } else {
+            map.set(name, CHAR_PALETTE[map.size % CHAR_PALETTE.length]);
+        }
     }
     return map.get(name)!;
 }
@@ -348,6 +374,8 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
     autoAdvanceDelay = 4000,
     dyslexicFont: initialDyslexic = false,
     onComplete,
+    charactersOnStage,
+    characterFactions,
 }) => {
     const [currentIdx,    setCurrentIdx]    = useState(0);
     const [isAutoPlaying, setIsAutoPlaying] = useState(autoAdvance);
@@ -370,8 +398,8 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
     }, [lines]);
 
     useMemo(() => {
-        allChars.forEach((c) => getCharColour(c, colourMap.current));
-    }, [allChars]);
+        allChars.forEach((c) => getCharColour(c, colourMap.current, characterFactions));
+    }, [allChars, characterFactions]);
 
     const currentEmotion:  Emotion      = (current?.emotion  as Emotion)   || "neutral";
     const currentIntensity: number      = current?.intensity                 ?? 0.5;
@@ -427,13 +455,39 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
         ? current.character.toUpperCase()
         : null;
 
-    const colours    = charName ? getCharColour(charName, colourMap.current) : CHAR_PALETTE[0];
+    const colours    = charName ? getCharColour(charName, colourMap.current, characterFactions) : CHAR_PALETTE[0];
     const isStageDir = current.type === "stage_direction"
         || current.type === "narrative"
         || current.type === "paragraph";
 
     return (
         <div className="flex flex-col gap-4 w-full">
+
+            {/* Who's on stage strip (Phase 2) */}
+            {charactersOnStage && charactersOnStage.length > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-secondary/40 border border-border/40">
+                    <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground shrink-0">On stage:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                        {charactersOnStage.map((name) => {
+                            const upperName = name.toUpperCase();
+                            const col = getCharColour(upperName, colourMap.current, characterFactions);
+                            const faction = characterFactions?.[upperName] || characterFactions?.[name];
+                            return (
+                                <span
+                                    key={name}
+                                    className="text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1"
+                                    style={{ background: col.bg, color: col.text }}
+                                    title={faction ? `Faction: ${faction}` : undefined}
+                                >
+                                    {name.slice(0, 12)}
+                                    {faction && <span className="opacity-60 text-[8px]">({faction.slice(0, 4)})</span>}
+                                </span>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Header */}
             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -445,7 +499,7 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
                     <div className="flex items-center gap-1.5">
                         <Users className="w-3.5 h-3.5 text-muted-foreground" />
                         {allChars.slice(0, 6).map((c) => {
-                            const col = getCharColour(c, colourMap.current);
+                            const col = getCharColour(c, colourMap.current, characterFactions);
                             return (
                                 <span key={c} className="text-[9px] font-black px-2 py-0.5 rounded-full"
                                     style={{ background: col.bg, color: col.text }}>

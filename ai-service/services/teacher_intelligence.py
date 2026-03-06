@@ -301,6 +301,74 @@ class TeacherIntelligence:
 
         return alerts
 
+    def common_highlight_alerts(
+        self,
+        all_highlights: List[Dict[str, Any]],
+        book_title: str = "",
+        min_students: int = 2,
+    ) -> List[Dict[str, Any]]:
+        """
+        Detect passages highlighted by multiple students (D6 deliverable).
+
+        Parameters
+        ----------
+        all_highlights : list of {student_name, text, section_id, timestamp}
+        min_students   : minimum students who must share a passage to trigger alert
+
+        Returns alerts like:
+            {
+                "type": "common_highlight",
+                "severity": "warning" | "info",
+                "message": str,
+                "passage": str,
+                "section_id": str,
+                "student_count": int,
+                "student_names": [str],
+                "suggested_action": str,
+            }
+        """
+        passage_map: Dict[str, Dict[str, Any]] = defaultdict(
+            lambda: {"students": set(), "original": "", "section_id": ""}
+        )
+
+        for h in all_highlights:
+            text = (h.get("text") or "").strip()
+            if len(text) < 15:
+                continue
+            # Group by first 80 chars (catches near-identical highlights)
+            key = text[:80].lower()
+            passage_map[key]["students"].add(h.get("student_name", "Unknown"))
+            passage_map[key]["original"] = text[:160]
+            passage_map[key]["section_id"] = h.get("section_id", "")
+
+        alerts = []
+        for _key, info in passage_map.items():
+            if len(info["students"]) >= min_students:
+                names = list(info["students"])
+                count = len(names)
+                preview = info["original"][:100] + ("…" if len(info["original"]) > 100 else "")
+                book_note = f' in "{book_title}"' if book_title else ""
+
+                alerts.append({
+                    "type": "common_highlight",
+                    "severity": "warning" if count >= 3 else "info",
+                    "message": (
+                        f"{count} students highlighted the same passage{book_note}: \"{preview}\""
+                    ),
+                    "passage": info["original"],
+                    "section_id": info["section_id"],
+                    "student_count": count,
+                    "student_names": names[:10],
+                    "suggested_action": (
+                        "Consider a brief class discussion about this passage. "
+                        f"{'Multiple' if count >= 3 else 'Some'} students may not understand "
+                        "the concept or literary device used here."
+                    ),
+                })
+
+        alerts.sort(key=lambda a: a["student_count"], reverse=True)
+        return alerts
+
     def generate_recap_text(
         self,
         recap_data: Dict[str, Any],

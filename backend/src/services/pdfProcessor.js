@@ -1,11 +1,9 @@
 import fs from 'fs';
 import pdf from 'pdf-parse';
-import axios from 'axios';
 
 export async function processPDF(filePath, options = {}) {
   try {
-    const { simplifyText = true } = options;
-    console.log(`📖 Reading PDF file... (Simplify: ${simplifyText})`);
+    console.log(`📖 Reading PDF file...`);
 
     // Read PDF
     const dataBuffer = fs.readFileSync(filePath);
@@ -21,37 +19,9 @@ export async function processPDF(filePath, options = {}) {
     const wordCount = originalContent.split(/\s+/).filter(w => w.length > 0).length;
     console.log(`📝 Cleaned text: ${wordCount} words`);
 
-    // Send to AI service for adaptation
-    let adaptedContent = originalContent;
-
-    if (!simplifyText) {
-      console.log('⏭️  Skipping AI adaptation as requested');
-    } else if (originalContent.length > 25000) {
-      console.log('⚠️ Content is too large for synchronous AI adaptation. Bypassing adaptation step to avoid timeouts.');
-    } else {
-      try {
-        console.log('🤖 Sending to AI service for adaptation...');
-        const response = await axios.post(
-          `${process.env.AI_SERVICE_URL || 'http://localhost:8082'}/adapt-text`,
-          {
-            text: originalContent,
-            target_level: 'accessible'
-          },
-          {
-            timeout: 20000,
-            headers: { 'Content-Type': 'application/json' }
-          }
-        );
-
-        if (response.data && response.data.adaptedText) {
-          adaptedContent = response.data.adaptedText;
-          console.log('✅ AI adaptation successful');
-        }
-      } catch (error) {
-        console.log(`⚠️  AI adaptation error: ${error.message}`);
-        adaptedContent = originalContent;
-      }
-    }
+    // Per-section simplification happens in the background ML step (literature.js)
+    // after the content is split into sections. Storing raw content here.
+    const adaptedContent = originalContent;
 
     // Clean up uploaded file
     try {

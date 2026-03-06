@@ -89,5 +89,11 @@ export const Literature = sequelize.define('Literature', {
   ratingCount: {
     type: DataTypes.INTEGER,
     defaultValue: 0
+  },
+  bookBrain: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Pre-computed Book Brain analysis: difficulty_map, vocabulary, characters, struggle_zones'
   }
 });

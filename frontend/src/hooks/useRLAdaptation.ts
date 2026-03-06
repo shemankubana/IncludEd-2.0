@@ -107,6 +107,7 @@ export function useRLAdaptation({
     const [isLoading, setIsLoading] = useState(false);
     const lastActionId = useRef<ActionId>(0);
     const stableCount  = useRef(0); // how many consecutive same-action predictions
+    const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const queryRL = useCallback(async () => {
         if (!idToken || !sessionId) return;
@@ -175,12 +176,21 @@ export function useRLAdaptation({
         }
     }, [idToken, sessionId, attentionState, disabilityType, textDifficulty, adaptation.actionId]);
 
-    // Poll on interval
+    // Adaptive polling: 10s when attention is low, otherwise use configured interval
+    const effectivePollMs =
+        attentionState.attentionScore < 0.4 || attentionState.sessionFatigue > 0.7
+            ? Math.min(pollIntervalMs, 10_000)
+            : pollIntervalMs;
+
+    // Poll on interval — reschedule whenever effectivePollMs changes
     useEffect(() => {
         queryRL();
-        const interval = setInterval(queryRL, pollIntervalMs);
-        return () => clearInterval(interval);
-    }, [queryRL, pollIntervalMs]);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(queryRL, effectivePollMs);
+        return () => {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+        };
+    }, [queryRL, effectivePollMs]);
 
     return { adaptation, isLoading, refreshNow: queryRL };
 }

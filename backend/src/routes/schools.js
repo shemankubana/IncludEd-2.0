@@ -1,3 +1,4 @@
+import { sendStudentInvite } from '../services/emailService.js';
 import express from 'express';
 import { School } from '../models/School.js';
 import { User } from '../models/User.js';
@@ -88,13 +89,22 @@ router.post('/invite', authenticateToken, async (req, res) => {
 
         const school = await School.findByPk(user.schoolId);
 
-        // In a real app, send email here
         const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:8080'}/auth?code=${school.code}&role=student`;
 
-        console.log(`✉️ Invitation link for ${email}: ${inviteLink}`);
+        try {
+            await sendStudentInvite({
+                toEmail: email,
+                teacherName: `${user.firstName} ${user.lastName}`,
+                schoolName: school.name,
+                schoolCode: school.code,
+            });
+            console.log(`✉️ Student invite sent to ${email}`);
+        } catch (emailErr) {
+            console.warn(`⚠️ Email failed (link still valid): ${emailErr.message}`);
+        }
 
         res.json({
-            message: `Invitation link generated for ${email}`,
+            message: `Invitation sent to ${email}`,
             link: inviteLink,
             schoolName: school.name,
             code: school.code

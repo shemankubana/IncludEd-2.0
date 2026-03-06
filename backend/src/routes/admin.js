@@ -3,6 +3,7 @@ import { User } from '../models/User.js';
 import { LessonProgress } from '../models/LessonProgress.js';
 import { StudentStats } from '../models/StudentStats.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { sendTeacherInvite } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -131,6 +132,38 @@ router.get('/stats', authenticateToken, requireAdmin, async (req, res) => {
         ]);
 
         res.json({ totalStudents, totalTeachers, pendingTeachers });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+// POST /api/admin/invite-teacher — invite someone to create a teacher account
+router.post('/invite-teacher', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required' });
+
+        const admin = await User.findByPk(req.user.userId);
+        const { School } = await import('../models/School.js');
+        const school = admin.schoolId ? await School.findByPk(admin.schoolId) : null;
+        if (!school) return res.status(400).json({ error: 'No school associated with your admin account' });
+
+        const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:8080'}/auth?code=${school.code}&role=teacher`;
+
+        try {
+            await sendTeacherInvite({
+                toEmail: email,
+                adminName: `${admin.firstName} ${admin.lastName}`,
+                schoolName: school.name,
+                schoolCode: school.code,
+            });
+            console.log(`✉️ Teacher invite sent to ${email}`);
+        } catch (emailErr) {
+            console.warn(`⚠️ Teacher invite email failed: ${emailErr.message}`);
+        }
+
+        res.json({ message: `Teacher invitation sent to ${email}`, link: inviteLink });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

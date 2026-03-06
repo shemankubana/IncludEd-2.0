@@ -40,7 +40,7 @@ router.get('/', authenticateToken, async (req, res) => {
             where: { userId: req.user.userId },
             include: [{
                 model: Literature,
-                attributes: ['id', 'title', 'author', 'imageUrl', 'wordCount', 'subject']
+                attributes: ['id', 'title', 'author', 'imageUrl', 'wordCount', 'subject', 'sections']
             }]
         });
         res.json(progress);

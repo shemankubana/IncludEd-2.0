@@ -111,6 +111,7 @@ class ComprehensionRecordRequest(BaseModel):
     time_spent_s: float = 0
     quiz_score: Optional[float] = None
     characters_seen: Optional[List[str]] = None
+    section_text: str = ""  # raw section content for theme extraction (D4)
 
 
 class HighlightRecordRequest(BaseModel):
@@ -164,6 +165,12 @@ class RecapTextRequest(BaseModel):
     language: str = "en"
 
 
+class CommonHighlightRequest(BaseModel):
+    highlights: List[Dict[str, Any]]  # [{student_name, text, section_id, timestamp}]
+    book_title: str = ""
+    min_students: int = 2
+
+
 # ── Core Literature Analysis Endpoints ───────────────────────────────────────
 
 @app.get("/")
@@ -206,11 +213,12 @@ async def analyze_pdf(
         questions     = result.questions,
         metadata      = result.metadata,
         book_brain    = {
-            "difficulty_map":  brain_result.difficulty_map,
-            "vocabulary":      brain_result.vocabulary,
-            "characters":      brain_result.characters,
-            "summary_stats":   brain_result.summary_stats,
-            "struggle_zones":  brain_result.struggle_zones,
+            "difficulty_map":        brain_result.difficulty_map,
+            "vocabulary":            brain_result.vocabulary,
+            "characters":            brain_result.characters,
+            "summary_stats":         brain_result.summary_stats,
+            "struggle_zones":        brain_result.struggle_zones,
+            "cultural_context_bank": brain_result.cultural_context_bank,
         },
     )
 
@@ -244,11 +252,12 @@ async def reanalyze_text(req: AnalyzeTextRequest):
         questions     = result.questions,
         metadata      = result.metadata,
         book_brain    = {
-            "difficulty_map":  brain_result.difficulty_map,
-            "vocabulary":      brain_result.vocabulary,
-            "characters":      brain_result.characters,
-            "summary_stats":   brain_result.summary_stats,
-            "struggle_zones":  brain_result.struggle_zones,
+            "difficulty_map":        brain_result.difficulty_map,
+            "vocabulary":            brain_result.vocabulary,
+            "characters":            brain_result.characters,
+            "summary_stats":         brain_result.summary_stats,
+            "struggle_zones":        brain_result.struggle_zones,
+            "cultural_context_bank": brain_result.cultural_context_bank,
         },
     )
 
@@ -271,11 +280,12 @@ async def book_brain_analyze(req: BookBrainRequest):
         req.units, req.doc_type, req.language, req.title, req.author,
     )
     return {
-        "difficulty_map":  result.difficulty_map,
-        "vocabulary":      result.vocabulary,
-        "characters":      result.characters,
-        "summary_stats":   result.summary_stats,
-        "struggle_zones":  result.struggle_zones,
+        "difficulty_map":        result.difficulty_map,
+        "vocabulary":            result.vocabulary,
+        "characters":            result.characters,
+        "summary_stats":         result.summary_stats,
+        "struggle_zones":        result.struggle_zones,
+        "cultural_context_bank": result.cultural_context_bank,
     }
 
 
@@ -404,6 +414,7 @@ async def record_section_read(req: ComprehensionRecordRequest):
         req.student_id, req.book_id, req.section_id,
         req.section_title, req.chapter_title,
         req.time_spent_s, req.quiz_score, req.characters_seen,
+        req.section_text,
     )
     return {"status": "recorded"}
 
@@ -422,6 +433,15 @@ async def record_highlight(req: HighlightRecordRequest):
 async def record_vocab_lookup(req: VocabRecordRequest):
     """Record a vocabulary word lookup."""
     comprehension_tracker.record_vocab_lookup(
+        req.student_id, req.book_id, req.word,
+    )
+    return {"status": "recorded"}
+
+
+@app.post("/comprehension/vocab-mastered", tags=["comprehension"])
+async def record_vocab_mastered(req: VocabRecordRequest):
+    """Record that a student has mastered a vocabulary word."""
+    comprehension_tracker.record_vocab_mastered(
         req.student_id, req.book_id, req.word,
     )
     return {"status": "recorded"}
@@ -483,6 +503,62 @@ async def get_reading_level(student_id: str):
     return {"student_id": student_id, "reading_level": level}
 
 
+class HighlightFeedbackRequest(BaseModel):
+    student_id: str
+    category: str  # figurative_language | archaic_idiom | cultural_reference | vocabulary_gap | general
+    highlighted_text: str = ""
+    difficulty_estimate: float = 0.5  # 0-1 how hard the passage seemed
+
+
+@app.post("/learner/highlight-feedback", tags=["learner"])
+async def learner_highlight_feedback(req: HighlightFeedbackRequest):
+    """
+    Apply targeted EMA update to learner embedding based on highlight category.
+
+    Category → embedding dimension mapping:
+      figurative_language → vec[95] (literary device recognition = adaptation slot 7)
+      archaic_idiom       → vec[65] (frustration proxy) + vec[117] (vocab lookup freq)
+      cultural_reference  → vec[67] (help-seeking behaviour)
+      vocabulary_gap      → vec[117] (vocab lookup freq) + vec[65] (mild frustration)
+      general             → vec[116] (highlight frequency)
+    """
+    import numpy as np
+    ALPHA = 0.2  # stronger signal than session-end EMA (α=0.15) for real-time feedback
+    vec = learner_embedding.get_or_create(req.student_id)
+    diff = req.difficulty_estimate
+
+    if req.category == "figurative_language":
+        # Student struggled with a literary device — update recognition signal
+        vec[95] = (1 - ALPHA) * vec[95] + ALPHA * diff
+        vec[67] = (1 - ALPHA) * vec[67] + ALPHA * 0.7  # boost help-seeking
+    elif req.category == "archaic_idiom":
+        # Archaic language = frustration + high vocab lookup
+        vec[65] = (1 - ALPHA) * vec[65] + ALPHA * diff          # frustration
+        vec[117] = (1 - ALPHA) * vec[117] + ALPHA * 0.8         # vocab lookup freq
+    elif req.category == "cultural_reference":
+        # Cultural gap — strengthen help-seeking signal
+        vec[67] = (1 - ALPHA) * vec[67] + ALPHA * 0.75
+        vec[65] = (1 - ALPHA) * vec[65] + ALPHA * diff * 0.5    # mild frustration
+    elif req.category == "vocabulary_gap":
+        # Pure vocabulary difficulty
+        vec[117] = (1 - ALPHA) * vec[117] + ALPHA * 0.7
+        vec[65] = (1 - ALPHA) * vec[65] + ALPHA * diff * 0.4
+    else:
+        # General highlight — just update highlight frequency
+        vec[116] = (1 - ALPHA) * vec[116] + ALPHA * 0.6
+
+    # Clip to [0, 1]
+    vec = np.clip(vec, 0.0, 1.0)
+    learner_embedding._cache[req.student_id] = vec
+    learner_embedding._save(req.student_id, vec)
+
+    return {
+        "student_id": req.student_id,
+        "category": req.category,
+        "embedding_updated": True,
+    }
+
+
 # ── Teacher Intelligence ─────────────────────────────────────────────────────
 
 @app.post("/teacher/student-summary", tags=["teacher"])
@@ -504,6 +580,18 @@ async def teacher_class_alerts(req: ClassAlertsRequest):
     return {"alerts": alerts}
 
 
+@app.post("/teacher/common-highlights", tags=["teacher"])
+async def teacher_common_highlights(req: CommonHighlightRequest):
+    """
+    Detect passages highlighted by multiple students (D6 deliverable).
+    Alerts teacher when ≥ min_students highlight the same passage.
+    """
+    alerts = teacher_intelligence.common_highlight_alerts(
+        req.highlights, req.book_title, req.min_students,
+    )
+    return {"alerts": alerts}
+
+
 @app.post("/teacher/recap", tags=["teacher"])
 async def teacher_generate_recap(req: RecapTextRequest):
     """Generate 'Story So Far' recap text."""
@@ -512,11 +600,87 @@ async def teacher_generate_recap(req: RecapTextRequest):
     return {"recap": recap_text, "data": recap_data}
 
 
+# ── Poem Analysis (Phase 2 + Phase 7) ────────────────────────────────────────
+
+class PoemAnalyzeRequest(BaseModel):
+    text: str
+    language: str = "en"
+
+
+@app.post("/poem/analyze", tags=["poem"])
+async def poem_analyze(req: PoemAnalyzeRequest):
+    """
+    Analyse a poem: split into stanzas, detect emotion + rhyme scheme per stanza.
+
+    Returns:
+      {
+        "stanzas": [
+          {
+            "stanza_index": int,
+            "lines": [str],
+            "emotion": str,
+            "intensity": float,
+            "rhyme_scheme": str,
+            "end_words": [str],
+            "color_tint": str
+          }
+        ],
+        "dominant_emotion": str,
+        "rhyme_pattern": str  # overall pattern
+      }
+    """
+    from ml_pipeline.emotion_analyzer import get_emotion_analyzer
+    analyzer = get_emotion_analyzer()
+    stanzas = await asyncio.to_thread(
+        analyzer.analyze_poem_stanzas, req.text, req.language
+    )
+    if not stanzas:
+        return {"stanzas": [], "dominant_emotion": "neutral", "rhyme_pattern": "free verse"}
+
+    # Dominant emotion: most frequent non-neutral emotion
+    from collections import Counter as _Counter
+    emotion_counts = _Counter(s["emotion"] for s in stanzas if s["emotion"] != "neutral")
+    dominant = emotion_counts.most_common(1)[0][0] if emotion_counts else "neutral"
+
+    # Overall rhyme pattern: concatenate first stanza's scheme
+    rhyme_pattern = stanzas[0]["rhyme_scheme"] if stanzas else "free verse"
+
+    return {
+        "stanzas": stanzas,
+        "dominant_emotion": dominant,
+        "rhyme_pattern": rhyme_pattern,
+    }
+
+
 # ── Helper Endpoints ─────────────────────────────────────────────────────────
 
 @app.post("/adapt-text")
 async def adapt_text(request: Any):
-    return {"adaptedText": request.text[:5000], "strategy": "Original"}
+    """
+    Simplify a section of text using the rule-based simplification engine.
+    Used for per-section background simplification of uploaded content.
+    Works without Ollama (rule-based archaic word replacement + sentence splitting).
+    """
+    text = getattr(request, "text", None) or (request if isinstance(request, str) else "")
+    doc_type = getattr(request, "doc_type", "generic") or "generic"
+    if not text:
+        return {"adaptedText": "", "strategy": "empty"}
+
+    result = await asyncio.to_thread(
+        simplification_svc.simplify,
+        text,
+        "",   # book_title — not needed for section-level adaptation
+        "",   # author
+        doc_type,
+        "",   # chapter_context
+        "",   # speaker
+        "intermediate",
+        "en",
+    )
+    return {
+        "adaptedText": result.get("simple_version", text),
+        "strategy": result.get("tier", "rule_based"),
+    }
 
 @app.post("/tts/generate")
 async def generate_tts(request: Any):

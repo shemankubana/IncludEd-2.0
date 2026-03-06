@@ -19,9 +19,10 @@ import { useRef, useEffect, useCallback, useState } from "react";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
-const FLUSH_INTERVAL     = 10_000; // ms between batch sends
-const IDLE_THRESHOLD     = 8_000;  // ms of no movement = attention lapse
-const SCROLL_SAMPLE_RATE = 200;    // ms between scroll samples
+const FLUSH_INTERVAL          = 10_000; // ms between batch sends
+const IDLE_THRESHOLD          = 8_000;  // ms of no movement = attention lapse
+const SCROLL_SAMPLE_RATE      = 200;    // ms between scroll samples
+const ATTENTION_REFRESH_RATE  = 2_500;  // ms — real-time struggle score (D1)
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -48,6 +49,8 @@ export interface AttentionState {
     backtrackFreq:      number; // [0,1]
     attentionScore:     number; // [0,1] composite
     sessionFatigue:     number; // [0,1] accumulated fatigue
+    touchPressureNorm:  number; // [0,1] avg touch pressure — frustration proxy (D1)
+    wordDwellMs:        number; // ms spent on current visible word region (D1)
 }
 
 interface UseTelemetryOptions {
@@ -146,8 +149,15 @@ export function useTelemetry({
     const dwellSamples       = useRef(0);
     const idleTimer          = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Click tracking
+    // Click / touch pressure tracking
     const clickCount         = useRef(0);
+    const touchPressureAccum = useRef(0);   // sum of pointer pressures (0–1)
+    const touchPressureCount = useRef(0);   // number of pressure samples
+
+    // Word-level dwell: time elapsed on current visible word range
+    const lastScrollStopTime = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const wordDwellAccum     = useRef(0);   // ms spent stationary on current word
+    const wordDwellStart     = useRef(Date.now());
 
     // Session timing
     const sessionStart       = useRef(Date.now());
@@ -164,6 +174,8 @@ export function useTelemetry({
         backtrackFreq:     0.0,
         attentionScore:    0.7,
         sessionFatigue:    0.0,
+        touchPressureNorm: 0.0,
+        wordDwellMs:       0,
     });
 
     // Push event into queue
@@ -199,16 +211,27 @@ export function useTelemetry({
         // Session fatigue: increases with time (30-min session = 1.0)
         const sessionFatigue = Math.min(1, sessionSecs / 1800);
 
-        // Composite attention score (higher = better focus)
+        // Touch pressure: avg normalised pressure (high = frustration signal)
+        const touchPressureNorm = touchPressureCount.current > 0
+            ? Math.min(1, touchPressureAccum.current / touchPressureCount.current)
+            : 0;
+
+        // Word dwell: current accumulated ms on visible region
+        const wordDwellMs = wordDwellAccum.current;
+
+        // Composite attention score (higher = better focus).
+        // Touch pressure > 0.6 reduces score (frustration signal, D1).
+        const pressurePenalty = touchPressureNorm > 0.6 ? (touchPressureNorm - 0.6) * 0.25 : 0;
         const attentionScore = Math.max(
             0,
             Math.min(
                 1,
-                0.4 * readingSpeedNorm
+                0.35 * readingSpeedNorm
                     + 0.2 * (1 - mouseDwellNorm)
                     + 0.2 * (1 - scrollHesitation)
-                    + 0.2 * (1 - backtrackFreq)
+                    + 0.15 * (1 - backtrackFreq)
                     - 0.1 * sessionFatigue
+                    - pressurePenalty
             )
         );
 
@@ -219,6 +242,8 @@ export function useTelemetry({
             backtrackFreq,
             attentionScore,
             sessionFatigue,
+            touchPressureNorm,
+            wordDwellMs,
         };
     }, []);
 
@@ -316,17 +341,62 @@ export function useTelemetry({
             });
         };
 
+        // Touch pressure handler (D1: frustration correlates with harder taps).
+        // PointerEvent.pressure is 0–1 (0 = no contact, 1 = max force).
+        // Hardware that doesn't report pressure returns 0.5 for active contact.
+        const handlePointerDown = (e: PointerEvent) => {
+            const pressure = e.pressure ?? 0;
+            if (pressure > 0 && pressure !== 0.5) {
+                // Only count when device actually reports pressure (> default 0.5)
+                touchPressureAccum.current += pressure;
+                touchPressureCount.current += 1;
+                if (pressure > 0.7) {
+                    // Hard tap — signal of frustration
+                    push({
+                        type: "click",
+                        timestamp: Date.now(),
+                        payload: { touch_pressure: pressure, hard_tap: 1 },
+                    });
+                }
+            }
+        };
+
+        // Word-level dwell: when scrolling stops, start accumulating dwell time
+        // on the currently visible text region (proxy for word fixation).
+        const handleScrollForDwell = () => {
+            if (lastScrollStopTime.current) clearTimeout(lastScrollStopTime.current);
+            wordDwellStart.current = Date.now();
+            lastScrollStopTime.current = setTimeout(() => {
+                // Scrolling stopped — start counting dwell time
+                const dwell = Date.now() - wordDwellStart.current;
+                wordDwellAccum.current += dwell;
+                if (dwell > 3_000) {
+                    // 3+ second fixation on visible region = decoding difficulty
+                    push({
+                        type: "mouse_pause",
+                        timestamp: Date.now(),
+                        payload: { word_fixation_ms: dwell, region: window.scrollY },
+                    });
+                }
+            }, 600); // 600ms without scrolling = paused on content
+        };
+
         window.addEventListener("scroll", handleScroll, { passive: true });
+        window.addEventListener("scroll", handleScrollForDwell, { passive: true });
         window.addEventListener("mousemove", handleMouseMove, { passive: true });
         window.addEventListener("touchmove", handleTouchMove, { passive: true });
         window.addEventListener("click", handleClick, { passive: true });
+        window.addEventListener("pointerdown", handlePointerDown, { passive: true });
 
         return () => {
             window.removeEventListener("scroll", handleScroll);
+            window.removeEventListener("scroll", handleScrollForDwell);
             window.removeEventListener("mousemove", handleMouseMove);
             window.removeEventListener("touchmove", handleTouchMove);
             window.removeEventListener("click", handleClick);
+            window.removeEventListener("pointerdown", handlePointerDown);
             if (idleTimer.current) clearTimeout(idleTimer.current);
+            if (lastScrollStopTime.current) clearTimeout(lastScrollStopTime.current);
         };
     }, [push]);
 
@@ -335,6 +405,17 @@ export function useTelemetry({
         const interval = setInterval(flush, FLUSH_INTERVAL);
         return () => clearInterval(interval);
     }, [flush]);
+
+    // Real-time struggle score refresh every 2.5s (D1 deliverable).
+    // Updates attentionState locally without sending a network request.
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const state = computeAttentionState();
+            setAttentionState(state);
+            onStateUpdate?.(state);
+        }, ATTENTION_REFRESH_RATE);
+        return () => clearInterval(interval);
+    }, [computeAttentionState, onStateUpdate]);
 
     // Update words read when section changes
     const markSectionRead = useCallback((sectionWordCount: number) => {

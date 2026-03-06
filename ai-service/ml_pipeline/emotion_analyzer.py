@@ -343,6 +343,110 @@ class EmotionAnalyzer:
             "anim":      anim,
         }
 
+    def analyze_poem_stanzas(
+        self,
+        poem_text: str,
+        language: str = "en",
+    ) -> List[Dict[str, Any]]:
+        """
+        Analyse a full poem, splitting it into stanzas and detecting:
+          - emotion + intensity per stanza
+          - rhyme scheme (ABAB, AABB, etc.)
+          - end words for rhyme highlighting
+
+        Returns list of stanza dicts:
+          [{
+            "stanza_index": int,
+            "lines": [str],
+            "emotion": str,
+            "intensity": float,
+            "anim": dict,
+            "rhyme_scheme": str,  # e.g. "ABAB" or "AABB"
+            "end_words": [str],
+            "color_tint": str,   # CSS colour for stanza background
+          }]
+        """
+        stanzas = self._split_into_stanzas(poem_text)
+        results = []
+
+        for i, stanza_lines in enumerate(stanzas):
+            stanza_text = " ".join(stanza_lines)
+            emotion_data = self.analyze(stanza_text, language)
+
+            end_words = [self._last_word(line) for line in stanza_lines]
+            rhyme_scheme = self._detect_rhyme_scheme(end_words)
+
+            results.append({
+                "stanza_index": i,
+                "lines": stanza_lines,
+                "emotion": emotion_data["emotion"],
+                "intensity": emotion_data["intensity"],
+                "anim": emotion_data["anim"],
+                "rhyme_scheme": rhyme_scheme,
+                "end_words": end_words,
+                "color_tint": emotion_data["anim"]["color_tint"],
+            })
+
+        return results
+
+    def _split_into_stanzas(self, text: str) -> List[List[str]]:
+        """Split poem text into stanzas (separated by blank lines)."""
+        raw_stanzas = re.split(r"\n\s*\n", text.strip())
+        result = []
+        for raw in raw_stanzas:
+            lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
+            if lines:
+                result.append(lines)
+        return result
+
+    @staticmethod
+    def _last_word(line: str) -> str:
+        """Extract the last alphabetic word from a line (for rhyme detection)."""
+        words = re.findall(r"[a-zA-Z']+", line)
+        return words[-1].lower().rstrip("'s") if words else ""
+
+    @staticmethod
+    def _detect_rhyme_scheme(end_words: List[str]) -> str:
+        """
+        Detect rhyme scheme (simplified: checks last 2 chars of end words).
+        Returns label like "ABAB", "AABB", "ABCABC", or "free verse".
+        """
+        if len(end_words) < 2:
+            return "free verse"
+
+        # Map end-word suffixes to letters
+        suffix_map: Dict[str, str] = {}
+        scheme: List[str] = []
+        next_letter = ord("A")
+
+        for word in end_words:
+            suffix = word[-2:] if len(word) >= 2 else word
+            if suffix not in suffix_map:
+                suffix_map[suffix] = chr(next_letter)
+                next_letter += 1
+                if next_letter > ord("Z"):
+                    next_letter = ord("A")
+            scheme.append(suffix_map[suffix])
+
+        pattern = "".join(scheme)
+
+        # Classify common patterns
+        if len(scheme) >= 4:
+            if pattern[:4] in ("ABAB", "CDCD", "EFEF"):
+                return "ABAB"
+            if pattern[:4] in ("AABB", "CCDD", "EEFF"):
+                return "AABB"
+            if pattern[:4] in ("ABBA", "CDDC"):
+                return "ABBA"
+
+        if len(set(scheme)) == 1:
+            return "monorhyme"
+
+        if len(set(scheme)) >= len(scheme) * 0.8:
+            return "free verse"
+
+        return pattern[:8]
+
     @property
     def ml_ready(self) -> bool:
         return self._ml_ready

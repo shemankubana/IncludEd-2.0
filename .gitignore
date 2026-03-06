@@ -14,5 +14,3 @@ ai-service/models/
 *.npz
 .DS_Store
 Screenshot*
-__pycache__/
-*.pyc
