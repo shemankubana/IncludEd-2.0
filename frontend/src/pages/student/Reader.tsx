@@ -173,7 +173,6 @@ const AdaptiveReader = () => {
         sessionId,
         literatureId: id ?? null,
         idToken,
-        wordCount: words.length,
     });
 
     // ── RL Adaptation ──────────────────────────────────────────────────────────

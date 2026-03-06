@@ -19,10 +19,10 @@ import { useRef, useEffect, useCallback, useState } from "react";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
-const FLUSH_INTERVAL          = 10_000; // ms between batch sends
-const IDLE_THRESHOLD          = 8_000;  // ms of no movement = attention lapse
-const SCROLL_SAMPLE_RATE      = 200;    // ms between scroll samples
-const ATTENTION_REFRESH_RATE  = 2_500;  // ms — real-time struggle score (D1)
+const FLUSH_INTERVAL = 10_000; // ms between batch sends
+const IDLE_THRESHOLD = 8_000;  // ms of no movement = attention lapse
+const SCROLL_SAMPLE_RATE = 200;    // ms between scroll samples
+const ATTENTION_REFRESH_RATE = 2_500;  // ms — real-time struggle score (D1)
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -30,40 +30,39 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 export interface TelemetryEvent {
     type:
-        | "scroll"
-        | "mouse_pause"
-        | "click"
-        | "paragraph_enter"
-        | "paragraph_exit"
-        | "attention_lapse"
-        | "backtrack"
-        | "reading_speed";
+    | "scroll"
+    | "mouse_pause"
+    | "click"
+    | "paragraph_enter"
+    | "paragraph_exit"
+    | "attention_lapse"
+    | "backtrack"
+    | "reading_speed";
     timestamp: number;
     payload: Record<string, number | string | boolean>;
 }
 
 export interface AttentionState {
-    readingSpeedNorm:   number; // [0,1] normalised from WPM
-    mouseDwellNorm:     number; // [0,1]
-    scrollHesitation:   number; // [0,1]
-    backtrackFreq:      number; // [0,1]
-    attentionScore:     number; // [0,1] composite
-    sessionFatigue:     number; // [0,1] accumulated fatigue
-    touchPressureNorm:  number; // [0,1] avg touch pressure — frustration proxy (D1)
-    wordDwellMs:        number; // ms spent on current visible word region (D1)
+    readingSpeedNorm: number; // [0,1] normalised from WPM
+    mouseDwellNorm: number; // [0,1]
+    scrollHesitation: number; // [0,1]
+    backtrackFreq: number; // [0,1]
+    attentionScore: number; // [0,1] composite
+    sessionFatigue: number; // [0,1] accumulated fatigue
+    touchPressureNorm: number; // [0,1] avg touch pressure — frustration proxy (D1)
+    wordDwellMs: number; // ms spent on current visible word region (D1)
 }
 
 interface UseTelemetryOptions {
-    sessionId:   string | null;
+    sessionId: string | null;
     literatureId: string | null;
-    idToken:     string | null;
-    wordCount:   number;
+    idToken: string | null;
     onStateUpdate?: (state: AttentionState) => void;
 }
 
 // ── IndexedDB offline queue ────────────────────────────────────────────────────
 
-const DB_NAME    = "included_telemetry";
+const DB_NAME = "included_telemetry";
 const STORE_NAME = "pending_events";
 const DB_VERSION = 1;
 
@@ -74,7 +73,7 @@ async function openDB(): Promise<IDBDatabase> {
             req.result.createObjectStore(STORE_NAME, { autoIncrement: true });
         };
         req.onsuccess = () => resolve(req.result);
-        req.onerror   = () => reject(req.error);
+        req.onerror = () => reject(req.error);
     });
 }
 
@@ -130,52 +129,51 @@ export function useTelemetry({
     sessionId,
     literatureId,
     idToken,
-    wordCount,
     onStateUpdate,
 }: UseTelemetryOptions) {
     // Event queue
     const queue = useRef<TelemetryEvent[]>([]);
 
     // Scroll tracking
-    const lastScrollY        = useRef(0);
-    const lastScrollTime     = useRef(Date.now());
-    const scrollSpeeds       = useRef<number[]>([]);
-    const backtrackCount     = useRef(0);
-    const scrollEventCount   = useRef(0);
+    const lastScrollY = useRef(0);
+    const lastScrollTime = useRef(Date.now());
+    const scrollSpeeds = useRef<number[]>([]);
+    const backtrackCount = useRef(0);
+    const scrollEventCount = useRef(0);
 
     // Mouse dwell
-    const lastMoveTime       = useRef(Date.now());
-    const dwellAccum         = useRef(0);
-    const dwellSamples       = useRef(0);
-    const idleTimer          = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastMoveTime = useRef(Date.now());
+    const dwellAccum = useRef(0);
+    const dwellSamples = useRef(0);
+    const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Click / touch pressure tracking
-    const clickCount         = useRef(0);
+    const clickCount = useRef(0);
     const touchPressureAccum = useRef(0);   // sum of pointer pressures (0–1)
     const touchPressureCount = useRef(0);   // number of pressure samples
 
     // Word-level dwell: time elapsed on current visible word range
     const lastScrollStopTime = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const wordDwellAccum     = useRef(0);   // ms spent stationary on current word
-    const wordDwellStart     = useRef(Date.now());
+    const wordDwellAccum = useRef(0);   // ms spent stationary on current word
+    const wordDwellStart = useRef(Date.now());
 
     // Session timing
-    const sessionStart       = useRef(Date.now());
-    const sectionStart       = useRef(Date.now());
+    const sessionStart = useRef(Date.now());
+    const sectionStart = useRef(Date.now());
 
     // Reading speed estimation
-    const wordsRead          = useRef(0);
+    const wordsRead = useRef(0);
 
     // Derived state
     const [attentionState, setAttentionState] = useState<AttentionState>({
-        readingSpeedNorm:  0.5,
-        mouseDwellNorm:    0.0,
-        scrollHesitation:  0.0,
-        backtrackFreq:     0.0,
-        attentionScore:    0.7,
-        sessionFatigue:    0.0,
+        readingSpeedNorm: 0.5,
+        mouseDwellNorm: 0.0,
+        scrollHesitation: 0.0,
+        backtrackFreq: 0.0,
+        attentionScore: 0.7,
+        sessionFatigue: 0.0,
         touchPressureNorm: 0.0,
-        wordDwellMs:       0,
+        wordDwellMs: 0,
     });
 
     // Push event into queue
@@ -227,11 +225,11 @@ export function useTelemetry({
             Math.min(
                 1,
                 0.35 * readingSpeedNorm
-                    + 0.2 * (1 - mouseDwellNorm)
-                    + 0.2 * (1 - scrollHesitation)
-                    + 0.15 * (1 - backtrackFreq)
-                    - 0.1 * sessionFatigue
-                    - pressurePenalty
+                + 0.2 * (1 - mouseDwellNorm)
+                + 0.2 * (1 - scrollHesitation)
+                + 0.15 * (1 - backtrackFreq)
+                - 0.1 * sessionFatigue
+                - pressurePenalty
             )
         );
 

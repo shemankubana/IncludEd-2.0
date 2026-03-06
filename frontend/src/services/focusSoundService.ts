@@ -33,7 +33,7 @@ export interface FocusSoundConfig {
  * Single audio context per document lifetime to avoid conflicts
  */
 let audioContext: AudioContext | null = null;
-let currentSource: AudioBufferSource Node | GainNode | null = null;
+let currentSource: AudioBufferSourceNode | GainNode | null = null;
 let gainNode: GainNode | null = null;
 let isPlaying = false;
 

@@ -8,6 +8,17 @@ export const authenticateToken = async (req, res, next) => {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
+  // Development Bypass
+  if (token === 'dev-admin' && process.env.NODE_ENV !== 'production') {
+    req.user = {
+      uid: 'dev-admin-id',
+      userId: 'dev-admin-id',
+      email: 'dev@included.com',
+      role: 'admin'
+    };
+    return next();
+  }
+
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
     // You can attach the decoded token or fetch a more detailed user profile from db

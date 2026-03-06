@@ -82,7 +82,6 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/sessions', sessionsRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stats', statsRoutes);
 
 // Health check
