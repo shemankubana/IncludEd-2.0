@@ -57,7 +57,7 @@ interface Section {
 
 // ── IndexedDB helpers for offline progress ────────────────────────────────────
 
-const IDB_DB    = "included_reader";
+const IDB_DB = "included_reader";
 const IDB_STORE = "progress";
 
 async function idbGetProgress(litId: string): Promise<number | null> {
@@ -69,7 +69,7 @@ async function idbGetProgress(litId: string): Promise<number | null> {
             const tx = req.result.transaction(IDB_STORE, "readonly");
             const get = tx.objectStore(IDB_STORE).get(litId);
             get.onsuccess = () => resolve(get.result?.section ?? null);
-            get.onerror   = () => resolve(null);
+            get.onerror = () => resolve(null);
         };
         req.onerror = () => resolve(null);
     });
@@ -93,36 +93,36 @@ async function idbSaveProgress(litId: string, section: number): Promise<void> {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 const AdaptiveReader = () => {
-    const navigate  = useNavigate();
-    const { id }    = useParams();
+    const navigate = useNavigate();
+    const { id } = useParams();
     const { user, profile, dyslexicMode } = useAuth();
 
     // Reader state
-    const [isPlaying,          setIsPlaying]          = useState(false);
-    const [focusMode,          setFocusMode]           = useState(false);
-    const [loading,            setLoading]             = useState(true);
-    const [lesson,             setLesson]              = useState<any>(null);
-    const [intro,              setIntro]               = useState<string | null>(null);
-    const [showIntro,          setShowIntro]           = useState(true);
-    const [sections,           setSections]            = useState<Section[]>([]);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [focusMode, setFocusMode] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [lesson, setLesson] = useState<any>(null);
+    const [intro, setIntro] = useState<string | null>(null);
+    const [showIntro, setShowIntro] = useState(true);
+    const [sections, setSections] = useState<Section[]>([]);
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
-    const [showQuizPrompt,     setShowQuizPrompt]      = useState(false);
-    const [contentType,        setContentType]         = useState<"play" | "novel" | "poem" | "generic">("generic");
-    const [sessionId,          setSessionId]           = useState<string | null>(null);
-    const [idToken,            setIdToken]             = useState<string | null>(null);
-    const [showRLBadge,        setShowRLBadge]         = useState(false);
+    const [showQuizPrompt, setShowQuizPrompt] = useState(false);
+    const [contentType, setContentType] = useState<"play" | "novel" | "poem" | "generic">("generic");
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [idToken, setIdToken] = useState<string | null>(null);
+    const [showRLBadge, setShowRLBadge] = useState(false);
 
     // Book Brain + Comprehension Graph state
-    const [bookBrain,          setBookBrain]           = useState<any>(null);
-    const [showRecap,          setShowRecap]           = useState(false);
-    const [recapText,          setRecapText]           = useState<string | null>(null);
-    const [showStrugglePrep,   setShowStrugglePrep]    = useState(false);
-    const [struggleVocab,      setStruggleVocab]       = useState<any[]>([]);
+    const [bookBrain, setBookBrain] = useState<any>(null);
+    const [showRecap, setShowRecap] = useState(false);
+    const [recapText, setRecapText] = useState<string | null>(null);
+    const [showStrugglePrep, setShowStrugglePrep] = useState(false);
+    const [struggleVocab, setStruggleVocab] = useState<any[]>([]);
 
     // ADHD inline micro-check state (D3 deliverable)
-    const [microCheck,         setMicroCheck]          = useState<{ question: string; options: string[]; answer: string } | null>(null);
-    const [microCheckAnswer,   setMicroCheckAnswer]    = useState<string | null>(null);
-    const microCheckWordsRef   = useRef(0); // words read since last micro-check
+    const [microCheck, setMicroCheck] = useState<{ question: string; options: string[]; answer: string } | null>(null);
+    const [microCheckAnswer, setMicroCheckAnswer] = useState<string | null>(null);
+    const microCheckWordsRef = useRef(0); // words read since last micro-check
     const MICRO_CHECK_INTERVAL = 250;       // trigger every ~250 words
 
     // Scene summary card state (Phase 2 — Play mode "What just happened?")
@@ -134,8 +134,8 @@ const AdaptiveReader = () => {
     } | null>(null);
 
     // ADHD breathing break + cliffhanger teaser state (Phase 3)
-    const [breathingBreak, setBreathingBreak]     = useState(false);
-    const [breathPhase, setBreathPhase]           = useState<"inhale" | "hold" | "exhale">("inhale");
+    const [breathingBreak, setBreathingBreak] = useState(false);
+    const [breathPhase, setBreathPhase] = useState<"inhale" | "hold" | "exhale">("inhale");
     const [cliffhangerTeaser, setCliffhangerTeaser] = useState<string | null>(null);
     const breathIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const ADHD_SECTION_BREAK_EVERY = 3; // show breathing break every N sections
@@ -146,22 +146,18 @@ const AdaptiveReader = () => {
 
     // Session tracking for learner embedding
     const sessionStartRef = useRef<number>(Date.now());
-    const wordsReadRef    = useRef<number>(0);
-    const adaptationsRef  = useRef<number[]>([]);
+    const wordsReadRef = useRef<number>(0);
+    const adaptationsRef = useRef<number[]>([]);
 
     const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
 
     // TTS
     const [activeWordIndex, setActiveWordIndex] = useState(-1);
-    const [,                setCurrentTime]     = useState(0);
+    const [, setCurrentTime] = useState(0);
     const ttsRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-    const totalSections    = sections.length;
-    const currentSection   = sections[currentSectionIndex] || { title: "", content: "" };
-    // Use pre-computed simplified content for RL simplification actions (1=Light, 2=Heavy)
-    const useSimplified    = (adaptation.actionId === 1 || adaptation.actionId === 2) && !!currentSection.simplified_content;
-    const safeContent      = (useSimplified ? currentSection.simplified_content : currentSection.content) || "";
-    const words            = safeContent.split(/\s+/).filter(Boolean);
+    const totalSections = sections.length;
+    const currentSection = sections[currentSectionIndex] || { title: "", content: "" };
 
     // ── Disability encoding ────────────────────────────────────────────────────
     const disabilityEncoded: number = (() => {
@@ -189,6 +185,11 @@ const AdaptiveReader = () => {
         attentionState,
         pollIntervalMs: 5_000,
     });
+
+    // Use pre-computed simplified content for RL simplification actions (1=Light, 2=Heavy)
+    const useSimplified = (adaptation.actionId === 1 || adaptation.actionId === 2) && !!currentSection.simplified_content;
+    const safeContent = (useSimplified ? currentSection.simplified_content : currentSection.content) || "";
+    const words = safeContent.split(/\s+/).filter(Boolean);
 
     // ── RL → DyslexiaRenderer settings bridge ─────────────────────────────────
     // Each RL action maps to a specific DyslexiaSettings configuration.
@@ -251,7 +252,7 @@ const AdaptiveReader = () => {
                         method: "POST",
                         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                         body: JSON.stringify({
-                            literatureId:   id,
+                            literatureId: id,
                             disabilityType: profile?.disabilityType || "none",
                             textDifficulty: 0.5,
                         }),
@@ -295,8 +296,8 @@ const AdaptiveReader = () => {
                     const chunks: Section[] = [];
                     for (let i = 0; i < w.length; i += SIZE) {
                         chunks.push({
-                            title:     `Page ${Math.floor(i / SIZE) + 1}`,
-                            content:   w.slice(i, i + SIZE).join(" "),
+                            title: `Page ${Math.floor(i / SIZE) + 1}`,
+                            content: w.slice(i, i + SIZE).join(" "),
                             wordCount: Math.min(SIZE, w.length - i),
                         });
                     }
@@ -614,7 +615,7 @@ const AdaptiveReader = () => {
                         completionRate: 1.0,
                         status: "completed",
                     }),
-                }).catch(() => {});
+                }).catch(() => { });
             }
             navigate(`/student/quiz/${id}`);
         }
@@ -672,10 +673,10 @@ const AdaptiveReader = () => {
     // ── Helper: extract clean Act / Scene from messy ML titles ───────────────
     // e.g. "9 MACBETH ACT 1. SC. 2 DUNCAN MALCOLM..." → { act: "Act 1", scene: "Scene 2" }
     function parseActScene(title: string): { act: string; scene: string } {
-        const actM   = title.match(/ACT\s+(\d+|[IVX]+)/i);
+        const actM = title.match(/ACT\s+(\d+|[IVX]+)/i);
         const sceneM = title.match(/SC(?:ENE)?\.?\s*(\d+|[IVX]+)/i);
         return {
-            act:   actM   ? `Act ${actM[1]}`     : "Prologue",
+            act: actM ? `Act ${actM[1]}` : "Prologue",
             scene: sceneM ? `Scene ${sceneM[1]}` : "",
         };
     }
@@ -713,7 +714,7 @@ const AdaptiveReader = () => {
         if (contentType !== "play") return { actTitle: undefined, sceneTitle: currentSection.title };
         const { act, scene } = parseActScene(currentSection.title);
         return {
-            actTitle:   act   || undefined,
+            actTitle: act || undefined,
             sceneTitle: scene || currentSection.title,
         };
     }, [currentSection.title, contentType]);
@@ -1290,7 +1291,7 @@ const AdaptiveReader = () => {
                                     currentSection.faction
                                         ? Object.fromEntries(
                                             (currentSection.characters_present || []).map(c => [c.toUpperCase(), currentSection.faction!])
-                                          )
+                                        )
                                         : undefined
                                 }
                                 onComplete={() => {
@@ -1499,7 +1500,7 @@ const AdaptiveReader = () => {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ student_id: user.uid, book_id: id, word }),
-                            }).catch(() => {});
+                            }).catch(() => { });
                         }
                     }}
                 />
@@ -1555,7 +1556,7 @@ const AdaptiveReader = () => {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ student_id: user.uid, book_id: id, word }),
-                        }).catch(() => {});
+                        }).catch(() => { });
                     }
                 }}
                 onTTSPlay={(text) => {
@@ -1578,7 +1579,7 @@ const AdaptiveReader = () => {
                                 highlighted_text: text.slice(0, 200),
                                 difficulty_estimate: attentionState.scrollHesitation,
                             }),
-                        }).catch(() => {});
+                        }).catch(() => { });
                     }
                 }}
             />

@@ -223,7 +223,10 @@ const PoemRenderer: React.FC<PoemRendererProps> = ({
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.35 }}
                         className="w-full rounded-3xl overflow-hidden border border-border/50"
-                        style={{ background: stanza.color_tint + "40" }}
+                        style={{
+                            background: `linear-gradient(135deg, ${stanza.color_tint}20, ${stanza.color_tint}60)`,
+                            boxShadow: `0 10px 30px ${stanza.color_tint}15`
+                        }}
                     >
                         {/* Stanza emotion header */}
                         <div
@@ -277,9 +280,8 @@ const PoemRenderer: React.FC<PoemRendererProps> = ({
                                             }}
                                         >
                                             <p
-                                                className={`text-lg md:text-xl leading-relaxed font-medium ${
-                                                    isPlaying ? "text-primary" : "text-foreground"
-                                                } ${dyslexicFont ? "font-dyslexic" : ""}`}
+                                                className={`text-lg md:text-xl leading-relaxed font-medium ${isPlaying ? "text-primary" : "text-foreground"
+                                                    } ${dyslexicFont ? "font-dyslexic" : ""}`}
                                                 style={{ lineHeight: 2 }}
                                             >
                                                 {words.map((word, wi) => {

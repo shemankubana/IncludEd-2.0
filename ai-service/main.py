@@ -38,6 +38,7 @@ from services.simplification_service     import SimplificationService
 from services.learner_embedding          import LearnerEmbedding, SessionMetrics
 from services.comprehension_tracker      import ComprehensionTracker
 from services.teacher_intelligence       import TeacherIntelligence
+from services.teacher_recommendations    import get_recommendation_engine, StudentRecommendation
 from ml_pipeline import LiteratureAnalyzer, BookBrain
 from ml_pipeline.quiz_generator import PedagogicalQuestionGenerator
 
@@ -598,6 +599,113 @@ async def teacher_generate_recap(req: RecapTextRequest):
     recap_data = comprehension_tracker.get_recap(req.student_id, req.book_id)
     recap_text = teacher_intelligence.generate_recap_text(recap_data, req.language)
     return {"recap": recap_text, "data": recap_data}
+
+
+# ── Teacher Recommendations (D6: Actionable insights) ──────────────────────────
+
+class StudentRecommendationRequest(BaseModel):
+    student_id: str
+    student_name: str
+    student_profile: Dict[str, Any]
+    recent_sessions: List[Dict[str, Any]]
+
+
+class ClassRecommendationRequest(BaseModel):
+    class_id: str
+    students_profiles: List[Dict[str, Any]]
+    current_book: Optional[Dict[str, Any]] = None
+
+
+class RiskAlertRequest(BaseModel):
+    student_id: str
+    student_name: str
+    student_profile: Dict[str, Any]
+    recent_sessions: List[Dict[str, Any]]
+    alert_threshold: float = 0.3
+
+
+@app.post("/teacher/recommendations/student", tags=["recommendations"])
+async def get_student_recommendations(req: StudentRecommendationRequest):
+    """
+    Generate 1–3 actionable recommendations for an individual student (D6).
+    
+    Example use:
+    - Student has low attention score → recommend scheduling sessions in morning
+    - Student shows high frustration → suggest simplified text or smaller chunks
+    - Student frequently backtracks → recommend pre-reading vocabulary
+    """
+    engine = get_recommendation_engine()
+    recommendations = engine.recommend_for_student(
+        req.student_id,
+        req.student_name,
+        req.student_profile,
+        req.recent_sessions,
+    )
+    return {
+        "student_id": req.student_id,
+        "recommendations": [
+            {
+                "priority": r.priority,
+                "action": r.action,
+                "rationale": r.rationale,
+                "expected_impact": r.expected_impact,
+            }
+            for r in recommendations
+        ],
+    }
+
+
+@app.post("/teacher/recommendations/class", tags=["recommendations"])
+async def get_class_recommendations(req: ClassRecommendationRequest):
+    """
+    Analyze class-wide patterns and generate cohort recommendations (D6).
+    
+    Detects patterns like:
+    - Widespread attention drift → introduce 10-min chunks with breathing breaks
+    - High vocabulary lookup rates → pre-teach key words
+    - Subgroup disengagement → check-in or switch book genre
+    """
+    engine = get_recommendation_engine()
+    recommendations = engine.recommend_for_class(
+        req.class_id,
+        req.students_profiles,
+        req.current_book,
+    )
+    return {
+        "class_id": req.class_id,
+        "recommendations": [
+            {
+                "pattern": r.pattern,
+                "affected_students": r.affected_students,
+                "intervention": r.intervention,
+                "resource": r.resource,
+                "timeline": r.timeline,
+            }
+            for r in recommendations
+        ],
+    }
+
+
+@app.post("/teacher/alerts/risk", tags=["recommendations"])
+async def get_risk_alert(req: RiskAlertRequest):
+    """
+    Identify students at risk of disengagement or learning loss (D6).
+    
+    Returns high-priority alert if student shows:
+    - Critically low attention (< 0.3)
+    - High frustration signals
+    - Few sessions completed (early dropout indicators)
+    - Declining comprehension scores
+    """
+    engine = get_recommendation_engine()
+    alert = engine.generate_risk_alert(
+        req.student_id,
+        req.student_name,
+        req.student_profile,
+        req.recent_sessions,
+        req.alert_threshold,
+    )
+    return {"alert": alert} if alert else {"alert": None, "status": "low_risk"}
 
 
 # ── Poem Analysis (Phase 2 + Phase 7) ────────────────────────────────────────

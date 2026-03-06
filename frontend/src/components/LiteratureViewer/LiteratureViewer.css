@@ -249,6 +249,7 @@
     opacity: 0;
     transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -371,6 +372,7 @@
   color: hsl(var(--foreground));
   margin: 0 0 1.25rem;
   text-align: left;
+  max-width: 60ch;
 }
 
 /* ── Empty state ─────────────────────────────────────────────────────────────── */
@@ -553,7 +555,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .lit-error {
@@ -796,6 +800,151 @@
    CHARACTER MAP
    ══════════════════════════════════════════════════════════════════════════════ */
 
+/* ── ADHD Improvements ── */
+.adhd-ambient {
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem;
+  background: hsl(var(--card) / 0.5);
+  border-bottom: 1px solid hsl(var(--border) / 0.3);
+}
+
+.adhd-ambient__triggers {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.adhd-ambient__btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1.5px solid hsl(var(--border));
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.adhd-ambient__btn--active {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: hsl(var(--primary));
+}
+
+/* ── Gamification ── */
+.gamification-overlay {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1rem;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.gamification-stats {
+  background: hsl(var(--card));
+  border: 1.5px solid hsl(var(--border));
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 180px;
+  pointer-events: auto;
+}
+
+.gamification-level {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.gamification-xp-bar {
+  height: 6px;
+  background: hsl(var(--muted));
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.gamification-xp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #F59E0B, #FBDF11);
+  transition: width 0.4s ease;
+}
+
+.gamification-xp-text {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-align: right;
+  opacity: 0.6;
+}
+
+.badge-count {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  padding: 0.5rem 0.75rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 800;
+  box-shadow: 0 4px 12px hsl(var(--primary) / 0.3);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.badge-notification {
+  background: hsl(var(--card));
+  border: 1.5px solid hsl(var(--border));
+  padding: 1rem;
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  display: flex;
+  gap: 1rem;
+  width: 280px;
+  pointer-events: auto;
+}
+
+.badge-notification__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.badge-notification__title {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+}
+
+.badge-notification__name {
+  font-size: 1rem;
+  font-weight: 800;
+  margin-top: -0.1rem;
+}
+
+.badge-notification__desc {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  margin-top: 0.2rem;
+  opacity: 0.8;
+}
+
 .character-map {
   border-top: 1px solid hsl(var(--border));
   background: hsl(var(--card));
@@ -909,13 +1058,15 @@
   margin: 0.5rem 0 0.25rem;
 }
 
-.character-map__rel-list, .character-map__scene-list {
+.character-map__rel-list,
+.character-map__scene-list {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
 }
 
-.character-map__rel-badge, .character-map__scene-badge {
+.character-map__rel-badge,
+.character-map__scene-badge {
   font-size: 0.72rem;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
@@ -1075,7 +1226,8 @@
   margin-top: 0.3rem;
 }
 
-.vocab-sidebar__master-btn, .vocab-sidebar__save-btn {
+.vocab-sidebar__master-btn,
+.vocab-sidebar__save-btn {
   display: flex;
   align-items: center;
   gap: 0.2rem;
@@ -1089,9 +1241,20 @@
   color: hsl(var(--muted-foreground));
 }
 
-.vocab-sidebar__master-btn:hover { color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
-.vocab-sidebar__save-btn:hover { color: hsl(var(--primary)); border-color: hsl(var(--primary)); }
-.vocab-sidebar__master-btn--done { color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
+.vocab-sidebar__master-btn:hover {
+  color: hsl(var(--accent));
+  border-color: hsl(var(--accent));
+}
+
+.vocab-sidebar__save-btn:hover {
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+
+.vocab-sidebar__master-btn--done {
+  color: hsl(var(--accent));
+  border-color: hsl(var(--accent));
+}
 
 /* ══════════════════════════════════════════════════════════════════════════════
    ADHD CHUNKING ENGINE
@@ -1207,8 +1370,15 @@
 }
 
 @keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.2); }
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.2);
+  }
 }
 
 .adhd-celebration__title {
@@ -1348,12 +1518,10 @@
 }
 
 .dyslexia-renderer--alt-lines .dyslexia-renderer__text {
-  background: repeating-linear-gradient(
-    transparent 0,
-    transparent 2em,
-    hsl(var(--muted) / 0.3) 2em,
-    hsl(var(--muted) / 0.3) 4em
-  );
+  background: repeating-linear-gradient(transparent 0,
+      transparent 2em,
+      hsl(var(--muted) / 0.3) 2em,
+      hsl(var(--muted) / 0.3) 4em);
 }
 
 /* Reading ruler */
@@ -1572,7 +1740,8 @@
   background: hsl(var(--primary) / 0.1);
 }
 
-.poem-display__empty, .poem-display__empty-note {
+.poem-display__empty,
+.poem-display__empty-note {
   color: hsl(var(--muted-foreground));
   font-style: italic;
   padding: 2rem;

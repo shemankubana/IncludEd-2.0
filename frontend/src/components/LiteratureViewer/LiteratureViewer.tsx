@@ -23,6 +23,8 @@ import CharacterMap from "./CharacterMap";
 import VocabularySidebar from "./VocabularySidebar";
 import { DyslexiaControls, DEFAULT_DYSLEXIA_SETTINGS, type DyslexiaSettings } from "./DyslexiaRenderer";
 import ADHDChunkingEngine from "./ADHDChunkingEngine";
+import GamificationSystem from "../play/GamificationSystem";
+import { useSignalTracker, type ReadingSignals } from "../../hooks/useSignalTracker";
 import "./LiteratureViewer.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -230,6 +232,40 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
         }).catch(() => { /* fire-and-forget */ });
     }, [studentId, bookId]);
 
+    // ── Signal Tracking & Telemetry ──
+    const wordCount = analysisData?.metadata?.word_count as number || 0;
+    const handleSignalUpdate = useCallback((signals: ReadingSignals) => {
+        if (!studentId || !bookId) return;
+
+        // Push telemetry periodically
+        fetch(`${AI_URL}/learner/update`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                student_id: studentId,
+                session_duration_s: signals.avg_dwell_time_ms / 1000,
+                words_read: wordCount, // Simplified
+                reading_speed_wpm: signals.reading_speed_wpm,
+                backtrack_count: signals.backtrack_count,
+                scroll_events: signals.scroll_events,
+                attention_lapses: signals.attention_score < 0.5 ? 1 : 0,
+                highlights_made: 0, // tracked elsewhere
+                vocab_lookups: 0, // tracked elsewhere
+                time_of_day_hour: new Date().getHours(),
+                disability_type: adhdMode ? 1.0 : 0.5, // placeholder logic
+                doc_type: analysisData.document_type,
+                avg_dwell_time_ms: signals.avg_dwell_time_ms,
+                session_fatigue: signals.session_fatigue,
+            }),
+        }).catch(() => { });
+    }, [studentId, bookId, wordCount, adhdMode, analysisData.document_type]);
+
+    useSignalTracker({
+        enabled: !!analysisData,
+        wordCount,
+        onUpdate: handleSignalUpdate,
+    });
+
     // Auto-select first act + scene when data arrives
     const [prevData, setPrevData] = useState<AnalyzeResponse | null>(null);
     if (analysisData && analysisData !== prevData) {
@@ -340,6 +376,8 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
                                         type: "paragraph" as const,
                                         content: p,
                                     })),
+                                    inferred: false,
+                                    paragraphs: [],
                                 }}
                                 docType={docType}
                             />
@@ -385,6 +423,9 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
             {showQuestions && analysisData.questions.length > 0 && (
                 <QuestionsPanel questions={analysisData.questions} />
             )}
+
+            {/* ── Gamification overlay ── */}
+            <GamificationSystem />
         </div>
     );
 };

@@ -21,7 +21,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
     ChevronRight, Award, Wind, Bookmark, Brain,
-    CheckCircle, Star, Zap, Timer, Play,
+    CheckCircle, Star, Zap, Timer, Play, Music, Volume2, VolumeX
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ interface ADHDChunkingEngineProps {
 
 // ── Chunk generation ─────────────────────────────────────────────────────────
 
-function splitIntoChunks(text: string, targetWords: number = 300): ContentChunk[] {
+function splitIntoChunks(text: string, targetWords: number = 450): ContentChunk[] {
     const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim());
     const chunks: ContentChunk[] = [];
     let currentChunk: string[] = [];
@@ -178,7 +178,54 @@ const BreathingBreak: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
     );
 };
 
-// ── Celebration animation ────────────────────────────────────────────────────
+// ── Ambient Sound Component ───────────────────────────────────────────────
+
+const AMBIENT_SOUNDS = [
+    { id: "none", label: "None", url: "" },
+    { id: "white_noise", label: "White Noise", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" }, // placeholder
+    { id: "rain", label: "Rain", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" }, // placeholder
+    { id: "lofi", label: "Focus Lofi", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" }, // placeholder
+];
+
+const AmbientSoundToggle: React.FC = () => {
+    const [selected, setSelected] = useState("none");
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    const handleToggle = (id: string, url: string) => {
+        if (selected === id) {
+            setSelected("none");
+            audioRef.current?.pause();
+        } else {
+            setSelected(id);
+            if (audioRef.current) {
+                audioRef.current.src = url;
+                audioRef.current.loop = true;
+                audioRef.current.play().catch(() => { });
+            }
+        }
+    };
+
+    return (
+        <div className="adhd-ambient">
+            <audio ref={audioRef} />
+            <div className="adhd-ambient__triggers">
+                {AMBIENT_SOUNDS.map(s => (
+                    <button
+                        key={s.id}
+                        className={`adhd-ambient__btn ${selected === s.id ? "adhd-ambient__btn--active" : ""}`}
+                        onClick={() => handleToggle(s.id, s.url)}
+                        title={s.label}
+                    >
+                        {s.id === "none" ? <VolumeX size={14} /> : <Music size={14} />}
+                        <span>{s.label}</span>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// ── Celebration animation ──────────────────────────────────────────────────
 
 const ChunkCelebration: React.FC<{
     chunkNumber: number;
@@ -191,13 +238,13 @@ const ChunkCelebration: React.FC<{
     <div className="adhd-celebration">
         <div className="adhd-celebration__icon">
             {streak >= 5 ? <Star size={40} /> :
-             streak >= 3 ? <Zap size={40} /> :
-             <CheckCircle size={40} />}
+                streak >= 3 ? <Zap size={40} /> :
+                    <CheckCircle size={40} />}
         </div>
         <h3 className="adhd-celebration__title">
             {streak >= 5 ? "Amazing streak!" :
-             streak >= 3 ? "You're on fire!" :
-             "Great job!"}
+                streak >= 3 ? "You're on fire!" :
+                    "Great job!"}
         </h3>
         <p className="adhd-celebration__progress">
             Section {chunkNumber + 1} of {totalChunks} complete
@@ -351,6 +398,8 @@ const ADHDChunkingEngine: React.FC<ADHDChunkingEngineProps> = ({
                     </span>
                 )}
             </div>
+
+            <AmbientSoundToggle />
 
             {/* Content phase */}
             {phase === "reading" && currentChunk && (

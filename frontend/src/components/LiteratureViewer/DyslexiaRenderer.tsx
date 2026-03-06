@@ -91,7 +91,7 @@ function estimateSyllables(word: string): string[] {
     return syllables.length > 0 ? syllables : [word];
 }
 
-function syllableColorWord(word: string): React.ReactNode {
+function syllableColorWord(word: string, showMarkers: boolean = false): React.ReactNode {
     const clean = word.replace(/[^a-zA-Z]/g, "");
     if (clean.length < 6) return word; // Only color long words
 
@@ -108,18 +108,18 @@ function syllableColorWord(word: string): React.ReactNode {
                         fontWeight: 600,
                     }}
                 >
-                    {syl}
+                    {syl}{showMarkers && i < syllables.length - 1 && "·"}
                 </span>
             ))}
         </span>
     );
 }
 
-function syllableColorText(text: string): React.ReactNode {
+function syllableColorText(text: string, showMarkers: boolean = false): React.ReactNode {
     const words = text.split(/(\s+)/);
     return words.map((segment, i) => {
         if (/^\s+$/.test(segment)) return segment;
-        return <React.Fragment key={i}>{syllableColorWord(segment)}</React.Fragment>;
+        return <React.Fragment key={i}>{syllableColorWord(segment, showMarkers)}</React.Fragment>;
     });
 }
 
@@ -178,6 +178,7 @@ export interface DyslexiaSettings {
     readingRuler: boolean;
     alternatingLines: boolean;
     openDyslexicFont: boolean;
+    syllableMarkers: boolean;
     letterSpacing: number;   // px
     wordSpacing: number;     // px
     lineHeight: number;      // multiplier
@@ -190,9 +191,10 @@ export const DEFAULT_DYSLEXIA_SETTINGS: DyslexiaSettings = {
     readingRuler: false,
     alternatingLines: false,
     openDyslexicFont: false,
-    letterSpacing: 1,
-    wordSpacing: 3,
-    lineHeight: 2.0,
+    syllableMarkers: true,
+    letterSpacing: 2,
+    wordSpacing: 4,
+    lineHeight: 1.8,
     fontSize: 1.1,
 };
 
@@ -214,7 +216,7 @@ export const DyslexiaText: React.FC<DyslexiaRendererProps> = ({
     if (settings.bionicReading) {
         rendered = bionicText(text);
     } else if (settings.syllableColors) {
-        rendered = syllableColorText(text);
+        rendered = syllableColorText(text, settings.syllableMarkers);
     } else {
         rendered = text;
     }
@@ -306,6 +308,16 @@ export const DyslexiaControls: React.FC<DyslexiaControlsProps> = ({
                         />
                         <Ruler size={14} />
                         Reading ruler
+                    </label>
+
+                    <label className="dyslexia-controls__option">
+                        <input
+                            type="checkbox"
+                            checked={settings.syllableMarkers}
+                            onChange={() => toggle("syllableMarkers")}
+                        />
+                        <Minus size={14} />
+                        Syllable markers (·)
                     </label>
 
                     <label className="dyslexia-controls__option">

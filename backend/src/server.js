@@ -10,6 +10,7 @@ import onboardingRoutes from './routes/onboarding.js';
 import schoolsRoutes from './routes/schools.js';
 import adminRoutes from './routes/admin.js';
 import progressRoutes from './routes/progress.js';
+import sessionsRoutes from './routes/sessions.js';
 import { sequelize } from './config/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,6 +20,33 @@ const __dirname = path.dirname(__filename);
 // dotenv does NOT overwrite existing values, so first-loaded wins.
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+import analyticsRoutes from './routes/analytics.js';
+import statsRoutes from './routes/stats.js';
+
+import { LessonProgress } from './models/LessonProgress.js';
+import { Literature } from './models/Literature.js';
+import { StudentStats } from './models/StudentStats.js';
+import { User } from './models/User.js';
+import { Session } from './models/Session.js';
+import { RLTrainingData } from './models/RLTrainingData.js';
+
+// ── Define Associations ──────────────────────────────────────────────────────
+LessonProgress.belongsTo(Literature, { foreignKey: 'literatureId' });
+Literature.hasMany(LessonProgress, { foreignKey: 'literatureId' });
+
+StudentStats.belongsTo(User, { foreignKey: 'userId' });
+User.hasOne(StudentStats, { foreignKey: 'userId' });
+
+User.hasMany(LessonProgress, { foreignKey: 'userId' });
+LessonProgress.belongsTo(User, { foreignKey: 'userId' });
+
+User.hasMany(Session, { foreignKey: 'studentId' });
+Session.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
+Session.belongsTo(Literature, { foreignKey: 'literatureId' });
+
+Session.hasMany(RLTrainingData, { foreignKey: 'sessionId' });
+RLTrainingData.belongsTo(Session, { foreignKey: 'sessionId' });
+RLTrainingData.belongsTo(User, { foreignKey: 'studentId' });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,6 +80,10 @@ app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/schools', schoolsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/progress', progressRoutes);
+app.use('/api/sessions', sessionsRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/stats', statsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
