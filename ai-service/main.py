@@ -148,6 +148,11 @@ class SessionUpdateRequest(BaseModel):
     session_fatigue: float = 0
 
 
+class RLPredictRequest(BaseModel):
+    state_vector: List[float]
+    content_type: float = 0.5  # 0.0=generic, 0.5=novel, 1.0=play
+
+
 class StudentSummaryRequest(BaseModel):
     student_name: str
     student_id: str
@@ -788,6 +793,18 @@ async def adapt_text(request: Any):
     return {
         "adaptedText": result.get("simple_version", text),
         "strategy": result.get("tier", "rule_based"),
+    }
+
+@app.post("/rl/predict", tags=["rl"])
+async def rl_predict(req: RLPredictRequest):
+    """Get pedagogical action recommendation from RL agent."""
+    action_id, action_label = rl_agent.predict_from_state_vector(
+        req.state_vector, req.content_type
+    )
+    return {
+        "action_id": action_id,
+        "action_label": action_label,
+        "fallback": not rl_agent.model_ready
     }
 
 @app.post("/tts/generate")

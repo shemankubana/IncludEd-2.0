@@ -23,6 +23,7 @@ import CharacterMap from "./CharacterMap";
 import VocabularySidebar from "./VocabularySidebar";
 import { DyslexiaControls, DEFAULT_DYSLEXIA_SETTINGS, type DyslexiaSettings } from "./DyslexiaRenderer";
 import ADHDChunkingEngine from "./ADHDChunkingEngine";
+import DifficultyMap from "./DifficultyMap";
 import GamificationSystem from "../play/GamificationSystem";
 import { useSignalTracker, type ReadingSignals } from "../../hooks/useSignalTracker";
 import "./LiteratureViewer.css";
@@ -199,7 +200,7 @@ const QuestionsPanel: React.FC<{ questions: QuestionData[] }> = ({ questions }) 
 
 // ── Main LiteratureViewer ──────────────────────────────────────────────────────
 
-const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
+const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
 
 const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
     analysisData,
@@ -346,6 +347,13 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
                 onActSelect={handleActSelect}
                 onSceneSelect={handleSceneSelect}
             />
+
+            {/* ── Difficulty Adventure Map ── */}
+            {bookBrain && bookBrain.difficulty_map.length > 0 && (
+                <div style={{ padding: "0 1.5rem" }}>
+                    <DifficultyMap data={bookBrain.difficulty_map} />
+                </div>
+            )}
 
             {/* ── Content ── */}
             <div style={{

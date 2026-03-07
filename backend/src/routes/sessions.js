@@ -199,10 +199,10 @@ router.post('/:id/telemetry', authenticateToken, async (req, res) => {
         if (!session) return res.status(404).json({ error: 'Session not found' });
 
         // Compute derived attention metrics from events
-        const scrollEvents     = events.filter(e => e.type === 'scroll');
-        const backtrackEvents  = events.filter(e => e.type === 'backtrack');
-        const dwellEvents      = events.filter(e => e.type === 'mouse_pause');
-        const lapseEvents      = events.filter(e => e.type === 'attention_lapse');
+        const scrollEvents = events.filter(e => e.type === 'scroll');
+        const backtrackEvents = events.filter(e => e.type === 'backtrack');
+        const dwellEvents = events.filter(e => e.type === 'mouse_pause');
+        const lapseEvents = events.filter(e => e.type === 'attention_lapse');
 
         const backtrackFreq = scrollEvents.length > 0
             ? backtrackEvents.length / scrollEvents.length
@@ -225,14 +225,14 @@ router.post('/:id/telemetry', authenticateToken, async (req, res) => {
         const currentSummary = session.telemetrySummary || {};
         const updatedSummary = {
             ...currentSummary,
-            eventCount:       (currentSummary.eventCount || 0) + events.length,
-            backtrackCount:   (currentSummary.backtrackCount || 0) + backtrackEvents.length,
-            lapseCount:       (currentSummary.lapseCount || 0) + lapseEvents.length,
-            avgDwellMs:       avgDwell,
-            avgScrollSpeed:   avgScrollSpeed,
-            backtrackFreq:    backtrackFreq,
+            eventCount: (currentSummary.eventCount || 0) + events.length,
+            backtrackCount: (currentSummary.backtrackCount || 0) + backtrackEvents.length,
+            lapseCount: (currentSummary.lapseCount || 0) + lapseEvents.length,
+            avgDwellMs: avgDwell,
+            avgScrollSpeed: avgScrollSpeed,
+            backtrackFreq: backtrackFreq,
             scrollHesitation: scrollHesitation,
-            lastUpdated:      Date.now(),
+            lastUpdated: Date.now(),
         };
 
         await session.update({ telemetrySummary: updatedSummary });
@@ -252,17 +252,17 @@ router.post('/:id/telemetry', authenticateToken, async (req, res) => {
 router.post('/:id/rl-predict', authenticateToken, async (req, res) => {
     try {
         const {
-            reading_speed    = 0.5,
-            mouse_dwell      = 0.0,
+            reading_speed = 0.5,
+            mouse_dwell = 0.0,
             scroll_hesitation = 0.0,
-            backtrack_freq   = 0.0,
-            attention_score  = 0.7,
-            disability_type  = 0.0,
-            text_difficulty  = 0.5,
-            session_fatigue  = 0.0,
+            backtrack_freq = 0.0,
+            attention_score = 0.7,
+            disability_type = 0.0,
+            text_difficulty = 0.5,
+            session_fatigue = 0.0,
         } = req.body;
 
-        const AI_URL = process.env.AI_SERVICE_URL || 'http://localhost:8082';
+        const AI_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
         const response = await fetch(`${AI_URL}/rl/predict`, {
             method: 'POST',

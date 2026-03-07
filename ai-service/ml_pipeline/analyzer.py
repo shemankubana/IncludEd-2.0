@@ -34,6 +34,14 @@ from .question_generator    import PedagogicalQuestionGenerator
 from .front_matter_detector import FrontMatterDetector, filter_body_blocks
 from .language_detector     import get_language_detector
 
+try:
+    import pytesseract
+    from PIL import Image
+    import io
+    _OCR_OK = True
+except ImportError:
+    _OCR_OK = False
+
 
 # ── Result dataclass ───────────────────────────────────────────────────────────
 
@@ -112,10 +120,14 @@ class LiteratureAnalyzer:
         all_blocks, total_chars = self._extract_blocks(doc)
 
         if total_chars < 50:
-            raise ValueError(
-                "Extracted text is too short. The PDF may be scanned/image-based. "
-                "Pre-process with OCR (e.g., pytesseract) first."
-            )
+            if _OCR_OK:
+                print("Text density low. Falling back to OCR...")
+                all_blocks, total_chars = self._ocr_analyze(doc)
+            else:
+                raise ValueError(
+                    "Extracted text is too short and OCR dependencies are missing. "
+                    "Install pytesseract and tesseract-ocr."
+                )
 
         # ── Step 2: Remove front/back matter ──────────────────────────────────
         body_blocks = self._front_matter_det.classify_blocks(all_blocks)
@@ -277,7 +289,26 @@ class LiteratureAnalyzer:
             page_dict = page.get_text(
                 "dict", flags=fitz.TEXT_PRESERVE_WHITESPACE
             )
+            
+            # Simple layout filtering: skip blocks that look like headers/footers
+            # Usually top 50 or bottom 50 points of a page
+            page_rect = page.rect
+            header_threshold = page_rect.height * 0.08 # top 8%
+            footer_threshold = page_rect.height * 0.92 # bottom 8%
+
             for block in page_dict.get("blocks", []):
+                # Skip if block is in header/footer area and is small
+                bbox = block.get("bbox", (0, 0, 0, 0))
+                is_header_area = bbox[3] < header_threshold
+                is_footer_area = bbox[1] > footer_threshold
+                
+                # Heuristic: headers/footers are often single lines or just numbers
+                if (is_header_area or is_footer_area) and len(block.get("lines", [])) <= 1:
+                    # Check if it's just a page number
+                    txt = "".join("".join(s["text"] for s in l["spans"]) for l in block.get("lines", [])).strip()
+                    if txt.isdigit() or len(txt) < 5:
+                        continue # Skip suspected page number or small footer/header
+
                 block["_page"] = page_idx
                 all_blocks.append(block)
                 if block.get("type") == 0:
@@ -285,6 +316,41 @@ class LiteratureAnalyzer:
                         for span in line.get("spans", []):
                             total_chars += len(span.get("text", ""))
 
+        return all_blocks, total_chars
+
+    def _ocr_analyze(self, doc: "fitz.Document") -> tuple[List[Dict[str, Any]], int]:
+        """Perform OCR on the entire document (blocks level)."""
+        all_blocks: List[Dict[str, Any]] = []
+        total_chars = 0
+        
+        # We only OCR the first 20 pages for speed in this demo, or all if short
+        max_ocr = min(doc.page_count, 50) 
+        
+        for page_idx in range(max_ocr):
+            page = doc[page_idx]
+            # Render page to image
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # 2x zoom for better OCR
+            img_data = pix.tobytes("png")
+            img = Image.open(io.BytesIO(img_data))
+            
+            # Run OCR
+            ocr_text = pytesseract.image_to_string(img)
+            
+            # Synthesize blocks from OCR text
+            paragraphs = [p.strip() for p in ocr_text.split("\n\n") if p.strip()]
+            for p in paragraphs:
+                block = {
+                    "type": 0,
+                    "_page": page_idx,
+                    "lines": [{
+                        "spans": [{
+                            "text": p, "size": 11.0, "flags": 0, "font": "OCR"
+                        }]
+                    }],
+                }
+                all_blocks.append(block)
+                total_chars += len(p)
+                
         return all_blocks, total_chars
 
     def _infer_title(

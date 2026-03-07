@@ -47,7 +47,7 @@ const TeacherDashboard = () => {
     }>({ summaries: [], alerts: [], loading: false });
     const { toast } = useToast();
 
-    const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
+    const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
 
     useEffect(() => {
         const fetchAnalytics = async () => {
@@ -437,13 +437,12 @@ const TeacherDashboard = () => {
                                                     initial={{ opacity: 0, x: -20 }}
                                                     animate={{ opacity: 1, x: 0 }}
                                                     transition={{ delay: i * 0.1 }}
-                                                    className={`rounded-2xl border p-4 flex gap-4 ${
-                                                        alert.severity === "urgent"
+                                                    className={`rounded-2xl border p-4 flex gap-4 ${alert.severity === "urgent"
                                                             ? "border-red-400/40 bg-red-500/5"
                                                             : alert.severity === "warning"
-                                                            ? "border-amber-400/40 bg-amber-500/5"
-                                                            : "border-blue-400/40 bg-blue-500/5"
-                                                    }`}
+                                                                ? "border-amber-400/40 bg-amber-500/5"
+                                                                : "border-blue-400/40 bg-blue-500/5"
+                                                        }`}
                                                 >
                                                     {alert.severity === "urgent" ? (
                                                         <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -485,33 +484,30 @@ const TeacherDashboard = () => {
                                                 animate={{ opacity: 1, scale: 1 }}
                                                 transition={{ delay: i * 0.08 }}
                                             >
-                                                <Card className={`rounded-[28px] border-2 ${
-                                                    s.risk_level === "high"
+                                                <Card className={`rounded-[28px] border-2 ${s.risk_level === "high"
                                                         ? "border-red-400/40"
                                                         : s.risk_level === "medium"
-                                                        ? "border-amber-400/40"
-                                                        : "border-green-400/40"
-                                                }`}>
+                                                            ? "border-amber-400/40"
+                                                            : "border-green-400/40"
+                                                    }`}>
                                                     <CardContent className="p-5 space-y-3">
                                                         <div className="flex items-center gap-3">
-                                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-black ${
-                                                                s.risk_level === "high"
+                                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-black ${s.risk_level === "high"
                                                                     ? "bg-red-500/10 text-red-600"
                                                                     : s.risk_level === "medium"
-                                                                    ? "bg-amber-500/10 text-amber-600"
-                                                                    : "bg-green-500/10 text-green-600"
-                                                            }`}>
+                                                                        ? "bg-amber-500/10 text-amber-600"
+                                                                        : "bg-green-500/10 text-green-600"
+                                                                }`}>
                                                                 {s.student_name?.charAt(0) || "?"}
                                                             </div>
                                                             <div>
                                                                 <h4 className="font-black text-sm">{s.student_name}</h4>
-                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg ${
-                                                                    s.risk_level === "high"
+                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg ${s.risk_level === "high"
                                                                         ? "bg-red-500/10 text-red-600"
                                                                         : s.risk_level === "medium"
-                                                                        ? "bg-amber-500/10 text-amber-600"
-                                                                        : "bg-green-500/10 text-green-600"
-                                                                }`}>
+                                                                            ? "bg-amber-500/10 text-amber-600"
+                                                                            : "bg-green-500/10 text-green-600"
+                                                                    }`}>
                                                                     {s.risk_level} risk
                                                                 </span>
                                                             </div>

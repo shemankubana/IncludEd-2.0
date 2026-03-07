@@ -149,7 +149,7 @@ const AdaptiveReader = () => {
     const wordsReadRef = useRef<number>(0);
     const adaptationsRef = useRef<number[]>([]);
 
-    const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
+    const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
 
     // TTS
     const [activeWordIndex, setActiveWordIndex] = useState(-1);
@@ -310,7 +310,7 @@ const AdaptiveReader = () => {
                     // Show "Story So Far" recap if returning to a book already in progress
                     if (cachedSection > 0 && user) {
                         try {
-                            const aiUrl = import.meta.env.VITE_AI_URL || "http://localhost:8082";
+                            const aiUrl = import.meta.env.VITE_AI_URL || "http://localhost:8000";
                             const recapRes = await fetch(
                                 `${aiUrl}/comprehension/recap?student_id=${user.uid}&book_id=${id}`
                             );
@@ -550,8 +550,8 @@ const AdaptiveReader = () => {
         let cycles = 0;
         breathIntervalRef.current = setInterval(() => {
             phaseIdx = (phaseIdx + 1) % 3;
-            phase = phases[phaseIdx];
-            setBreathPhase(phase);
+            const newPhase = phases[phaseIdx];
+            setBreathPhase(newPhase);
             if (phaseIdx === 0) {
                 cycles += 1;
                 if (cycles >= 3) {
@@ -559,7 +559,7 @@ const AdaptiveReader = () => {
                     setBreathingBreak(false);
                 }
             }
-        }, phase === "hold" ? 2000 : 4000);
+        }, 4000); // Standardize to 4s for simplicity and to avoid lint error on stale 'phase' comparison
     }, []);
 
     const handleNextSection = useCallback(() => {
@@ -1332,7 +1332,15 @@ const AdaptiveReader = () => {
                                 {/* TTS word-highlight overlay (generic mode) */}
                                 {contentType === "generic" && isPlaying && !adaptation.isTTSEnabled && (
                                     <div
-                                        className="reading-area leading-[2.2] text-xl md:text-2xl font-medium tracking-wide text-foreground/90 absolute inset-0 pointer-events-none"
+                                        className="reading-area absolute inset-0 pointer-events-none"
+                                        style={{
+                                            lineHeight: dyslexiaSettings.lineHeight,
+                                            fontSize: `${dyslexiaSettings.fontSize}rem`,
+                                            letterSpacing: `${dyslexiaSettings.letterSpacing}px`,
+                                            wordSpacing: `${dyslexiaSettings.wordSpacing}px`,
+                                            whiteSpace: "pre-wrap",
+                                            fontFamily: dyslexiaSettings.openDyslexicFont ? "'OpenDyslexic', sans-serif" : "inherit"
+                                        }}
                                         aria-hidden="true"
                                     >
                                         {displayWords.map((word: string, idx: number) => (
@@ -1495,7 +1503,7 @@ const AdaptiveReader = () => {
                     onWordLookup={(word) => {
                         // Record vocab lookup in comprehension graph
                         if (user && id) {
-                            fetch(`${AI_URL}/comprehension/vocab-lookup`, {
+                            fetch(`${AI_URL}/comprehension/vocab`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ student_id: user.uid, book_id: id, word }),

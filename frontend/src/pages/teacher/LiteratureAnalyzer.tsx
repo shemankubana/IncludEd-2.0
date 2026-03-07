@@ -18,8 +18,8 @@ import LiteratureViewer, {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const AI_SERVICE_URL =
-    (import.meta.env.VITE_AI_SERVICE_URL as string | undefined) ??
-    "http://localhost:8082";
+    (import.meta.env.VITE_AI_URL as string | undefined) ??
+    "http://localhost:8000";
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 

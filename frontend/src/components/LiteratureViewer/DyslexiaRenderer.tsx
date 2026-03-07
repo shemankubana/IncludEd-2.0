@@ -238,10 +238,21 @@ export const DyslexiaText: React.FC<DyslexiaRendererProps> = ({
         <div
             ref={containerRef}
             className={`dyslexia-renderer ${className} ${settings.alternatingLines ? "dyslexia-renderer--alt-lines" : ""}`}
-            style={{ ...style, position: "relative" }}
+            style={{ ...style, position: "relative", width: "100%", display: "block" }}
         >
             {settings.readingRuler && <ReadingRuler containerRef={containerRef} />}
-            <p className="dyslexia-renderer__text">{rendered}</p>
+            <p
+                className="dyslexia-renderer__text"
+                style={{
+                    whiteSpace: "pre-wrap",
+                    lineHeight: "inherit",
+                    letterSpacing: "inherit",
+                    wordSpacing: "inherit",
+                    margin: 0
+                }}
+            >
+                {rendered}
+            </p>
         </div>
     );
 };

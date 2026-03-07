@@ -9,10 +9,10 @@
  *  - Literature content: Pre-cached on first load
  */
 
-const CACHE_VERSION  = "included-v3";
-const STATIC_CACHE   = `${CACHE_VERSION}-static`;
-const CONTENT_CACHE  = `${CACHE_VERSION}-content`;
-const API_CACHE      = `${CACHE_VERSION}-api`;
+const CACHE_VERSION = "included-v3";
+const STATIC_CACHE = `${CACHE_VERSION}-static`;
+const CONTENT_CACHE = `${CACHE_VERSION}-content`;
+const API_CACHE = `${CACHE_VERSION}-api`;
 
 const STATIC_ASSETS = [
     "/",
@@ -26,7 +26,7 @@ const STATIC_ASSETS = [
 self.addEventListener("install", (event) => {
     event.waitUntil(
         caches.open(STATIC_CACHE).then((cache) =>
-            cache.addAll(STATIC_ASSETS).catch(() => {})
+            cache.addAll(STATIC_ASSETS).catch(() => { })
         ).then(() => self.skipWaiting())
     );
 });
@@ -66,6 +66,11 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
+    // 3. AI Service calls (port 8000): Network only
+    if (url.port === "8000" || url.pathname.startsWith("/comprehension/")) {
+        return; // Let it go to network normally
+    }
+
     // Static assets: cache first with network refresh
     event.respondWith(cacheFirstWithRefresh(request, STATIC_CACHE));
 });
@@ -73,8 +78,8 @@ self.addEventListener("fetch", (event) => {
 // ── Strategies ─────────────────────────────────────────────────────────────────
 
 async function cacheFirst(request, cacheName) {
-    const cache    = await caches.open(cacheName);
-    const cached   = await cache.match(request);
+    const cache = await caches.open(cacheName);
+    const cached = await cache.match(request);
     if (cached) return cached;
 
     try {
@@ -87,16 +92,20 @@ async function cacheFirst(request, cacheName) {
 }
 
 async function cacheFirstWithRefresh(request, cacheName) {
-    const cache  = await caches.open(cacheName);
+    const cache = await caches.open(cacheName);
     const cached = await cache.match(request);
 
     // Refresh in background
     const fetchPromise = fetch(request).then((response) => {
         if (response.ok) cache.put(request, response.clone());
         return response;
-    }).catch(() => null);
+    }).catch(() => new Response("Offline", { status: 503 }));
 
-    return cached || fetchPromise || new Response("Offline", { status: 503 });
+    if (cached) {
+        // Return cached, but fetchPromise still runs to update cache
+        return cached;
+    }
+    return fetchPromise;
 }
 
 async function networkFirstWithCache(request, cacheName) {
@@ -125,21 +134,21 @@ self.addEventListener("sync", (event) => {
 
 async function drainTelemetryQueue() {
     // Open IDB and flush any pending telemetry
-    const DB_NAME    = "included_telemetry";
+    const DB_NAME = "included_telemetry";
     const STORE_NAME = "pending_events";
 
     const db = await new Promise((resolve, reject) => {
         const req = indexedDB.open(DB_NAME, 1);
         req.onsuccess = () => resolve(req.result);
-        req.onerror   = () => reject(req.error);
+        req.onerror = () => reject(req.error);
     });
 
-    const tx    = db.transaction(STORE_NAME, "readwrite");
+    const tx = db.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
     const items = await new Promise((resolve) => {
         const req = store.getAll();
         req.onsuccess = () => resolve(req.result);
-        req.onerror   = () => resolve([]);
+        req.onerror = () => resolve([]);
     });
 
     for (const item of items) {

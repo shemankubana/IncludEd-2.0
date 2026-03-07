@@ -17,9 +17,9 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { X, Volume2, BookmarkPlus, Lightbulb, BookOpen, Loader2 } from "lucide-react";
+import { X, Volume2, BookmarkPlus, Lightbulb, BookOpen, Loader2, Sparkles } from "lucide-react";
 
-const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
+const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
 
 interface SimplificationResult {
     simple_version: string;
@@ -95,13 +95,20 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
     const [showDetails, setShowDetails] = useState(false);
     const popupRef = useRef<HTMLDivElement>(null);
 
-    const handleTextSelection = useCallback(() => {
+    const handleTextSelection = useCallback((e?: MouseEvent | TouchEvent) => {
+        // If clicking inside the popup, don't trigger a new selection/reset
+        if (e?.target && popupRef.current?.contains(e.target as Node)) {
+            return;
+        }
+
         const selection = window.getSelection();
         if (!selection || selection.isCollapsed || !selection.toString().trim()) {
             return;
         }
 
         const text = selection.toString().trim();
+        // Avoid re-fetching if it's the same text and we're already showing something
+        if (text === selectedText && visible) return;
         if (text.length < 5 || text.length > 1000) return;
 
         // Get position for popup
@@ -139,7 +146,7 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
         }
 
         fetchSimplification(text);
-    }, [bookTitle, author, docType, speaker, chapterContext, language, studentId, archiPhrases, onHighlightCategorized]);
+    }, [visible, selectedText, bookTitle, author, docType, speaker, chapterContext, language, studentId, archiPhrases, onHighlightCategorized]);
 
     const fetchSimplification = async (text: string) => {
         setLoading(true);
@@ -214,16 +221,16 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
 
     // Listen for text selection
     useEffect(() => {
-        const handleMouseUp = () => {
-            setTimeout(handleTextSelection, 50);
+        const handleMouseUp = (e: MouseEvent | TouchEvent) => {
+            setTimeout(() => handleTextSelection(e), 50);
         };
 
-        document.addEventListener("mouseup", handleMouseUp);
-        document.addEventListener("touchend", handleMouseUp);
+        document.addEventListener("mouseup", handleMouseUp as any);
+        document.addEventListener("touchend", handleMouseUp as any);
 
         return () => {
-            document.removeEventListener("mouseup", handleMouseUp);
-            document.removeEventListener("touchend", handleMouseUp);
+            document.removeEventListener("mouseup", handleMouseUp as any);
+            document.removeEventListener("touchend", handleMouseUp as any);
         };
     }, [handleTextSelection]);
 
@@ -273,9 +280,14 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
             ) : result ? (
                 <>
                     {/* Simple version — always first */}
-                    <div className="highlight-popup__simple">
-                        <Lightbulb size={16} />
-                        <p>{result.simple_version}</p>
+                    <div className="highlight-popup__simple p-4 bg-primary/10 rounded-xl border border-primary/20 mb-3 shadow-inner">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Sparkles size={16} className="text-primary animate-pulse" />
+                            <span className="text-[10px] font-bold text-primary tracking-widest uppercase">Simple Meaning</span>
+                        </div>
+                        <p className="text-sm font-semibold leading-relaxed text-blue-900">
+                            {result.simple_version}
+                        </p>
                     </div>
 
                     {/* Toggle for more details */}

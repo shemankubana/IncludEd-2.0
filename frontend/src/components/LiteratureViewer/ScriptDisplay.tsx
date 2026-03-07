@@ -16,7 +16,7 @@
  */
 
 import React, { useMemo } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Wand2, Sparkles } from "lucide-react";
 import type { BlockItem, SceneNode, UnitNode } from "./ScriptNavBar";
 
 interface ScriptDisplayProps {
@@ -59,11 +59,14 @@ const DialogueBubble: React.FC<{ block: BlockItem; side: "left" | "right" }> = (
     const isLeft = side === "left";
 
     return (
-        <div className={`dialogue-bubble dialogue-bubble--${side}`}>
-            {/* Avatar */}
+        <div className={`dialogue-bubble dialogue-bubble--${side} group`}>
+            {/* Avatar with pulse effect for focus */}
             <div
-                className="dialogue-bubble__avatar"
-                style={{ backgroundColor: color }}
+                className="dialogue-bubble__avatar ring-offset-2 hover:ring-2 transition-all duration-300"
+                style={{
+                    backgroundColor: color,
+                    boxShadow: `0 4px 12px ${color}44`
+                }}
                 title={block.character || ""}
             >
                 {initials}
