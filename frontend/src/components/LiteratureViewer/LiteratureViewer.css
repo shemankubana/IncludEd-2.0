@@ -767,6 +767,16 @@
   margin: 0.5rem 0 0.3rem;
 }
 
+.highlight-popup__vocab-inline {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid hsl(var(--primary) / 0.1);
+}
+
+.highlight-popup__vocab-inline strong {
+  color: hsl(var(--primary));
+}
+
 .highlight-popup__vocab-item {
   font-size: 0.82rem;
   line-height: 1.5;
@@ -867,11 +877,355 @@
   transition: all 0.2s;
 }
 
+
 .adhd-ambient__btn--active {
   background: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
   border-color: hsl(var(--primary));
 }
+
+.adhd-ambient__emoji {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.adhd-ambient__volume {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  padding: 0.4rem 0.75rem 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.adhd-ambient__slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 120px;
+  height: 4px;
+  border-radius: 999px;
+  background: hsl(var(--border));
+  outline: none;
+  cursor: pointer;
+}
+
+.adhd-ambient__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+}
+
+.adhd-ambient__volume-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   COMPREHENSION GRAPH
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.comprehension-graph {
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  animation: fadeSlideIn 0.25s ease;
+}
+
+.comprehension-graph__header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.comprehension-graph__header-main h2 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.comprehension-graph__section {
+  padding: 1rem;
+  border: 1.5px solid hsl(var(--border));
+  border-radius: 1rem;
+  background: hsl(var(--background));
+}
+
+.comprehension-graph__section--highlight {
+  background: hsl(var(--primary) / 0.04);
+  border-color: hsl(var(--primary) / 0.2);
+}
+
+.comprehension-graph__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
+
+.comprehension-graph__header h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.comprehension-graph__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 0.75rem;
+}
+
+.comprehension-graph__character {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  text-align: center;
+}
+
+.comprehension-graph__character-ring {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+
+.comprehension-graph__progress-ring {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.comprehension-graph__ring-bg {
+  fill: none;
+  stroke: hsl(var(--border));
+  stroke-width: 8;
+}
+
+.comprehension-graph__ring-progress {
+  fill: none;
+  stroke: hsl(var(--primary));
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+
+.comprehension-graph__character-percent {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: hsl(var(--foreground));
+}
+
+.comprehension-graph__character-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.comprehension-graph__character-meta {
+  font-size: 0.68rem;
+  color: hsl(var(--muted-foreground));
+  margin: 0;
+}
+
+.comprehension-graph__character-role {
+  font-size: 0.62rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  font-weight: 700;
+}
+
+.comprehension-graph__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.comprehension-graph__theme-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.6rem;
+  border: 1.5px solid transparent;
+}
+
+.comprehension-graph__theme-status {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.comprehension-graph__theme-content {
+  flex: 1;
+}
+
+.comprehension-graph__theme-content h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.comprehension-graph__theme-importance {
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.comprehension-graph__importance-bar {
+  height: 6px;
+  background: hsl(var(--border));
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.comprehension-graph__importance-fill {
+  height: 100%;
+  background: hsl(var(--primary));
+  border-radius: 999px;
+}
+
+.comprehension-graph__techniques {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.comprehension-graph__technique {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  border: 1.5px solid hsl(var(--border));
+  font-size: 0.77rem;
+  cursor: default;
+  transition: background 0.15s;
+}
+
+.comprehension-graph__technique:hover {
+  background: hsl(var(--muted) / 0.4);
+}
+
+.comprehension-graph__technique-badge {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.comprehension-graph__technique-name {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.comprehension-graph__vocab-progress {
+  margin-bottom: 0.75rem;
+}
+
+.comprehension-graph__progress-background {
+  height: 10px;
+  background: hsl(var(--muted));
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+
+.comprehension-graph__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, hsl(var(--accent)), hsl(var(--primary)));
+  border-radius: 999px;
+}
+
+.comprehension-graph__vocab-stats {
+  font-size: 0.78rem;
+  color: hsl(var(--muted-foreground));
+  margin: 0;
+}
+
+.comprehension-graph__vocab-sample {
+  margin-top: 0.5rem;
+}
+
+.comprehension-graph__vocab-tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.comprehension-graph__vocab-tag--mastered {
+  background: hsl(142, 70%, 50%, 0.12);
+  color: hsl(142, 70%, 35%);
+}
+
+.comprehension-graph__vocab-tag--learning {
+  background: hsl(210, 80%, 50%, 0.12);
+  color: hsl(210, 80%, 40%);
+}
+
+.comprehension-graph__progress-hero {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.comprehension-graph__progress-circle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: hsl(var(--primary) / 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--primary));
+  flex-shrink: 0;
+}
+
+.comprehension-graph__progress-text h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.comprehension-graph__progress-text p {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.comprehension-graph__progress-bar-large {
+  height: 12px;
+  background: hsl(var(--muted));
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.comprehension-graph__progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)));
+  border-radius: 999px;
+}
+
+
 
 /* ── Gamification ── */
 .gamification-overlay {

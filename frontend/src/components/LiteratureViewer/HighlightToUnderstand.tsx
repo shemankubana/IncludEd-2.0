@@ -288,9 +288,24 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
                         <p className="text-sm font-semibold leading-relaxed text-blue-900">
                             {result.simple_version}
                         </p>
+
+                        {/* Vocabulary — pulled out for instant visibility */}
+                        {result.vocabulary && result.vocabulary.length > 0 && (
+                            <div className="highlight-popup__vocab-inline mt-3 pt-3 border-t border-primary/10">
+                                {result.vocabulary.slice(0, 2).map((v, i) => (
+                                    <div key={i} className="mb-2 last:mb-0">
+                                        <div className="text-[10px] font-bold text-blue-700 uppercase tracking-tighter mb-0.5">Word help: {v.word}</div>
+                                        <div className="text-xs text-blue-800">
+                                            <strong>{v.meaning}</strong>
+                                            {v.analogy && <span className="text-[10px] opacity-70 italic block mt-0.5">Tip: {v.analogy}</span>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
-                    {/* Toggle for more details */}
+                    {/* Toggle for more details (intent, devices, culture) */}
                     <button
                         className="highlight-popup__toggle"
                         onClick={() => setShowDetails(!showDetails)}
@@ -308,11 +323,11 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
                                 </div>
                             )}
 
-                            {/* Vocabulary */}
-                            {result.vocabulary.length > 0 && (
-                                <div className="highlight-popup__vocab">
-                                    <p className="highlight-popup__section-title">Key words:</p>
-                                    {result.vocabulary.map((v, i) => (
+                            {/* Remaining Vocabulary (if > 2) */}
+                            {result.vocabulary.length > 2 && (
+                                <div className="highlight-popup__vocab mt-2">
+                                    <p className="highlight-popup__section-title">More words:</p>
+                                    {result.vocabulary.slice(2).map((v, i) => (
                                         <div key={i} className="highlight-popup__vocab-item">
                                             <strong>{v.word}</strong> — {v.meaning}
                                             {v.analogy && (

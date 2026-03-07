@@ -152,7 +152,7 @@ class TeacherIntelligence:
         comp_desc = "excellent" if avg_comp >= 0.8 else "good" if avg_comp >= 0.6 else "developing" if avg_comp >= 0.4 else "needs support"
         parts.append(
             f"{name} has read {chapters} chapter{'s' if chapters != 1 else ''} "
-            f"with {comp_desc} comprehension ({int(avg_comp * 100)}%)."
+            f"and is showing {comp_desc} progress in their comprehension ({int(avg_comp * 100)}%)."
         )
 
         if behind > 0:
@@ -393,14 +393,14 @@ class TeacherIntelligence:
                         f"Écris un bref résumé (3-4 phrases) de ce que l'élève a lu "
                         f'dans "{book_title}". Chapitres lus: {chapter_list}. '
                         f"Personnages principaux: {char_list}. "
-                        f"Ton simple et engageant pour un élève du secondaire."
+                        f"Ton simple et engageant pour un élève du primaire (9-12 ans)."
                     )
                 else:
                     prompt = (
                         f'Write a brief "Story So Far" recap (3-4 sentences) for a student '
                         f'reading "{book_title}". Chapters completed: {chapter_list}. '
                         f"Main characters: {char_list}. "
-                        f"Keep it simple, engaging, and suitable for a secondary school student."
+                        f"Keep it simple, engaging, and suitable for a primary school student (ages 9-12)."
                     )
                 result = self.ollama.generate(prompt)
                 if result and len(result.strip()) > 30:

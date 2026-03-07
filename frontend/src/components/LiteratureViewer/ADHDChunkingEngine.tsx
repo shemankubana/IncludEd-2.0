@@ -23,6 +23,14 @@ import {
     ChevronRight, Award, Wind, Bookmark, Brain,
     CheckCircle, Star, Zap, Timer, Play, Music, Volume2, VolumeX
 } from "lucide-react";
+import {
+    FocusSoundType,
+    playFocusSound,
+    stopFocusSound,
+    setFocusSoundVolume,
+    isFocusSoundPlaying,
+    disposeFocusSoundService,
+} from "../../services/focusSoundService";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,49 +186,87 @@ const BreathingBreak: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
     );
 };
 
-// ── Ambient Sound Component ───────────────────────────────────────────────
+// ── Ambient Sound Component (powered by focusSoundService) ────────────────
 
-const AMBIENT_SOUNDS = [
-    { id: "none", label: "None", url: "" },
-    { id: "white_noise", label: "White Noise", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" }, // placeholder
-    { id: "rain", label: "Rain", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" }, // placeholder
-    { id: "lofi", label: "Focus Lofi", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" }, // placeholder
+const FOCUS_SOUNDS: Array<{ id: FocusSoundType | "none"; label: string; emoji: string }> = [
+    { id: "none", label: "None", emoji: "🔇" },
+    { id: FocusSoundType.BINAURAL_ALPHA, label: "Binaural", emoji: "🧠" },
+    { id: FocusSoundType.WHITE_NOISE, label: "White Noise", emoji: "📡" },
+    { id: FocusSoundType.NATURE_RAIN, label: "Rain", emoji: "🌧️" },
+    { id: FocusSoundType.FOREST, label: "Forest", emoji: "🌲" },
+    { id: FocusSoundType.OCEAN_WAVES, label: "Ocean", emoji: "🌊" },
 ];
 
 const AmbientSoundToggle: React.FC = () => {
-    const [selected, setSelected] = useState("none");
-    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [selected, setSelected] = useState<string>("none");
+    const [volume, setVolume] = useState<number>(40);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleToggle = (id: string, url: string) => {
-        if (selected === id) {
+    // Cleanup on unmount
+    useEffect(() => () => { disposeFocusSoundService(); }, []);
+
+    const handleToggle = async (id: string) => {
+        if (id === "none" || id === selected) {
+            // Stop any playing sound
             setSelected("none");
-            audioRef.current?.pause();
-        } else {
-            setSelected(id);
-            if (audioRef.current) {
-                audioRef.current.src = url;
-                audioRef.current.loop = true;
-                audioRef.current.play().catch(() => { });
-            }
+            await stopFocusSound(800);
+            return;
         }
+
+        setIsLoading(true);
+        setSelected(id);
+        try {
+            await playFocusSound({
+                type: id as FocusSoundType,
+                volume,
+                fadeInMs: 1500,
+                fadeOutMs: 800,
+            });
+        } catch {
+            // Asset not found (e.g. nature sounds) — fail silently
+            setSelected("none");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const v = Number(e.target.value);
+        setVolume(v);
+        if (isFocusSoundPlaying()) setFocusSoundVolume(v);
     };
 
     return (
         <div className="adhd-ambient">
-            <audio ref={audioRef} />
             <div className="adhd-ambient__triggers">
-                {AMBIENT_SOUNDS.map(s => (
+                {FOCUS_SOUNDS.map(s => (
                     <button
                         key={s.id}
                         className={`adhd-ambient__btn ${selected === s.id ? "adhd-ambient__btn--active" : ""}`}
-                        onClick={() => handleToggle(s.id, s.url)}
+                        onClick={() => handleToggle(s.id)}
                         title={s.label}
+                        disabled={isLoading}
                     >
-                        {s.id === "none" ? <VolumeX size={14} /> : <Music size={14} />}
+                        <span className="adhd-ambient__emoji">{s.emoji}</span>
                         <span>{s.label}</span>
                     </button>
                 ))}
             </div>
+            {selected !== "none" && (
+                <div className="adhd-ambient__volume">
+                    <Volume2 size={13} />
+                    <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={volume}
+                        onChange={handleVolumeChange}
+                        className="adhd-ambient__slider"
+                        aria-label="Focus sound volume"
+                    />
+                    <span className="adhd-ambient__volume-label">{volume}%</span>
+                </div>
+            )}
         </div>
     );
 };

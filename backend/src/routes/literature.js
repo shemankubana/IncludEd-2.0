@@ -88,10 +88,10 @@ router.post('/upload', authenticateToken, upload.fields([
       try {
         console.log(`🧠 Background ML analysis for: ${literature.title}`);
         const aiResp = await axios.post(`${AI_SERVICE_URL}/reanalyze-text`, {
-          text:               originalContent,
-          filename:           `${literature.title}.txt`,
+          text: originalContent,
+          filename: `${literature.title}.txt`,
           generate_questions: true,
-          question_count:     10,
+          question_count: 10,
         }, { timeout: 180000 }); // 3 min — allows cold model start
 
         if (aiResp.data && aiResp.data.flat_units?.length > 0) {
@@ -102,25 +102,25 @@ router.post('/upload', authenticateToken, upload.fields([
           // Build a lookup from difficulty_map for per-section enriched metadata
           const difficultyLookup = {};
           for (const d of (aiResp.data.book_brain?.difficulty_map || [])) {
-            if (d.section_id)    difficultyLookup[d.section_id]    = d;
+            if (d.section_id) difficultyLookup[d.section_id] = d;
             if (d.section_title) difficultyLookup[d.section_title] = d;
           }
 
           const aiSections = aiResp.data.flat_units.map(unit => {
             const enrichment = difficultyLookup[unit.id] || difficultyLookup[unit.title] || {};
             return {
-              title:    unit.title   || 'Section',
-              content:  unit.content || '',
+              title: unit.title || 'Section',
+              content: unit.content || '',
               dialogue: unit.dialogue || unit.blocks || [],
               wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
               // Enriched per-section metadata (Phase 1)
-              emotion:              enrichment.emotion              || 'neutral',
-              setting:              enrichment.setting              || '',
-              characters_present:   enrichment.characters_present   || [],
-              archaic_phrases:      enrichment.archaic_phrases      || [],
-              literary_devices:     enrichment.literary_devices     || [],
-              faction:              enrichment.faction              || '',
-              difficulty:           enrichment.overall_difficulty   || 0,
+              emotion: enrichment.emotion || 'neutral',
+              setting: enrichment.setting || '',
+              characters_present: enrichment.characters_present || [],
+              archaic_phrases: enrichment.archaic_phrases || [],
+              literary_devices: enrichment.literary_devices || [],
+              faction: enrichment.faction || '',
+              difficulty: enrichment.overall_difficulty || 0,
               estimated_read_minutes: enrichment.estimated_read_minutes || 1,
             };
           });
@@ -129,9 +129,9 @@ router.post('/upload', authenticateToken, upload.fields([
           const aiAuthor = aiResp.data.author;
           const updatePayload = {
             contentType: aiContentType,
-            sections:    aiSections,
-            language:    detectedLang,
-            status:      'ready',
+            sections: aiSections,
+            language: detectedLang,
+            status: 'ready',
           };
           if (aiAuthor && (!literature.author || literature.author === 'Unknown')) {
             updatePayload.author = aiAuthor;
@@ -141,11 +141,11 @@ router.post('/upload', authenticateToken, upload.fields([
           if (aiResp.data.book_brain) {
             const bb = aiResp.data.book_brain;
             updatePayload.bookBrain = {
-              vocabulary:           (bb.vocabulary    || []).slice(0, 80),
-              characters:           bb.characters    || [],
-              summary_stats:        bb.summary_stats || {},
-              struggle_zones:       bb.struggle_zones || [],
-              difficulty_map:       (bb.difficulty_map || []).filter(d => d.overall_difficulty > 0.4),
+              vocabulary: (bb.vocabulary || []).slice(0, 80),
+              characters: bb.characters || [],
+              summary_stats: bb.summary_stats || {},
+              struggle_zones: bb.struggle_zones || [],
+              difficulty_map: (bb.difficulty_map || []).filter(d => d.overall_difficulty > 0.4),
               cultural_context_bank: bb.cultural_context_bank || [],
             };
           }
@@ -176,15 +176,17 @@ router.post('/upload', authenticateToken, upload.fields([
           const aiQuestions = aiResp.data.questions || [];
           if (aiQuestions.length > 0) {
             const { Quiz } = await import('../models/Quiz.js');
-            const diffMap = { beginner:'easy', intermediate:'medium', advanced:'hard',
-                              easy:'easy', medium:'medium', hard:'hard' };
+            const diffMap = {
+              beginner: 'easy', intermediate: 'medium', advanced: 'hard',
+              easy: 'easy', medium: 'medium', hard: 'hard'
+            };
             const quizRecords = aiQuestions.map(q => ({
-              literatureId:  literature.id,
-              question:      q.question || q.q || 'Question',
-              options:       q.options  || q.choices || [],
+              literatureId: literature.id,
+              question: q.question || q.q || 'Question',
+              options: q.options || q.choices || [],
               correctAnswer: q.correct_answer ?? q.answer ?? q.correct ?? 0,
-              explanation:   q.explanation || '',
-              difficulty:    diffMap[q.difficulty] || 'medium',
+              explanation: q.explanation || '',
+              difficulty: diffMap[q.difficulty] || 'medium',
             }));
             await Quiz.bulkCreate(quizRecords, { ignoreDuplicates: true });
             await literature.update({ questionsGenerated: quizRecords.length });
@@ -201,7 +203,7 @@ router.post('/upload', authenticateToken, upload.fields([
               doc_type: aiContentType,
               language: langCode === 'fr' ? 'fr' : 'en'
             }, { timeout: 60000 });
-            
+
             if (introResp.data?.introduction) {
               await literature.update({ introduction: introResp.data.introduction });
               console.log(`✅ Generated introduction for: ${literature.title}`);
@@ -377,23 +379,23 @@ router.post('/:id/reprocess', authenticateToken, async (req, res) => {
         // Build enrichment lookup from book_brain difficulty_map
         const reprocessLookup = {};
         for (const d of (aiResp.data.book_brain?.difficulty_map || [])) {
-          if (d.section_id)    reprocessLookup[d.section_id]    = d;
+          if (d.section_id) reprocessLookup[d.section_id] = d;
           if (d.section_title) reprocessLookup[d.section_title] = d;
         }
         sections = aiResp.data.flat_units.map(unit => {
           const enrichment = reprocessLookup[unit.id] || reprocessLookup[unit.title] || {};
           return {
-            title:    unit.title   || 'Section',
-            content:  unit.content || '',
+            title: unit.title || 'Section',
+            content: unit.content || '',
             dialogue: unit.dialogue || unit.blocks || [],
             wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
-            emotion:              enrichment.emotion              || 'neutral',
-            setting:              enrichment.setting              || '',
-            characters_present:   enrichment.characters_present   || [],
-            archaic_phrases:      enrichment.archaic_phrases      || [],
-            literary_devices:     enrichment.literary_devices     || [],
-            faction:              enrichment.faction              || '',
-            difficulty:           enrichment.overall_difficulty   || 0,
+            emotion: enrichment.emotion || 'neutral',
+            setting: enrichment.setting || '',
+            characters_present: enrichment.characters_present || [],
+            archaic_phrases: enrichment.archaic_phrases || [],
+            literary_devices: enrichment.literary_devices || [],
+            faction: enrichment.faction || '',
+            difficulty: enrichment.overall_difficulty || 0,
             estimated_read_minutes: enrichment.estimated_read_minutes || 1,
           };
         });
@@ -408,7 +410,7 @@ router.post('/:id/reprocess', authenticateToken, async (req, res) => {
       const { splitIntoChapters } = await import('../services/chapterSplitter.js');
       const result = await splitIntoChapters(textToProcess);
       contentType = result.contentType;
-      sections    = result.sections;
+      sections = result.sections;
     }
 
     const updatePayload = { contentType, sections };
@@ -498,9 +500,28 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'You do not have permission to delete this content' });
     }
 
-    // Delete associated quiz questions first
+    // Delete associated records first to avoid foreign key constraints
     const { Quiz } = await import('../models/Quiz.js');
+    const { LessonProgress } = await import('../models/LessonProgress.js');
+    const { Session } = await import('../models/Session.js');
+    const { RLTrainingData } = await import('../models/RLTrainingData.js');
+
+    // 1. Delete Quizzes
     await Quiz.destroy({ where: { literatureId: req.params.id } });
+
+    // 2. Delete Lesson Progress
+    await LessonProgress.destroy({ where: { literatureId: req.params.id } });
+
+    // 3. Delete Session-related data (RLTrainingData depends on Session)
+    const sessionIds = (await Session.findAll({
+      where: { literatureId: req.params.id },
+      attributes: ['id']
+    })).map(s => s.id);
+
+    if (sessionIds.length > 0) {
+      await RLTrainingData.destroy({ where: { sessionId: sessionIds } });
+      await Session.destroy({ where: { id: sessionIds } });
+    }
 
     await literature.destroy();
     console.log(`🗑️  Deleted: ${literature.title}`);

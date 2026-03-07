@@ -33,14 +33,25 @@ from .structural_segmenter  import StructuralSegmenter
 from .question_generator    import PedagogicalQuestionGenerator
 from .front_matter_detector import FrontMatterDetector, filter_body_blocks
 from .language_detector     import get_language_detector
+from services.gemini_service import GeminiService
 
 try:
-    import pytesseract
+    import easyocr
+    import numpy as np
     from PIL import Image
     import io
     _OCR_OK = True
 except ImportError:
     _OCR_OK = False
+
+_OCR_READER = None
+
+def get_easyocr_reader(languages=['en']):
+    global _OCR_READER
+    if _OCR_READER is None:
+        # gpu=False to ensure it works on all systems without CUDA issues
+        _OCR_READER = easyocr.Reader(languages, gpu=False)
+    return _OCR_READER
 
 
 # ── Result dataclass ───────────────────────────────────────────────────────────
@@ -77,6 +88,7 @@ class LiteratureAnalyzer:
     """
 
     def __init__(self):
+        self._gemini           = GeminiService()
         self._classifier       = ContentClassifier()
         self._segmenter        = StructuralSegmenter()
         self._qgen             = PedagogicalQuestionGenerator()
@@ -117,19 +129,29 @@ class LiteratureAnalyzer:
         doc   = fitz.open(stream=pdf_bytes, filetype="pdf")
         pages = doc.page_count
         all_blocks, total_chars = self._extract_blocks(doc)
-        all_blocks, total_chars = self._extract_blocks(doc)
 
-        if total_chars < 50:
+        # ── Step 2: Check for Gibberish (Broken Unicode CMap) ──────────────────
+        is_junk = False
+        if total_chars > 50:
+            sample_text = self._get_sample_text(all_blocks)
+            if self._is_gibberish(sample_text):
+                print("⚠️ Gibberish detected (broken Unicode map). Forcing OCR fallback...")
+                is_junk = True
+
+        if total_chars < 50 or is_junk:
             if _OCR_OK:
-                print("Text density low. Falling back to OCR...")
+                print(f"Falling back to OCR (low density={total_chars < 50}, junk={is_junk})...")
                 all_blocks, total_chars = self._ocr_analyze(doc)
             else:
-                raise ValueError(
-                    "Extracted text is too short and OCR dependencies are missing. "
-                    "Install pytesseract and tesseract-ocr."
-                )
+                if is_junk:
+                    print("⚠️ Cannot OCR: dependencies missing. Proceeding with garbled text.")
+                else:
+                    raise ValueError(
+                        "Extracted text is too short and OCR dependencies are missing. "
+                        "Install pytesseract and tesseract-ocr."
+                    )
 
-        # ── Step 2: Remove front/back matter ──────────────────────────────────
+        # ── Step 3: Remove front/back matter ──────────────────────────────────
         body_blocks = self._front_matter_det.classify_blocks(all_blocks)
         front_pages_removed = len(all_blocks) - len(body_blocks)
 
@@ -137,24 +159,67 @@ class LiteratureAnalyzer:
             body_blocks = all_blocks
             front_pages_removed = 0
 
-        # ── Step 3: Detect language ────────────────────────────────────────────
+        # ── Step 4: Detect language ────────────────────────────────────────────
         lang_result = self._lang_detector.detect_from_blocks(body_blocks)
         language    = lang_result["language"]
         lang_conf   = lang_result["confidence"]
 
-        # ── Step 4: Classify ───────────────────────────────────────────────────
+        # ── Step 5: Classify ───────────────────────────────────────────────────
         clf = self._classifier.classify(body_blocks)
 
-        # ── Step 5: Infer title + author ──────────────────────────────────────
+        # ── Step 6: Infer title + author ──────────────────────────────────────
         title  = self._infer_title(all_blocks, doc, filename)
         author = self._infer_author(all_blocks, doc)
 
-        # ── Step 6: Segment + emotion tagging ─────────────────────────────────
+        # ── Step 6.5: Gemini Metadata Refinement (Tier 0) ───────────────────
+        if self._gemini.is_available():
+            try:
+                # Use first few content blocks for deep analysis
+                sample_text = " ".join([
+                    "".join(s["text"] for l in b.get("lines", []) for s in l.get("spans", []))
+                    for b in body_blocks[:20] if b.get("type") == 0
+                ])[:3000]
+                
+                refinement_prompt = f"""Analyze this document content:
+"{sample_text}"
+
+The current (possibly inaccurate) metadata is:
+Title: {title}
+Author: {author}
+Detected Type: {clf.type}
+
+Respond in JSON with refined metadata focusing on Primary School (P4-P6) categories:
+- title: string
+- author: string
+- type: "folktale" | "poetry" | "novel" | "informational" | "play" | "resource_book"
+- primary_suitability: "P4" | "P5" | "P6" | "unknown"
+- structure: [{"title": "e.g. Introduction", "text": "the exact text of the heading in the document"}]
+"""
+                refinement = self._gemini.generate_json(refinement_prompt)
+                if refinement:
+                    print(f"✨ Gemini Analysis: Title='{refinement.get('title')}', Type='{refinement.get('type')}', Suitability='{refinement.get('primary_suitability')}'")
+                    title = refinement.get("title", title)
+                    author = refinement.get("author", author)
+                    if refinement.get("type"):
+                        clf.type = refinement["type"]
+                    ai_headings = refinement.get("structure", [])
+                    if ai_headings:
+                        print(f"🧩 Gemini structural discovery: found {len(ai_headings)} units/chapters.")
+                else:
+                    ai_headings = []
+            except Exception as e:
+                print(f"Gemini metadata refinement failed: {e}")
+                ai_headings = []
+        else:
+            ai_headings = []
+
+        # ── Step 7: Segment + emotion tagging ─────────────────────────────────
         units = self._segmenter.segment(
             body_blocks,
             doc_type     = clf.type,
             language     = language,
             add_emotions = True,
+            ai_headings  = ai_headings,
         )
         flat_units = self._flatten_units(units, doc_type=clf.type)
 
@@ -287,7 +352,7 @@ class LiteratureAnalyzer:
         for page_idx in range(doc.page_count):
             page = doc[page_idx]
             page_dict = page.get_text(
-                "dict", flags=fitz.TEXT_PRESERVE_WHITESPACE
+                "dict", flags=fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_DEHYPHENATE
             )
             
             # Simple layout filtering: skip blocks that look like headers/footers
@@ -318,38 +383,101 @@ class LiteratureAnalyzer:
 
         return all_blocks, total_chars
 
+    def _get_sample_text(self, blocks: List[Dict[str, Any]], max_chars: int = 1000) -> str:
+        """Extract a small sample of text from body blocks for validation."""
+        text = ""
+        # Look for blocks that aren't on the cover page (usually page 0)
+        body_blocks = [b for b in blocks if b.get("_page", 0) > 0]
+        if not body_blocks: body_blocks = blocks
+        
+        for b in body_blocks:
+            if b.get("type") == 0:
+                for line in b.get("lines", []):
+                    for span in line.get("spans", []):
+                        text += span.get("text", "") + " "
+                        if len(text) > max_chars:
+                            return text
+        return text
+
+    def _is_gibberish(self, text: str) -> bool:
+        """
+        Detect broken Unicode maps (mojibake).
+        Signs of junk text:
+        - Ratio of symbols/whitespace to letters is extremely high.
+        - Common English characters (e.g. 'e', 't', 'a') are missing.
+        - Excessive noise characters: }, {, [, @, _, \, |, ^, ~
+        """
+        if not text or len(text) < 20:
+            return False
+            
+        # Clean text for counting
+        letters = sum(1 for c in text if c.isalpha())
+        total = len(text.strip())
+        if total == 0: return False
+        
+        alpha_ratio = letters / total
+        
+        # ── Decision ─────────────────────────────────────────────────────────
+        # Real prose usually has > 70% letters. Broken PDFs often have many symbols.
+        if alpha_ratio < 0.5:
+            return True
+            
+        # Check for noise character concentration
+        # Added: |, ¤, ¦, §, ©, ®, ±, ¶
+        noise_chars = "}{[]@_\\|^~¤¦§©®±¶"
+        noise_count = sum(1 for c in text if c in noise_chars)
+        if noise_count / total > 0.05: # > 5% junk chars (lowered from 10%)
+            return True
+            
+        # Check for fragmented text (very short non-word "words")
+        words = text.split()
+        if len(words) > 10:
+            short_words = [w for w in words if len(w) <= 2 and w.isalpha()]
+            if len(short_words) / len(words) > 0.5: # > 50% are 1-2 char fragments
+                return True
+                
+        # Secondary check: Common English letters (ETAOIN)
+        text_lower = text.lower()
+        common_missing = sum(1 for char in "etaoin" if char not in text_lower)
+        if common_missing >= 3 and letters > 40: # Lowered threshold
+            return True
+
+        return False
+
     def _ocr_analyze(self, doc: "fitz.Document") -> tuple[List[Dict[str, Any]], int]:
-        """Perform OCR on the entire document (blocks level)."""
+        """Perform OCR using EasyOCR on the entire document."""
         all_blocks: List[Dict[str, Any]] = []
         total_chars = 0
         
-        # We only OCR the first 20 pages for speed in this demo, or all if short
+        # We only OCR the first 50 pages for speed
         max_ocr = min(doc.page_count, 50) 
+        reader = get_easyocr_reader()
         
         for page_idx in range(max_ocr):
             page = doc[page_idx]
-            # Render page to image
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # 2x zoom for better OCR
+            # Render page to image (higher zoom for better OCR)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) 
             img_data = pix.tobytes("png")
-            img = Image.open(io.BytesIO(img_data))
             
-            # Run OCR
-            ocr_text = pytesseract.image_to_string(img)
+            # EasyOCR can take image path, cv2 image, or byte stream
+            # For simplicity and to avoid PIL dependency where not needed:
+            results = reader.readtext(img_data, detail=0, paragraph=True)
             
             # Synthesize blocks from OCR text
-            paragraphs = [p.strip() for p in ocr_text.split("\n\n") if p.strip()]
-            for p in paragraphs:
+            for p in results:
+                txt = p.strip()
+                if not txt: continue
                 block = {
                     "type": 0,
                     "_page": page_idx,
                     "lines": [{
                         "spans": [{
-                            "text": p, "size": 11.0, "flags": 0, "font": "OCR"
+                            "text": txt, "size": 11.0, "flags": 0, "font": "OCR"
                         }]
                     }],
                 }
                 all_blocks.append(block)
-                total_chars += len(p)
+                total_chars += len(txt)
                 
         return all_blocks, total_chars
 
@@ -486,17 +614,53 @@ class LiteratureAnalyzer:
         else:
             for chapter in units:
                 for section in chapter.get("children", []):
-                    flat.append({
-                        "title":    (
+                    content = (
+                        section.get("content", "")
+                        or "\n\n".join(section.get("paragraphs", []))
+                    )
+                    
+                    # ADHD Sub-chunking: If a section is too long (> 4000 chars),
+                    # break it into smaller manageable chunks for the reader.
+                    chunks = self._sub_chunk_content(content, max_chars=3000)
+                    
+                    for i, chunk in enumerate(chunks):
+                        title = (
                             f"{chapter['title']} - {section['title']}"
                             if section.get("title")
                             else chapter["title"]
-                        ),
-                        "content":  (
-                            section.get("content", "")
-                            or "\n\n".join(section.get("paragraphs", []))
-                        ),
-                        "dialogue": [],
-                    })
+                        )
+                        if len(chunks) > 1:
+                            title += f" (Part {i+1})"
+                            
+                        flat.append({
+                            "title":    title,
+                            "content":  chunk,
+                            "dialogue": [],
+                        })
 
         return flat
+
+    def _sub_chunk_content(self, text: str, max_chars: int = 3000) -> List[str]:
+        """Split long text into chunks at paragraph boundaries."""
+        if len(text) <= max_chars * 1.2:  # Allow 20% overflow to avoid tiny fragments
+            return [text]
+            
+        paragraphs = text.split("\n\n")
+        chunks = []
+        current_chunk = []
+        current_len = 0
+        
+        for p in paragraphs:
+            p_len = len(p)
+            if current_len + p_len > max_chars and current_chunk:
+                chunks.append("\n\n".join(current_chunk))
+                current_chunk = [p]
+                current_len = p_len
+            else:
+                current_chunk.append(p)
+                current_len += p_len + 2
+                
+        if current_chunk:
+            chunks.append("\n\n".join(current_chunk))
+            
+        return chunks

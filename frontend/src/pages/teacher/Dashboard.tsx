@@ -40,11 +40,13 @@ const TeacherDashboard = () => {
     const [analyticsData, setAnalyticsData] = useState<any>(null);
     const [inviteEmail, setInviteEmail] = useState("");
     const [isInviting, setIsInviting] = useState(false);
+    const [expandedRec, setExpandedRec] = useState<number | null>(null);
     const [intelligenceData, setIntelligenceData] = useState<{
         summaries: any[];
         alerts: any[];
+        recommendations: Record<string, any[]>;
         loading: boolean;
-    }>({ summaries: [], alerts: [], loading: false });
+    }>({ summaries: [], alerts: [], recommendations: {}, loading: false });
     const { toast } = useToast();
 
     const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
@@ -214,6 +216,41 @@ const TeacherDashboard = () => {
             } catch { /* common-highlight alerts optional */ }
 
             setIntelligenceData({ summaries, alerts, loading: false });
+
+            // ── Fetch per-student recommendations (D6 actionable intelligence) ──
+            const recMap: Record<string, any[]> = {};
+            await Promise.all(
+                summaries.slice(0, 10).map(async (s: any, idx: number) => {
+                    const student = students[idx];
+                    if (!student) return;
+                    const studentId = student.name.replace(/\s+/g, "_").toLowerCase();
+                    try {
+                        const recRes = await fetch(`${AI_URL}/teacher/recommendations/student`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                student_id: studentId,
+                                student_name: s.student_name,
+                                student_profile: {
+                                    attention_score: student.progress / 100,
+                                    frustration_level: s.risk_level === "high" ? 0.7 : 0.3,
+                                    best_time_of_day: "9am-noon",
+                                    persistence: student.progress > 60 ? 0.7 : 0.4,
+                                },
+                                recent_sessions: [{
+                                    quiz_score: student.progress / 100,
+                                    attention_score: student.progress / 100,
+                                }],
+                            }),
+                        });
+                        if (recRes.ok) {
+                            const recData = await recRes.json();
+                            recMap[s.student_name] = recData.recommendations || [];
+                        }
+                    } catch { /* optional */ }
+                })
+            );
+            setIntelligenceData(prev => ({ ...prev, recommendations: recMap }));
         } catch (err) {
             console.error("Intelligence fetch failed:", err);
             setIntelligenceData(prev => ({ ...prev, loading: false }));
@@ -332,9 +369,18 @@ const TeacherDashboard = () => {
                         <TabsList className="bg-secondary/50 p-1.5 rounded-2xl h-14 w-fit border border-border">
                             <TabsTrigger value="students" className="rounded-xl font-black text-sm px-6 data-[state=active]:bg-background data-[state=active]:shadow-lg">Student Roster</TabsTrigger>
                             <TabsTrigger value="analytics" className="rounded-xl font-black text-sm px-6 data-[state=active]:bg-background data-[state=active]:shadow-lg">Class Analytics</TabsTrigger>
-                            <TabsTrigger value="intelligence" className="rounded-xl font-black text-sm px-6 data-[state=active]:bg-background data-[state=active]:shadow-lg gap-2 flex items-center" onClick={() => { if (intelligenceData.summaries.length === 0) fetchIntelligence(); }}>
+                            <TabsTrigger
+                                value="intelligence"
+                                className="rounded-xl font-black text-sm px-6 data-[state=active]:bg-background data-[state=active]:shadow-lg gap-2 flex items-center"
+                                onClick={() => { if (intelligenceData.summaries.length === 0) fetchIntelligence(); }}
+                            >
                                 <Brain className="w-3.5 h-3.5" />
                                 AI Insights
+                                {Object.values(intelligenceData.recommendations).flat().some((r: any) => r.priority === "high") && (
+                                    <span className="ml-0.5 rounded-full bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 min-w-[16px] text-center">
+                                        {Object.values(intelligenceData.recommendations).flat().filter((r: any) => r.priority === "high").length}
+                                    </span>
+                                )}
                             </TabsTrigger>
                             <TabsTrigger value="content" className="rounded-xl font-black text-sm px-6 data-[state=active]:bg-background data-[state=active]:shadow-lg">My Content</TabsTrigger>
                         </TabsList>
@@ -438,10 +484,10 @@ const TeacherDashboard = () => {
                                                     animate={{ opacity: 1, x: 0 }}
                                                     transition={{ delay: i * 0.1 }}
                                                     className={`rounded-2xl border p-4 flex gap-4 ${alert.severity === "urgent"
-                                                            ? "border-red-400/40 bg-red-500/5"
-                                                            : alert.severity === "warning"
-                                                                ? "border-amber-400/40 bg-amber-500/5"
-                                                                : "border-blue-400/40 bg-blue-500/5"
+                                                        ? "border-red-400/40 bg-red-500/5"
+                                                        : alert.severity === "warning"
+                                                            ? "border-amber-400/40 bg-amber-500/5"
+                                                            : "border-blue-400/40 bg-blue-500/5"
                                                         }`}
                                                 >
                                                     {alert.severity === "urgent" ? (
@@ -485,28 +531,28 @@ const TeacherDashboard = () => {
                                                 transition={{ delay: i * 0.08 }}
                                             >
                                                 <Card className={`rounded-[28px] border-2 ${s.risk_level === "high"
-                                                        ? "border-red-400/40"
-                                                        : s.risk_level === "medium"
-                                                            ? "border-amber-400/40"
-                                                            : "border-green-400/40"
+                                                    ? "border-red-400/40"
+                                                    : s.risk_level === "medium"
+                                                        ? "border-amber-400/40"
+                                                        : "border-green-400/40"
                                                     }`}>
                                                     <CardContent className="p-5 space-y-3">
                                                         <div className="flex items-center gap-3">
                                                             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-black ${s.risk_level === "high"
-                                                                    ? "bg-red-500/10 text-red-600"
-                                                                    : s.risk_level === "medium"
-                                                                        ? "bg-amber-500/10 text-amber-600"
-                                                                        : "bg-green-500/10 text-green-600"
+                                                                ? "bg-red-500/10 text-red-600"
+                                                                : s.risk_level === "medium"
+                                                                    ? "bg-amber-500/10 text-amber-600"
+                                                                    : "bg-green-500/10 text-green-600"
                                                                 }`}>
                                                                 {s.student_name?.charAt(0) || "?"}
                                                             </div>
                                                             <div>
                                                                 <h4 className="font-black text-sm">{s.student_name}</h4>
                                                                 <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg ${s.risk_level === "high"
-                                                                        ? "bg-red-500/10 text-red-600"
-                                                                        : s.risk_level === "medium"
-                                                                            ? "bg-amber-500/10 text-amber-600"
-                                                                            : "bg-green-500/10 text-green-600"
+                                                                    ? "bg-red-500/10 text-red-600"
+                                                                    : s.risk_level === "medium"
+                                                                        ? "bg-amber-500/10 text-amber-600"
+                                                                        : "bg-green-500/10 text-green-600"
                                                                     }`}>
                                                                     {s.risk_level} risk
                                                                 </span>
@@ -514,6 +560,50 @@ const TeacherDashboard = () => {
                                                         </div>
 
                                                         <p className="text-sm text-muted-foreground leading-relaxed">{s.summary}</p>
+
+                                                        {/* Actionable Recommendations (D6) */}
+                                                        {(intelligenceData.recommendations[s.student_name]?.length ?? 0) > 0 && (
+                                                            <div>
+                                                                <button
+                                                                    className="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline w-full text-left"
+                                                                    onClick={() => setExpandedRec(expandedRec === i ? null : i)}
+                                                                    aria-expanded={expandedRec === i}
+                                                                >
+                                                                    <Brain className="w-3 h-3" />
+                                                                    Recommended Actions ({intelligenceData.recommendations[s.student_name].length})
+                                                                    <span className="ml-auto font-black">{expandedRec === i ? "▲" : "▼"}</span>
+                                                                </button>
+                                                                {expandedRec === i && (
+                                                                    <div className="mt-2 space-y-2">
+                                                                        {intelligenceData.recommendations[s.student_name].map((rec: any, rIdx: number) => (
+                                                                            <div
+                                                                                key={rIdx}
+                                                                                className={`rounded-xl p-3 border text-xs ${rec.priority === "high"
+                                                                                    ? "border-red-400/30 bg-red-500/5"
+                                                                                    : rec.priority === "medium"
+                                                                                        ? "border-amber-400/30 bg-amber-500/5"
+                                                                                        : "border-green-400/30 bg-green-500/5"
+                                                                                    }`}
+                                                                            >
+                                                                                <div className="flex items-start gap-1.5">
+                                                                                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md flex-shrink-0 ${rec.priority === "high" ? "bg-red-500/15 text-red-600" :
+                                                                                        rec.priority === "medium" ? "bg-amber-500/15 text-amber-600" :
+                                                                                            "bg-green-500/15 text-green-600"
+                                                                                        }`}>{rec.priority}</span>
+                                                                                    <p className="font-bold leading-snug">{rec.action}</p>
+                                                                                </div>
+                                                                                {rec.rationale && (
+                                                                                    <p className="text-muted-foreground mt-1 leading-relaxed">{rec.rationale}</p>
+                                                                                )}
+                                                                                {rec.expected_impact && (
+                                                                                    <p className="mt-1 text-primary font-semibold">📈 {rec.expected_impact}</p>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
 
                                                         {s.recommendation && (
                                                             <div className="bg-secondary/40 rounded-xl p-3">

@@ -19,6 +19,7 @@ import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+from services.gemini_service import GeminiService
 
 # ── Difficulty scoring ────────────────────────────────────────────────────────
 
@@ -272,9 +273,43 @@ def _extract_characters_from_units(
 # ── Vocabulary extraction ─────────────────────────────────────────────────────
 
 def _extract_vocabulary(
-    units: List[Dict[str, Any]], doc_type: str, language: str = "en"
+    units: List[Dict[str, Any]], 
+    doc_type: str, 
+    language: str = "en",
+    gemini: Optional[GeminiService] = None
 ) -> List[Dict[str, Any]]:
-    """Extract difficult vocabulary from the text."""
+    """Extract difficult vocabulary from the text, using Gemini if available."""
+    
+    # ── Tier 0: Gemini Cloud Acceleration ──────────────────────────────────
+    if gemini and gemini.is_available():
+        # Use first 3000 chars of content for deep vocabulary extraction
+        all_content = ""
+        for u in units[:5]:
+            all_content += (u.get("content", "") or str(u.get("paragraphs", []))) + "\n"
+        all_content = all_content[:4000]
+
+        prompt = f"""Analyze this literary text excerpt:
+"{all_content}"
+
+Identify 15-20 difficult or key vocabulary words for a Primary School (P4-P6, ages 9-12) student.
+For each word, provide:
+- meaning: a very simple, child-friendly definition
+- analogy: a simple comparison
+- archaic: boolean (is it an old-fashioned word?)
+
+Respond in JSON as a list of objects with keys: "word", "meaning", "analogy", "archaic".
+"""
+        try:
+            result = gemini.generate_json(prompt)
+            if isinstance(result, list) and len(result) > 0:
+                # Add context metadata to match local schema
+                for item in result:
+                    item["difficulty"] = 0.8 if item.get("archaic") else 0.6
+                return result
+        except Exception as e:
+            print(f"Gemini BookBrain vocab extraction failed: {e}")
+
+    # ── Tier 1: Local Heuristics ───────────────────────────────────────────
     word_freq: Counter = Counter()
     word_contexts: Dict[str, List[str]] = defaultdict(list)
 
@@ -502,6 +537,9 @@ class BookBrain:
         result = brain.analyze(units, doc_type="play", language="en", title="Macbeth")
     """
 
+    def __init__(self):
+        self._gemini = GeminiService()
+
     def analyze(
         self,
         units: List[Dict[str, Any]],
@@ -517,8 +555,8 @@ class BookBrain:
         # 2. Difficulty mapping (enriched with emotion, setting, characters_present, etc.)
         difficulty_map = _compute_difficulty_map(units, doc_type, char_names)
 
-        # 3. Vocabulary extraction
-        vocabulary = _extract_vocabulary(units, doc_type, language)
+        # 3. Vocabulary extraction (Tiered: Gemini -> Rules)
+        vocabulary = _extract_vocabulary(units, doc_type, language, self._gemini)
 
         # 4. Summary statistics
         total_words = sum(d["word_count"] for d in difficulty_map)

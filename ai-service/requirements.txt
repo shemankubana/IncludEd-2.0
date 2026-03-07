@@ -5,12 +5,16 @@ python-dotenv==1.0.0
 pydantic>=2.8.2
 aiofiles==23.2.1
 requests==2.31.0
+google-generativeai==0.3.2
 
 # ── PDF Processing ─────────────────────────────────────────────────────────────
 pymupdf==1.23.8
+easyocr==1.7.2
+opencv-python-headless==4.8.1.78
 
 # ── ML / NLP ───────────────────────────────────────────────────────────────────
-numpy==1.26.3
+numpy==1.26.4                  # Fix for version 2.0 compatibility issues
+Pillow==11.3.0
 torch>=2.2.2                  # Downgraded for Python 3.9 compatibility
 transformers>=4.38.0          # HuggingFace Transformers (DistilRoBERTa, FLAN-T5)
 sentencepiece>=0.1.99         # Required for T5Tokenizer

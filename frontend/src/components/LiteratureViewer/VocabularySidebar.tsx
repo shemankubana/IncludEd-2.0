@@ -23,6 +23,8 @@ interface VocabItem {
     contexts: string[];
     archaic?: boolean;
     modern_meaning?: string;
+    meaning?: string;
+    analogy?: string;
 }
 
 interface VocabularySidebarProps {
@@ -166,9 +168,16 @@ const VocabularySidebar: React.FC<VocabularySidebarProps> = ({
                                         )}
                                     </div>
 
-                                    {v.modern_meaning && (
+                                    {(v.modern_meaning || v.meaning) && (
                                         <p className="vocab-sidebar__meaning">
-                                            Modern meaning: <strong>{v.modern_meaning}</strong>
+                                            {v.archaic ? "Modern meaning: " : "Meaning: "}
+                                            <strong>{v.modern_meaning || v.meaning}</strong>
+                                        </p>
+                                    )}
+
+                                    {v.analogy && (
+                                        <p className="vocab-sidebar__analogy italic text-muted-foreground text-xs mt-1">
+                                            Tip: {v.analogy}
                                         </p>
                                     )}
 

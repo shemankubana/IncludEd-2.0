@@ -35,6 +35,9 @@ from typing import Any, Dict, List, Optional, Tuple
 # Allow import from parent package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from services.gemini_service import GeminiService
+from services.ollama_service import OllamaService
+
 
 # ── System prompts (Ollama) ────────────────────────────────────────────────────
 
@@ -352,14 +355,14 @@ class PedagogicalQuestionGenerator:
     """
 
     def __init__(self):
-        self._ollama: Optional[Any] = None
+        self._gemini = GeminiService()
+        self._ollama: Optional[OllamaService] = None
         self._t5: Optional[FlanT5Generator] = None
         self._init_ollama()
         # T5 loaded lazily to avoid startup delay
 
     def _init_ollama(self):
         try:
-            from services.ollama_service import OllamaService
             self._ollama = OllamaService()
         except Exception:
             self._ollama = None
@@ -390,6 +393,12 @@ class PedagogicalQuestionGenerator:
         """
         count = max(1, min(count, 10))
         text_sample = content[:4000]
+
+        # ── Tier 0: Gemini (Primary Cloud Acceleration) ────────────────────────
+        if self._gemini.is_available():
+            questions = self._generate_gemini(text_sample, doc_type, count, language)
+            if questions:
+                return questions[:count]
 
         # ── Tier 1: Ollama ────────────────────────────────────────────────────
         if self._ollama and self._is_ollama_available():
@@ -432,6 +441,38 @@ class PedagogicalQuestionGenerator:
         return questions
 
     # ── Private helpers ────────────────────────────────────────────────────────
+
+    def _generate_gemini(
+        self,
+        content: str,
+        doc_type: str,
+        count: int,
+        language: str,
+    ) -> List[Dict[str, Any]]:
+        """Generate high-quality pedagogical questions using Gemini."""
+        system_instruction = (
+            "You are an expert primary school teacher specializing in literacy for students aged 9-12 (Primary 4-6). "
+            "Create engaging multiple-choice questions about the provided text. "
+            "Focus on: understanding plot and characters, predicting outcomes, and identifying themes or morals. "
+            "Ensure the vocabulary of the questions is appropriate for 9-12 year olds."
+        )
+
+        lang_hint = " Answer in French." if language == "fr" else ""
+        prompt = (
+            f"Generate {count} multiple-choice questions about this {doc_type} passage.{lang_hint}\n\n"
+            f"TEXT:\n{content}\n\n"
+            "Respond in JSON with exactly this structure:\n"
+            '{"questions": [{"question": "...", "options": ["A", "B", "C", "D"], "correctAnswer": 0, "explanation": "...", "difficulty": "easy|medium|hard"}]}'
+        )
+
+        try:
+            result = self._gemini.generate_json(prompt, system_instruction)
+            raw_qs = result.get("questions", [])
+            if raw_qs:
+                return [self._normalise_question(q) for q in raw_qs]
+        except Exception as e:
+            print(f"⚠️  PedagogicalQGen Gemini error: {e}")
+        return []
 
     def _generate_ollama(
         self,

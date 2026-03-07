@@ -24,6 +24,7 @@ import VocabularySidebar from "./VocabularySidebar";
 import { DyslexiaControls, DEFAULT_DYSLEXIA_SETTINGS, type DyslexiaSettings } from "./DyslexiaRenderer";
 import ADHDChunkingEngine from "./ADHDChunkingEngine";
 import DifficultyMap from "./DifficultyMap";
+import ComprehensionGraph, { type ComprehensionGraphData } from "./ComprehensionGraph";
 import GamificationSystem from "../play/GamificationSystem";
 import { useSignalTracker, type ReadingSignals } from "../../hooks/useSignalTracker";
 import "./LiteratureViewer.css";
@@ -212,6 +213,9 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
     const [selectedActId, setSelectedActId] = useState<string | null>(null);
     const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
     const [dyslexiaSettings, setDyslexiaSettings] = useState<DyslexiaSettings>(DEFAULT_DYSLEXIA_SETTINGS);
+    const [showComprehensionGraph, setShowComprehensionGraph] = useState(false);
+    const [comprehensionData, setComprehensionData] = useState<ComprehensionGraphData | null>(null);
+    const comprehensionFetched = useRef(false);
     const vocabPostRef = useRef(false); // prevent duplicate fire
 
     const handleVocabSave = useCallback((word: string) => {
@@ -222,6 +226,47 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
             body: JSON.stringify({ student_id: studentId, book_id: bookId, word }),
         }).catch(() => { /* fire-and-forget */ });
     }, [studentId, bookId]);
+
+    // ── Comprehension Graph fetch + toggle ──────────────────────────────────
+    const buildFallbackGraphData = useCallback((): ComprehensionGraphData => {
+        const bb = analysisData?.book_brain;
+        return {
+            characters: (bb?.characters ?? []).map((c) => ({
+                name: c.name,
+                understanding: Math.min(1, c.line_count / 40),
+                firstAppearance: 0,
+                mentions: c.line_count,
+                arcType: c.importance === "major" ? "major" : "minor",
+            })),
+            themes: [],
+            devices: [],
+            vocabMastered: [],
+            vocabLearning: (bb?.vocabulary ?? []).slice(0, 6).map((v) => v.word),
+            currentProgress: 0,
+            chaptersSoFar: 0,
+            totalChapters: analysisData?.units.length ?? 1,
+        };
+    }, [analysisData]);
+
+    const handleToggleComprehensionGraph = useCallback(async () => {
+        setShowComprehensionGraph((v) => !v);
+        if (!comprehensionFetched.current && studentId && bookId) {
+            comprehensionFetched.current = true;
+            try {
+                const res = await fetch(`${AI_URL}/comprehension/graph/${studentId}/${bookId}`);
+                if (res.ok) {
+                    const raw = await res.json();
+                    setComprehensionData(raw as ComprehensionGraphData);
+                } else {
+                    setComprehensionData(buildFallbackGraphData());
+                }
+            } catch {
+                setComprehensionData(buildFallbackGraphData());
+            }
+        } else if (!comprehensionData) {
+            setComprehensionData(buildFallbackGraphData());
+        }
+    }, [studentId, bookId, AI_URL, comprehensionData, buildFallbackGraphData]);
 
     const handleVocabMastered = useCallback((word: string) => {
         if (!studentId || !bookId) return;
@@ -328,6 +373,32 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
                 <span className="lit-confidence">
                     {Math.round(analysisData.confidence * 100)}% confident
                 </span>
+                {/* Journey toggle — only shown when student context is available */}
+                {studentId && (
+                    <button
+                        id="comprehension-journey-toggle"
+                        onClick={handleToggleComprehensionGraph}
+                        style={{
+                            marginLeft: "auto",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.35rem",
+                            padding: "0.3rem 0.8rem",
+                            borderRadius: "0.6rem",
+                            border: "1.5px solid hsl(var(--border))",
+                            background: showComprehensionGraph ? "hsl(var(--primary))" : "transparent",
+                            color: showComprehensionGraph ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
+                            fontSize: "0.82rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            transition: "all 0.2s",
+                        }}
+                        aria-pressed={showComprehensionGraph}
+                        title="View your reading journey"
+                    >
+                        📊 My Journey
+                    </button>
+                )}
             </header>
 
             {/* ── Dyslexia Controls ── */}
@@ -337,6 +408,16 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
                     onChange={setDyslexiaSettings}
                 />
             </div>
+
+            {/* ── Comprehension Graph (student journey) ── */}
+            {showComprehensionGraph && comprehensionData && (
+                <ComprehensionGraph
+                    data={comprehensionData}
+                    studentName={studentId}
+                    bookTitle={analysisData.title}
+                    isStudent={true}
+                />
+            )}
 
             {/* ── Navigation ── */}
             <ScriptNavBar

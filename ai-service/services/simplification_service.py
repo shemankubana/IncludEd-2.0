@@ -21,7 +21,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from .ollama_service import OllamaService
+from services.ollama_service import OllamaService
+from services.gemini_service import GeminiService
 
 
 # ── Literary device detection ─────────────────────────────────────────────────
@@ -61,7 +62,46 @@ _KINYARWANDA_BRIDGE: Dict[str, str] = {
     "grief":         "Like *agahinda* — the deep sorrow felt when loss touches a family.",
     "justice":       "Like *ubutabera* and the *gacaca* courts — where truth and community healing meet.",
     "identity":      "Like *indangamuntu* (identity card) — but deeper, who you are inside, your values and story.",
+    # Education & learning
+    "school":        "Like *ishuri* — a place of growth and opportunity that many Rwandan families sacrifice for.",
+    "teacher":       "Like *umwarimu* — a deeply respected figure who shapes the next generation.",
+    "student":       "Like *umunyeshuri* — one who works hard today for a better tomorrow.",
+    "exam":          "Like *ikizamini* — a test of what you have learned, taken seriously in Rwanda's education system.",
+    "knowledge":     "Like *ubumenyi* — the wisdom passed down from elders and gained through study.",
+    "learning":      "Like *kwiga* — the lifelong Rwandan value of seeking understanding and growth.",
+    # Nature & environment
+    "river":         "Like the *Nyabarongo* — Rwanda's largest river, central to life, farming, and history.",
+    "mountain":      "Like the *ibirunga* (volcanoes) of the north — awe-inspiring landmarks that shape the land.",
+    "forest":        "Like *ishyamba* — forests that many Rwandan families depend on for firewood and food.",
+    "rain":          "Like *imvura* — in Rwanda, rain is a blessing that brings green hills to life.",
+    "sun":           "Like *izuba* — the sun that rises over a thousand hills every morning.",
+    "hill":          "Like the *inkike* (hills) that define Rwanda's famous landscape — *pays des mille collines*.",
+    # Community & belonging
+    "community":     "Like *umuryango w'abaturage* — the village community that raises every child together.",
+    "refugee":       "Like *impunzi* — a word with deep meaning in Rwanda's history of displacement and return.",
+    "home":          "Like *urugo* — the family homestead, a sacred place of belonging.",
+    "neighbour":     "Like *umuturanyi* — whom Rwandans greet every morning by name.",
+    "stranger":      "Like *umunyamahanga* — in Rwandan culture, even strangers deserve hospitality (*ubushyingiro*).",
+    # Modern concepts
+    "government":    "Like *leta* — the state that many Rwandans have seen transform dramatically since 1994.",
+    "democracy":     "Like *demokarasi* — a concept Rwanda works towards through its *Gacaca* and local governance.",
+    "city":          "Like *umujyi wa Kigali* — a rapidly growing city that many students dream of reaching one day.",
+    "technology":    "Like Rwanda's *Smart Rwanda* vision — a country that has embraced mobile phones and internet.",
+    "phone":         "Like the mobile phones that connect *abaturage* (citizens) across Rwanda's hills.",
+    # More literary themes
+    "power":         "Like *ingufu* — in Rwanda, the abuse of power has deep historical resonance.",
+    "freedom":       "Like *ubwigenge* — independence, celebrated every 1st of July in Rwanda.",
+    "hope":          "Like *ibyiringiro* — the hope that Rwanda's *Agaciro* (dignity, self-worth) is built upon.",
+    "shame":         "Like *isoni* — a powerful feeling in Rwandan culture, tied to community reputation.",
+    "pride":         "Like *ikuzo* — the pride Rwandans feel in their culture, resilience, and progress.",
+    "courage":       "Like *ubutwari* — praised in Rwandan history as the quality of great leaders and liberators.",
+    "loneliness":    "Like *ubusa* — an unusual feeling in a culture where communal ties are deep.",
+    "forgiveness":   "Like *imbabazi* — central to Rwanda's post-genocide reconciliation process.",
+    "revenge":       "Like *impyisi* (hyena) in Rwandan fables — seeking revenge but ultimately paying the price.",
+    "corruption":    "Like *akarengane* — a betrayal of *agaciro* (dignity) that Rwanda actively fights.",
+    "sacrifice":     "Like *gutanga* — giving something precious for others; a virtue celebrated in Rwandan songs.",
 }
+
 
 
 def _get_kinyarwanda_bridge(text: str) -> Optional[str]:
@@ -104,6 +144,7 @@ class SimplificationService:
 
     def __init__(self):
         self.ollama = OllamaService()
+        self.gemini = GeminiService()
 
     def simplify(
         self,
@@ -129,7 +170,26 @@ class SimplificationService:
                 "tier": "ollama" | "flan_t5" | "rule_based",
             }
         """
-        # Try Tier 1: Ollama LLM
+        # Tier 0: Gemini Cloud LLM (Primary)
+        if self.gemini.is_available():
+            try:
+                # Reuse the Ollama prompt logic as it's already well-structured
+                result = self._simplify_gemini(
+                    highlighted_text, book_title, author, doc_type,
+                    chapter_context, speaker, reading_level, language,
+                )
+                if result and result.get("simple_version"):
+                    result["tier"] = "gemini"
+                    # Supplement with local assets + Gemini Vocab
+                    result["vocabulary"] = self._extract_vocabulary_gemini(highlighted_text, reading_level)
+                    result["literary_devices"] = self._detect_devices(highlighted_text)
+                    if not result.get("kinyarwanda_bridge"):
+                        result["kinyarwanda_bridge"] = _get_kinyarwanda_bridge(highlighted_text)
+                    return result
+            except Exception as e:
+                print(f"Gemini simplification failed: {e}")
+
+        # Tier 1: Ollama LLM
         if self.ollama.is_available():
             try:
                 result = self._simplify_ollama(
@@ -153,6 +213,67 @@ class SimplificationService:
             speaker, reading_level, language,
         )
 
+    def _simplify_gemini(
+        self,
+        text: str,
+        book_title: str,
+        author: str,
+        doc_type: str,
+        chapter_context: str,
+        speaker: str,
+        reading_level: str,
+        language: str,
+    ) -> Dict[str, Any]:
+        """Use Gemini for high-performance simplification."""
+        level_desc = {
+            "beginner": "a 9-year-old Primary 4 (P4) student",
+            "intermediate": "a 10-year-old Primary 5 (P5) student",
+            "advanced": "an 11-12 year old Primary 6 (P6) student",
+        }.get(reading_level, "a 10-year-old Primary 5 student")
+
+        speaker_ctx = f' spoken by the character "{speaker}"' if speaker else ""
+        book_ctx = f' from "{book_title}" by {author}' if book_title else ""
+
+        system_instruction = f"You are an expert pedagogical AI specializing in simplifying literature for {level_desc}. You focus on clarity, cultural relevance (Rwanda), and preserving the author's emotional resonance."
+
+        if language == "fr":
+            prompt = f"""Analyse ce passage{book_ctx}{speaker_ctx}:
+
+"{text}"
+
+Contexte du chapitre: {chapter_context[:500] if chapter_context else 'Non fourni'}
+
+Réponds en JSON avec exactement ces clés:
+{{
+  "simple_version": "Version simplifiée (2-3 phrases)",
+  "author_intent": "Pourquoi l'auteur a écrit cela ainsi",
+  "cultural_context": "Contexte culturel si pertinent, sinon null",
+  "kinyarwanda_bridge": "Analogie culturelle rwandaise — compare avec un concept rwandais (imigabane, umuganda, icyubahiro, etc.)",
+  "vocabulary": [
+    {"word": "string", "meaning": "définition simple pour un enfant", "analogy": "comparaison simple"}
+  ]
+}}"""
+        else:
+            prompt = f"""Analyze this passage{book_ctx}{speaker_ctx}:
+
+"{text}"
+
+Chapter context: {chapter_context[:500] if chapter_context else 'Not provided'}
+
+Respond in JSON with exactly these keys:
+{{
+  "simple_version": "Simplified version (2-3 sentences)",
+  "author_intent": "Why the author wrote it this way",
+  "cultural_context": "Cultural context if relevant, otherwise null",
+  "kinyarwanda_bridge": "Rwanda cultural connection — compare to umuganda, gacaca, icyubahiro, or another Rwandan concept",
+  "vocabulary": [
+    {"word": "string", "meaning": "simple child-friendly definition", "analogy": "simple comparison for a 10-year-old"}
+  ]
+}}"""
+
+        result = self.gemini.generate_json(prompt, system_instruction)
+        return result if isinstance(result, dict) else {}
+
     def _simplify_ollama(
         self,
         text: str,
@@ -166,10 +287,10 @@ class SimplificationService:
     ) -> Dict[str, Any]:
         """Use Ollama for intelligent simplification."""
         level_desc = {
-            "beginner": "a 10-year-old student",
-            "intermediate": "a 14-year-old secondary school student",
-            "advanced": "a 17-year-old student",
-        }.get(reading_level, "a 14-year-old student")
+            "beginner": "a 9-year-old Primary 4 (P4) student",
+            "intermediate": "a 10-year-old Primary 5 (P5) student",
+            "advanced": "an 11-12 year old Primary 6 (P6) student",
+        }.get(reading_level, "a 10-year-old Primary 5 student")
 
         speaker_ctx = f' spoken by the character "{speaker}"' if speaker else ""
         book_ctx = f' from "{book_title}" by {author}' if book_title else ""
@@ -186,7 +307,10 @@ Réponds en JSON avec exactement ces clés:
   "simple_version": "Version simplifiée qui préserve le style littéraire (2-3 phrases)",
   "author_intent": "Pourquoi l'auteur a écrit cela ainsi (1-2 phrases)",
   "cultural_context": "Contexte culturel si pertinent, sinon null",
-  "kinyarwanda_bridge": "Analogie culturelle rwandaise si applicable (ex: comparer à imigabane, gacaca, icyubahiro), sinon null"
+  "kinyarwanda_bridge": "Analogie culturelle rwandaise si applicable (ex: comparer à imigabane, gacaca, icyubahiro), sinon null",
+  "vocabulary": [
+    {"word": "string", "meaning": "définition simple", "analogy": "comparaison simple"}
+  ]
 }}
 
 Adapte pour {level_desc}. Préserve la voix littéraire."""
@@ -202,7 +326,10 @@ Respond in JSON with exactly these keys:
   "simple_version": "Simplified version that preserves literary voice (2-3 sentences)",
   "author_intent": "Why the author wrote it this way (1-2 sentences)",
   "cultural_context": "Cultural context if relevant, otherwise null",
-  "kinyarwanda_bridge": "Rwanda cultural connection if applicable (e.g. compare to umuganda, gacaca, icyubahiro, or another Rwandan concept), otherwise null"
+  "kinyarwanda_bridge": "Rwanda cultural connection if applicable (e.g. compare to umuganda, gacaca, icyubahiro, or another Rwandan concept), otherwise null",
+  "vocabulary": [
+    {"word": "string", "meaning": "simple child-friendly definition", "analogy": "simple comparison for a 10-year-old"}
+  ]
 }}
 
 Adapt for {level_desc}. Preserve the literary voice — don't dumb it down."""
@@ -281,6 +408,27 @@ Adapt for {level_desc}. Preserve the literary voice — don't dumb it down."""
             "kinyarwanda_bridge": kinyarwanda_bridge,
             "tier": "rule_based",
         }
+
+    def _extract_vocabulary_gemini(self, text: str, reading_level: str) -> List[Dict[str, str]]:
+        """Extract difficult words and generate child-friendly definitions using Gemini."""
+        if not self.gemini.is_available():
+            return self._extract_vocabulary(text)
+
+        level_desc = {
+            "beginner": "Primary 4 (9 years old)",
+            "intermediate": "Primary 5 (10 years old)",
+            "advanced": "Primary 6 (11-12 years old)",
+        }.get(reading_level, "Primary 5 student")
+
+        prompt = f"""Identify 3-5 difficult or important words from this text and provide child-friendly definitions:
+"{text}"
+
+The definitions should be suitable for a {level_desc}.
+Respond in JSON as a list of objects with "word", "meaning", and "analogy" (a simple comparison to help them understand).
+Example: [{{"word": "astounded", "meaning": "very surprised", "analogy": "like when you see a magic trick"}}]
+"""
+        result = self.gemini.generate_json(prompt)
+        return result if isinstance(result, list) else self._extract_vocabulary(text)
 
     def _extract_vocabulary(self, text: str) -> List[Dict[str, str]]:
         """Extract difficult words with definitions."""

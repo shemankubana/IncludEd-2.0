@@ -59,7 +59,7 @@ _LIVRE_RE    = re.compile(r"\bLIVRE\s+([\dIVX]+|[A-Z][a-z]+)?\b", re.IGNORECASE)
 # Character cue: ALL CAPS line (1–5 words), optional period/colon, <30 chars total
 # Handles: "ROMEO", "LADY MACBETH", "FIRST WITCH.", "THE GHOST:"
 _CUE_RE = re.compile(
-    r"^[A-Z][A-Z\s'\.]{0,28}[A-Z]\.?\:?\s*$"
+    r"^[A-Z][A-Z\s'\.\d]{0,28}[A-Z]\.?\:?\s*$"
 )
 
 # Stage directions
@@ -89,12 +89,9 @@ class StructuralSegmenter:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    def segment(
-        self,
-        all_blocks: List[Dict[str, Any]],
-        doc_type: str,
         language: str = "en",
         add_emotions: bool = True,
+        ai_headings: Optional[List[Dict[str, str]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Segment blocks into hierarchical units.
@@ -105,7 +102,9 @@ class StructuralSegmenter:
         doc_type:     "play" | "novel" | "generic"
         language:     "en" | "fr"
         add_emotions: If True, run EmotionAnalyzer on dialogue blocks (plays only).
+        ai_headings:  Optional list of metadata-inferred headings [{"title": "...", "text": "..."}].
         """
+        self.ai_headings = ai_headings or []
         tokens = self._tokenise(all_blocks, doc_type)
 
         if doc_type == "play":
@@ -163,8 +162,21 @@ class StructuralSegmenter:
         return tokens
 
     def _match_heading(self, text: str, doc_type: str) -> Tuple[str, bool]:
-        """Check first 30 chars for heading patterns."""
-        # Skip running headers (page-number-prefixed lines like "9 MACBETH ACT 1. SC. 2 DUNCAN...")
+        """
+        Check for heading patterns. 
+        Priority: AI-discovered headings -> Regex patterns.
+        """
+        clean_text = self._normalize_heading(text)
+        
+        # 1. AI Anchor Match (highest priority)
+        if hasattr(self, "ai_headings") and self.ai_headings:
+            for ah in self.ai_headings:
+                target = self._normalize_heading(ah.get("text", ah.get("title", "")))
+                if target and target in clean_text:
+                    # Treat as chapter-level for novels/poems, act/scene follows regex logic below
+                    return "chapter", True
+
+        # Skip running headers
         if _RUNNING_HEADER_RE.match(text.strip()):
             return "none", False
         t = text[:30]
@@ -180,6 +192,11 @@ class StructuralSegmenter:
             if _PARTIE_RE.search(t):   return "chapter", True
             if _LIVRE_RE.search(t):    return "chapter", True
         return "none", False
+
+    @staticmethod
+    def _normalize_heading(text: str) -> str:
+        """Lowercases and strips common punctuation/whitespace for comparison."""
+        return re.sub(r'[^a-zA-Z0-9]', '', text.lower())
 
     # ── Play hierarchy ─────────────────────────────────────────────────────────
 

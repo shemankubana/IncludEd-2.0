@@ -34,6 +34,7 @@ from services.accessibility_adapter      import FreeAccessibilityAdapter
 from services.rl_agent_service           import RLAgentService
 from services.smart_question_generator   import SmartQuestionGenerator
 from services.ollama_service             import OllamaService
+from services.gemini_service             import GeminiService
 from services.simplification_service     import SimplificationService
 from services.learner_embedding          import LearnerEmbedding, SessionMetrics
 from services.comprehension_tracker      import ComprehensionTracker
@@ -64,6 +65,7 @@ accessibility_adapter = FreeAccessibilityAdapter()
 rl_agent              = RLAgentService()
 tts_service           = TTSService()
 ollama_service        = OllamaService()
+gemini_service        = GeminiService()
 simplification_svc    = SimplificationService()
 learner_embedding     = LearnerEmbedding()
 comprehension_tracker = ComprehensionTracker()
@@ -342,51 +344,40 @@ class IntroductionRequest(BaseModel):
 
 @app.post("/introduction/generate", tags=["literature"])
 async def generate_introduction(req: IntroductionRequest):
-    """Generate a short student-friendly introduction for a book."""
-    doc_label_en = {"play": "play", "novel": "novel"}.get(req.doc_type, "text")
-    doc_label_fr = {"play": "pièce de théâtre", "novel": "roman"}.get(req.doc_type, "texte")
+    """
+    Generate an engaging literature introduction (v3.0).
+    Now uses Gemini as primary for high-quality pedagogical context.
+    """
+    prompt = f"""Generate a short, engaging pedagogical introduction (2-3 paragraphs) for:
+Title: {req.title}
+Author: {req.author}
+Content Genre: {req.doc_type}
 
-    try:
-        if req.language == "fr":
-            prompt = (
-                f"Écris une courte introduction (3-4 phrases) de la {doc_label_fr} "
-                f'"{req.title}" écrite par {req.author}. '
-                f"L'introduction doit être simple, engageante et adaptée aux élèves du secondaire. "
-                f"Voici un extrait du début : {req.content_summary[:500]}"
-            )
-        else:
-            prompt = (
-                f'Write a short introduction (3-4 sentences) for the {doc_label_en} '
-                f'"{req.title}" written by {req.author}. '
-                f"Keep it simple, engaging, and suitable for secondary school students. "
-                f"Here is an excerpt from the beginning: {req.content_summary[:500]}"
-            )
-        result = ollama_service.generate(prompt)
-        if result and len(result.strip()) > 30:
-            return {"introduction": result.strip()}
-    except Exception:
-        pass
+Summary of initial content:
+{req.content_summary}
 
-    snippet = req.content_summary[:200].strip().rstrip(".") + "…" if req.content_summary else ""
+Focus on the historical/literary context and why this work matters.
+Format: Return only the text of the introduction.
+"""
+    system_instruction = "You are an expert literature teacher helping students with learning differences feel excited about reading."
+    
+    # Tier 0: Gemini
+    if gemini_service.is_available():
+        intro = gemini_service.generate(prompt, system_instruction)
+        if intro:
+            return {"introduction": intro, "tier": "gemini"}
+            
+    # Tier 1: Ollama
+    if ollama_service.is_available():
+        intro = ollama_service.generate(prompt, system_instruction)
+        if intro:
+            return {"introduction": intro, "tier": "ollama"}
 
-    if req.language == "fr":
-        intro = (
-            f'"{req.title}" est une {doc_label_fr} écrite par {req.author}. '
-            f"Ce texte vous emmène dans une histoire fascinante pleine de personnages mémorables et de moments captivants. "
-        )
-        if snippet:
-            intro += f'Elle commence ainsi : « {snippet} » '
-        intro += "Bonne lecture !"
-    else:
-        intro = (
-            f'"{req.title}" is a {doc_label_en} written by {req.author}. '
-            f"This text takes you on a fascinating journey with memorable characters and captivating moments. "
-        )
-        if snippet:
-            intro += f'It begins: "{snippet}" '
-        intro += "Enjoy reading!"
-
-    return {"introduction": intro}
+    # Fallback: Static template (legacy)
+    return {
+        "introduction": f"Welcome to {req.title} by {req.author}. This {req.doc_type} is a classic work that explores important themes and characters.",
+        "tier": "template"
+    }
 
 
 # ── Quiz Generation ─────────────────────────────────────────────────────────
@@ -768,21 +759,20 @@ async def poem_analyze(req: PoemAnalyzeRequest):
 # ── Helper Endpoints ─────────────────────────────────────────────────────────
 
 @app.post("/adapt-text")
-async def adapt_text(request: Any):
+async def adapt_text(req: Dict[str, Any]):
     """
-    Simplify a section of text using the rule-based simplification engine.
-    Used for per-section background simplification of uploaded content.
-    Works without Ollama (rule-based archaic word replacement + sentence splitting).
+    Batch adaptation endpoint used by background workers (D2).
     """
-    text = getattr(request, "text", None) or (request if isinstance(request, str) else "")
-    doc_type = getattr(request, "doc_type", "generic") or "generic"
+    text = req.get("text", "")
+    doc_type = req.get("doc_type", "generic")
+    
     if not text:
         return {"adaptedText": "", "strategy": "empty"}
 
     result = await asyncio.to_thread(
         simplification_svc.simplify,
         text,
-        "",   # book_title — not needed for section-level adaptation
+        "",   # book_title
         "",   # author
         doc_type,
         "",   # chapter_context
@@ -838,15 +828,77 @@ async def health():
             "learner_embedding_128dim",
             "comprehension_graph",
             "teacher_intelligence",
+            "teacher_recommendations",
             "story_recaps",
             "poem_mode",
             "adhd_chunking",
             "dyslexia_rendering",
+            "focus_sounds",
+            "gemini_acceleration",
         ],
         "timestamp":      time.time(),
     }
 
 
+# ── Startup: Model Size Check (D7 compliance) ────────────────────────────────
+
+@app.on_event("startup")
+async def check_model_sizes():
+    """
+    Verify that loaded model files fit within the 500 MB offline spec (D7).
+    This is a non-blocking advisory check — the service starts regardless.
+    """
+    MODEL_SIZE_LIMIT_MB = 500
+    MODEL_EXTENSIONS   = {".bin", ".pt", ".gguf", ".safetensors", ".pkl", ".joblib"}
+
+    # Directories to scan (relative to this file)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    scan_dirs = [
+        os.path.join(base_dir, "models"),
+        os.path.join(base_dir, "services"),
+        os.path.join(base_dir, "..", "rl-engine"),
+    ]
+
+    total_bytes = 0
+    large_files: list[tuple[str, float]] = []
+
+    for scan_dir in scan_dirs:
+        if not os.path.isdir(scan_dir):
+            continue
+        for root, _, files in os.walk(scan_dir):
+            for fname in files:
+                if any(fname.endswith(ext) for ext in MODEL_EXTENSIONS):
+                    fpath = os.path.join(root, fname)
+                    try:
+                        size_bytes = os.path.getsize(fpath)
+                        total_bytes += size_bytes
+                        size_mb = size_bytes / (1024 * 1024)
+                        if size_mb > 50:
+                            large_files.append((fpath, size_mb))
+                    except OSError:
+                        pass
+
+    total_mb = total_bytes / (1024 * 1024)
+    if large_files:
+        large_files.sort(key=lambda x: x[1], reverse=True)
+
+    if total_mb > MODEL_SIZE_LIMIT_MB:
+        import logging
+        logging.getLogger("included.startup").warning(
+            "[MODEL SIZE] ⚠️  Total model files = %.1f MB — EXCEEDS 500 MB offline spec (D7)! "
+            "Consider INT4 quantization. Largest files: %s",
+            total_mb,
+            ", ".join(f"{os.path.basename(f)} ({s:.0f} MB)" for f, s in large_files[:3]),
+        )
+    else:
+        import logging
+        logging.getLogger("included.startup").info(
+            "[MODEL SIZE] ✅ Total model files = %.1f MB — within 500 MB offline spec (D7).",
+            total_mb,
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8082)
+
