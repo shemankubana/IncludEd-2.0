@@ -7,6 +7,7 @@ import { Literature } from '../models/Literature.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { sequelize } from '../config/database.js';
 import { Op } from 'sequelize';
+import { generateTeacherInsights } from '../services/insightService.js';
 
 const router = express.Router();
 
@@ -213,11 +214,11 @@ router.get('/validation-metrics', authenticateToken, requireTeacher, async (req,
 
         // Split sessions into first-half (pre) and second-half (post) for longitudinal comparison
         const mid = Math.floor(completedSessions.length / 2);
-        const preSessions  = completedSessions.slice(0, mid);
+        const preSessions = completedSessions.slice(0, mid);
         const postSessions = completedSessions.slice(mid);
 
         const mean = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
-        const std  = (arr) => {
+        const std = (arr) => {
             const m = mean(arr);
             return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / (arr.length - 1));
         };
@@ -230,9 +231,9 @@ router.get('/validation-metrics', authenticateToken, requireTeacher, async (req,
         };
 
         // Comprehension (quiz scores)
-        const preQuiz  = preSessions.map(s => s.quizScore || 0);
+        const preQuiz = preSessions.map(s => s.quizScore || 0);
         const postQuiz = postSessions.map(s => s.quizScore || 0);
-        const preQuizMean  = mean(preQuiz);
+        const preQuizMean = mean(preQuiz);
         const postQuizMean = mean(postQuiz);
         const comprehensionGain = preQuizMean > 0
             ? ((postQuizMean - preQuizMean) / preQuizMean) * 100
@@ -240,9 +241,9 @@ router.get('/validation-metrics', authenticateToken, requireTeacher, async (req,
         const quizCohensD = cohensD(preQuiz, postQuiz);
 
         // Attention scores
-        const preAttn  = preSessions.map(s => s.avgAttentionScore || 0).filter(v => v > 0);
+        const preAttn = preSessions.map(s => s.avgAttentionScore || 0).filter(v => v > 0);
         const postAttn = postSessions.map(s => s.avgAttentionScore || 0).filter(v => v > 0);
-        const preAttnMean  = preAttn.length  ? mean(preAttn)  : 0;
+        const preAttnMean = preAttn.length ? mean(preAttn) : 0;
         const postAttnMean = postAttn.length ? mean(postAttn) : 0;
         const attentionGain = preAttnMean > 0
             ? ((postAttnMean - preAttnMean) / preAttnMean) * 100
@@ -264,30 +265,30 @@ router.get('/validation-metrics', authenticateToken, requireTeacher, async (req,
         res.json({
             dataPoints: completedSessions.length,
             comprehension: {
-                preMean:  parseFloat(preQuizMean.toFixed(4)),
+                preMean: parseFloat(preQuizMean.toFixed(4)),
                 postMean: parseFloat(postQuizMean.toFixed(4)),
-                gainPct:  parseFloat(comprehensionGain.toFixed(2)),
-                cohensD:  parseFloat(quizCohensD.toFixed(4)),
+                gainPct: parseFloat(comprehensionGain.toFixed(2)),
+                cohensD: parseFloat(quizCohensD.toFixed(4)),
                 meetsTarget: comprehensionGain >= 25,
             },
             attention: {
-                preMean:  parseFloat(preAttnMean.toFixed(4)),
+                preMean: parseFloat(preAttnMean.toFixed(4)),
                 postMean: parseFloat(postAttnMean.toFixed(4)),
-                gainPct:  parseFloat(attentionGain.toFixed(2)),
-                cohensD:  parseFloat(attnCohensD.toFixed(4)),
+                gainPct: parseFloat(attentionGain.toFixed(2)),
+                cohensD: parseFloat(attnCohensD.toFixed(4)),
                 meetsTarget: attentionGain >= 30,
             },
             rl: {
-                meanReward:   parseFloat(rlMeanReward.toFixed(4)),
+                meanReward: parseFloat(rlMeanReward.toFixed(4)),
                 totalRecords: rlRecords.length,
-                meetsTarget:  rlMeanReward > 0,
+                meetsTarget: rlMeanReward > 0,
             },
             effectSize: {
-                cohensD:    parseFloat(overallD.toFixed(4)),
+                cohensD: parseFloat(overallD.toFixed(4)),
                 meetsTarget: Math.abs(overallD) >= 0.5,
                 interpretation: Math.abs(overallD) >= 0.8 ? 'large'
                     : Math.abs(overallD) >= 0.5 ? 'medium'
-                    : Math.abs(overallD) >= 0.2 ? 'small' : 'negligible',
+                        : Math.abs(overallD) >= 0.2 ? 'small' : 'negligible',
             },
             thresholds: {
                 comprehension_improvement: '≥ 25%',
@@ -320,15 +321,55 @@ router.get('/rl-reward-trend', authenticateToken, requireTeacher, async (req, re
         for (let i = 0; i < records.length; i += binSize) {
             const bin = records.slice(i, i + binSize);
             bins.push({
-                bin:         Math.floor(i / binSize) + 1,
-                meanReward:  parseFloat((bin.reduce((s, r) => s + parseFloat(r.reward || 0), 0) / bin.length).toFixed(4)),
+                bin: Math.floor(i / binSize) + 1,
+                meanReward: parseFloat((bin.reduce((s, r) => s + parseFloat(r.reward || 0), 0) / bin.length).toFixed(4)),
                 recordCount: bin.length,
-                date:        bin[0]?.recordedAt,
+                date: bin[0]?.recordedAt,
             });
         }
 
         res.json({ bins, total: records.length });
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/analytics/insights
+ * Returns AI-generated teaching insights based on class performance.
+ */
+router.get('/insights', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        // Collect class stats similar to /class but pass to AI
+        const stats = await Session.findAll({
+            attributes: [
+                'disabilityType',
+                [sequelize.fn('AVG', sequelize.col('quizScore')), 'avgQuiz'],
+                [sequelize.fn('AVG', sequelize.col('avgAttentionScore')), 'avgAttention'],
+                [sequelize.fn('AVG', sequelize.col('completionRate')), 'avgCompletion'],
+            ],
+            where: { status: 'completed' },
+            group: ['disabilityType'],
+            raw: true,
+        });
+
+        // Top struggle zones (from BookBrain in Literature)
+        const struggleResult = await Literature.findAll({
+            attributes: ['title', 'bookBrain'],
+            limit: 5
+        });
+
+        const insights = await generateTeacherInsights({
+            classStats: stats,
+            struggleZones: struggleResult.map(l => ({
+                title: l.title,
+                zones: l.bookBrain?.struggle_zones || []
+            }))
+        });
+
+        res.json({ insights });
+    } catch (error) {
+        console.error('❌ Insight route error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });

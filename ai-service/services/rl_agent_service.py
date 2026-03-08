@@ -27,6 +27,7 @@ ACTION_LABELS = {
 DISABILITY_NONE     = 0.0
 DISABILITY_DYSLEXIA = 0.5
 DISABILITY_ADHD     = 1.0
+DISABILITY_BOTH     = 1.5
 
 
 class RLAgentService:
@@ -171,8 +172,16 @@ class RLAgentService:
          backtrack_freq, attention_score, disability_type,
          text_difficulty, session_fatigue) = state_vector
 
+        # Both (Dyslexia + ADHD) - High support needs
+        if disability_type >= 1.4:
+            if attention_score < 0.5 or session_fatigue > 0.5:
+                return 5  # Attention Break
+            if mouse_dwell > 0.4 or backtrack_freq > 0.4:
+                return 4  # Syllable Break
+            return 2      # Heavy Simplification
+
         # ADHD profile
-        if disability_type >= 0.9:
+        if 0.9 <= disability_type <= 1.1:
             if attention_score < 0.4 or session_fatigue > 0.6:
                 return 5  # Attention Break
             return 2       # Heavy Simplification
@@ -190,13 +199,12 @@ class RLAgentService:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _encode_disability(disability_profile: Optional[Dict]) -> float:
+    def _encode_disability(self, disability_profile: Optional[Dict]) -> float:
         if not disability_profile:
             return DISABILITY_NONE
         disabilities = disability_profile.get("disabilities", [])
         if "adhd" in disabilities and "dyslexia" in disabilities:
-            return DISABILITY_ADHD   # ADHD takes priority in dual profile
+            return DISABILITY_BOTH
         if "adhd" in disabilities:
             return DISABILITY_ADHD
         if "dyslexia" in disabilities:

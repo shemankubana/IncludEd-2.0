@@ -25,9 +25,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
-import asyncio
 from dotenv import load_dotenv
 
+# Load environment variables IMMEDIATELY
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
+import asyncio
 import time
 from services.tts_service                import TTSService
 from services.accessibility_adapter      import FreeAccessibilityAdapter
@@ -48,7 +51,6 @@ _literature_analyzer = LiteratureAnalyzer()
 _book_brain          = BookBrain()
 _quiz_generator      = PedagogicalQuestionGenerator()
 
-load_dotenv()
 app = FastAPI(title="IncludEd AI Service", version="3.0.0")
 
 app.add_middleware(
@@ -65,7 +67,7 @@ accessibility_adapter = FreeAccessibilityAdapter()
 rl_agent              = RLAgentService()
 tts_service           = TTSService()
 ollama_service        = OllamaService()
-gemini_service        = GeminiService()
+gemini_service        = GeminiService(os.getenv("GEMINI_API_KEY"))
 simplification_svc    = SimplificationService()
 learner_embedding     = LearnerEmbedding()
 comprehension_tracker = ComprehensionTracker()
@@ -348,7 +350,7 @@ async def generate_introduction(req: IntroductionRequest):
     Generate an engaging literature introduction (v3.0).
     Now uses Gemini as primary for high-quality pedagogical context.
     """
-    prompt = f"""Generate a short, engaging pedagogical introduction (2-3 paragraphs) for:
+    prompt = f"""Generate an engaging, highly accurate, and short pedagogical introduction (2-3 paragraphs) for a student about to read:
 Title: {req.title}
 Author: {req.author}
 Content Genre: {req.doc_type}
@@ -356,7 +358,7 @@ Content Genre: {req.doc_type}
 Summary of initial content:
 {req.content_summary}
 
-Focus on the historical/literary context and why this work matters.
+Do not hallucinate plot points. Base your introduction strictly on the provided summary and the known context of the book. Focus on the themes, characters introduced, and why this work matters.
 Format: Return only the text of the introduction.
 """
     system_instruction = "You are an expert literature teacher helping students with learning differences feel excited about reading."
@@ -442,6 +444,42 @@ async def record_vocab_mastered(req: VocabRecordRequest):
         req.student_id, req.book_id, req.word,
     )
     return {"status": "recorded"}
+
+
+class VocabExplainRequest(BaseModel):
+    word: str
+    context: str = ""
+    language: str = "en"
+
+
+@app.post("/vocab/explain", tags=["vocabulary"])
+async def explain_vocab(req: VocabExplainRequest):
+    """Generate a child-friendly explanation for a word in context."""
+    prompt = f"""Explain the word "{req.word}" in this context: "{req.context}"
+Provide:
+1. modern_meaning: a very simple definition for a 10-year old.
+2. analogy: a simple comparison helpful for a child.
+3. category: a short label for the word type (e.g. Vocabulary, Archaic, Idiom).
+
+Respond in JSON with keys: "modern_meaning", "analogy", "category".
+"""
+    system_instruction = "You are a kind teacher explaining difficult words to children with dyslexia and ADHD. Keep it simple, visual, and encouraging."
+    
+    # Tier 0: Gemini
+    if gemini_service.is_available():
+        res = gemini_service.generate_json(prompt, system_instruction)
+        if res: return res
+        
+    # Tier 1: Ollama
+    if ollama_service.is_available():
+        res = ollama_service.generate_json(prompt, system_instruction)
+        if res: return res
+
+    return {
+        "modern_meaning": f"A word used to describe something in the story.",
+        "analogy": "Like a puzzle piece that fits in this sentence.",
+        "category": "Vocabulary"
+    }
 
 
 @app.get("/comprehension/summary", tags=["comprehension"])
@@ -812,6 +850,40 @@ async def push_telemetry(request: Any):
 @app.post("/session/end")
 async def end_session(request: Any):
     return {"status": "finished"}
+
+
+@app.post("/teacher/insights", tags=["teacher"])
+async def teacher_insights(req: Dict[str, Any]):
+    """Generate NL insights using Gemini based on analytics data."""
+    import json
+    analytics_data = req.get("analytics_data", {})
+    if not analytics_data:
+        return {"insights": "No data available to generate insights."}
+        
+    from services.gemini_service import GeminiService
+    gemini = GeminiService()
+    if not gemini.is_available():
+        return {"insights": "Gemini AI service is not configured. Please check API keys."}
+        
+    prompt = f"""You are an expert special education teacher. Analyze the following student platform data and provide actionable teaching insights, specifically focusing on ADHD and Dyslexia.
+    
+Data: {json.dumps(analytics_data)}
+
+Format your response as a professional, encouraging report. Include:
+- A brief summary of overall class engagement.
+- Specific insights regarding students with ADHD/Dyslexia.
+- Actionable recommendations based on the struggle zones and quiz scores.
+Keep it strictly under 250 words."""
+
+    try:
+        # Use synchronous generate wrapped in to_thread, or if it's async (depends on GeminiService)
+        # Assuming generate is synchronous as in other places
+        import asyncio
+        insights = await asyncio.to_thread(gemini.generate, prompt)
+        return {"insights": insights}
+    except Exception as e:
+        print(f"Error generating insights: {e}")
+        return {"insights": "Error generating insights."}
 
 
 # ── System ───────────────────────────────────────────────────────────────────

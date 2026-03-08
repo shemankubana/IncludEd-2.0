@@ -29,6 +29,7 @@ interface SimplificationResult {
         meaning: string;
         analogy: string;
         type?: string;
+        category?: string;
     }>;
     literary_devices: Array<{
         device: string;
@@ -294,7 +295,10 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
                             <div className="highlight-popup__vocab-inline mt-3 pt-3 border-t border-primary/10">
                                 {result.vocabulary.slice(0, 2).map((v, i) => (
                                     <div key={i} className="mb-2 last:mb-0">
-                                        <div className="text-[10px] font-bold text-blue-700 uppercase tracking-tighter mb-0.5">Word help: {v.word}</div>
+                                        <div className={`text-[10px] font-bold uppercase tracking-tighter mb-0.5 ${(v.category?.toLowerCase() === 'archaic' || v.type === 'archaic') ? 'text-purple-700' : 'text-blue-700'
+                                            }`}>
+                                            {v.category || (v.type === 'archaic' ? 'Archaic' : 'Word help')}: {v.word}
+                                        </div>
                                         <div className="text-xs text-blue-800">
                                             <strong>{v.meaning}</strong>
                                             {v.analogy && <span className="text-[10px] opacity-70 italic block mt-0.5">Tip: {v.analogy}</span>}

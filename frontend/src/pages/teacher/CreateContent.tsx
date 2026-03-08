@@ -43,6 +43,9 @@ const CreateContent = () => {
     const [simplifyText, setSimplifyText] = useState(true);
     const [generateAudio, setGenerateAudio] = useState(false);
     const [difficulty, setDifficulty] = useState("beginner");
+    const [language, setLanguage] = useState("en");
+    const [gradeLevel, setGradeLevel] = useState("P4");
+    const [curriculumOutcomeCode, setCurriculumOutcomeCode] = useState("");
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [vttContent, setVttContent] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -88,7 +91,9 @@ const CreateContent = () => {
             } else {
                 formData.append("title", title);
                 formData.append("subject", subject);
-                formData.append("language", "english");
+                formData.append("language", language);
+                formData.append("gradeLevel", gradeLevel);
+                if (curriculumOutcomeCode) formData.append("curriculumOutcomeCode", curriculumOutcomeCode);
 
                 if (file) {
                     formData.append("file", file);
@@ -193,7 +198,7 @@ const CreateContent = () => {
                             <CardContent className="p-8 space-y-6">
                                 {activeTab === "text" ? (
                                     <div className="space-y-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div className="space-y-2">
                                                 <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Lesson Title</label>
                                                 <Input
@@ -216,6 +221,42 @@ const CreateContent = () => {
                                                     <option>History</option>
                                                     <option>General</option>
                                                 </select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Language</label>
+                                                <select
+                                                    value={language}
+                                                    onChange={(e) => setLanguage(e.target.value)}
+                                                    className="w-full h-12 rounded-xl border-2 px-3 bg-background font-medium focus:border-primary outline-none"
+                                                >
+                                                    <option value="en">English (EN)</option>
+                                                    <option value="fr">Français (FR)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Grade Level</label>
+                                                <select
+                                                    value={gradeLevel}
+                                                    onChange={(e) => setGradeLevel(e.target.value)}
+                                                    className="w-full h-12 rounded-xl border-2 px-3 bg-background font-medium focus:border-primary outline-none"
+                                                >
+                                                    <option value="P3">Primary 3</option>
+                                                    <option value="P4">Primary 4</option>
+                                                    <option value="P5">Primary 5</option>
+                                                    <option value="P6">Primary 6</option>
+                                                </select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Syllabus / Outcome Code (Optional)</label>
+                                                <Input
+                                                    value={curriculumOutcomeCode}
+                                                    onChange={(e) => setCurriculumOutcomeCode(e.target.value)}
+                                                    placeholder="e.g. P4-ENG-LIT-01"
+                                                    className="h-12 rounded-xl border-2 uppercase"
+                                                />
                                             </div>
                                         </div>
 

@@ -205,48 +205,66 @@ _CHARACTER_CUE_RE = re.compile(r"^[A-Z][A-Z\s'\.]{0,28}[A-Z]\.?\:?\s*$")
 
 
 def _extract_characters_from_units(
-    units: List[Dict[str, Any]], doc_type: str
+    units: List[Dict[str, Any]], doc_type: str, gemini: Optional[GeminiService] = None
 ) -> List[Dict[str, Any]]:
-    """Extract character information from structured units."""
+    """Extract character information from structured units with flat indexing (Phase 3)."""
     char_lines: Dict[str, List[str]] = defaultdict(list)
     char_scenes: Dict[str, set] = defaultdict(set)
     char_interactions: Dict[str, Counter] = defaultdict(Counter)
+    char_first_seen: Dict[str, int] = {}
+    char_all_seen: Dict[str, List[int]] = defaultdict(list)
 
+    flat_idx = 0
     if doc_type == "play":
-        for act in units:
-            for scene in act.get("children", []):
-                scene_chars_in_scene: List[str] = []
+        for act_idx, act in enumerate(units):
+            for scene_idx, scene in enumerate(act.get("children", [])):
+                scene_chars_in_scene: set = set()
                 for block in scene.get("blocks", []):
                     if block.get("type") == "dialogue" and block.get("character"):
                         char_name = block["character"].strip().upper()
+                        # Clean common play noise (ENTER, EXIT, etc handled below)
                         char_lines[char_name].append(block.get("content", ""))
-                        char_scenes[char_name].add(scene.get("title", ""))
-                        scene_chars_in_scene.append(char_name)
+                        char_scenes[char_name].add(scene.get("title", f"Act {act_idx+1} Scene {scene_idx+1}"))
+                        scene_chars_in_scene.add(char_name)
+                        
+                        if char_name not in char_first_seen:
+                            char_first_seen[char_name] = flat_idx
+                        if flat_idx not in char_all_seen[char_name]:
+                            char_all_seen[char_name].append(flat_idx)
 
-                # Track co-appearances for relationship inference
-                for i, c1 in enumerate(scene_chars_in_scene):
-                    for c2 in scene_chars_in_scene[i + 1:]:
-                        if c1 != c2:
-                            char_interactions[c1][c2] += 1
-                            char_interactions[c2][c1] += 1
+                # Track co-appearances
+                chars_list = list(scene_chars_in_scene)
+                for i, c1 in enumerate(chars_list):
+                    for c2 in chars_list[i + 1:]:
+                        char_interactions[c1][c2] += 1
+                        char_interactions[c2][c1] += 1
+                flat_idx += 1
     else:
         # Novel: extract from dialogue tags
         dialogue_re = re.compile(
-            r'(?:said|replied|asked|whispered|shouted|cried|exclaimed|murmured)\s+'
+            r'(?:said|replied|asked|whispered|shouted|cried|exclaimed|murmured|added|thought)\s+'
             r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)',
         )
-        for chapter in units:
-            for section in chapter.get("children", []):
+        for chap_idx, chapter in enumerate(units):
+            for sec_idx, section in enumerate(chapter.get("children", [])):
                 content = section.get("content", "")
+                found_in_section = set()
                 for match in dialogue_re.finditer(content):
-                    name = match.group(1).strip()
+                    name = match.group(1).strip().upper()
                     char_lines[name].append("")
-                    char_scenes[name].add(chapter.get("title", ""))
+                    char_scenes[name].add(chapter.get("title", f"Chapter {chap_idx+1}"))
+                    found_in_section.add(name)
+                    
+                    if name not in char_first_seen:
+                        char_first_seen[name] = flat_idx
+                    if flat_idx not in char_all_seen[name]:
+                        char_all_seen[name].append(flat_idx)
+                flat_idx += 1
 
     characters = []
+    noise = {"AND", "THE", "ALL", "BOTH", "ENTER", "EXIT", "ACT", "SCENE", "STORY", "TIME", "DAY", "NIGHT", "MAN", "WOMAN", "BOY", "GIRL"}
     for name, lines in char_lines.items():
-        # Filter out very short names that are likely noise
-        if len(name) < 2 or name in {"AND", "THE", "ALL", "BOTH", "ENTER", "EXIT"}:
+        if len(name) < 2 or name in noise:
             continue
 
         line_count = len(lines)
@@ -257,16 +275,34 @@ def _extract_characters_from_units(
             "name_upper": name,
             "line_count": line_count,
             "scene_count": len(char_scenes.get(name, set())),
-            "importance": "major" if line_count > 20 else "minor" if line_count > 5 else "background",
+            "importance": "major" if line_count > 15 else "minor" if line_count > 3 else "background",
+            "first_seen_index": char_first_seen.get(name, 0),
+            "all_seen_indices": char_all_seen.get(name, []),
             "relationships": [
                 {"character": other.title(), "co_appearances": count}
                 for other, count in top_interactions
             ],
             "scenes": sorted(char_scenes.get(name, set())),
+            "description": "", # To be filled by Gemini
         })
 
-    # Sort by line count (most important first)
+    # Sort by importance
     characters.sort(key=lambda c: c["line_count"], reverse=True)
+    major_only = [c["name"] for c in characters if c["importance"] != "background"][:12]
+
+    # Fill descriptions via Gemini (Phase 3 spoiler safety)
+    if gemini and gemini.is_available() and major_only:
+        prompt = f"""Provide child-friendly, spoiler-safe descriptions for these characters: {", ".join(major_only)}. 
+Focus on their personality and physical traits, NOT story twists or endings.
+Respond in JSON: {{"CharacterName": "Description"}}"""
+        try:
+            desc_map = gemini.generate_json(prompt)
+            if isinstance(desc_map, dict):
+                for c in characters:
+                    if c["name"] in desc_map:
+                        c["description"] = desc_map[c["name"]]
+        except: pass
+
     return characters
 
 
@@ -282,7 +318,7 @@ def _extract_vocabulary(
     
     # ── Tier 0: Gemini Cloud Acceleration ──────────────────────────────────
     if gemini and gemini.is_available():
-        # Use first 3000 chars of content for deep vocabulary extraction
+        # Use first 4000 chars of content for deep vocabulary extraction
         all_content = ""
         for u in units[:5]:
             all_content += (u.get("content", "") or str(u.get("paragraphs", []))) + "\n"
@@ -293,18 +329,21 @@ def _extract_vocabulary(
 
 Identify 15-20 difficult or key vocabulary words for a Primary School (P4-P6, ages 9-12) student.
 For each word, provide:
-- meaning: a very simple, child-friendly definition
-- analogy: a simple comparison
-- archaic: boolean (is it an old-fashioned word?)
+- modern_meaning: a very simple, child-friendly definition (1 sentence)
+- analogy: a simple comparison to help a child understand
+- archaic: boolean (is it an old-fashioned or complex literary word?)
 
-Respond in JSON as a list of objects with keys: "word", "meaning", "analogy", "archaic".
+Respond in JSON as a list of objects with keys: "word", "modern_meaning", "analogy", "archaic".
 """
         try:
             result = gemini.generate_json(prompt)
             if isinstance(result, list) and len(result) > 0:
                 # Add context metadata to match local schema
                 for item in result:
-                    item["difficulty"] = 0.8 if item.get("archaic") else 0.6
+                    # Calibrated difficulty: archaic/literary words are 0.75, others 0.55
+                    item["difficulty"] = 0.75 if item.get("archaic") else 0.55
+                    if "meaning" in item and "modern_meaning" not in item:
+                        item["modern_meaning"] = item.pop("meaning")
                 return result
         except Exception as e:
             print(f"Gemini BookBrain vocab extraction failed: {e}")
@@ -314,56 +353,45 @@ Respond in JSON as a list of objects with keys: "word", "meaning", "analogy", "a
     word_contexts: Dict[str, List[str]] = defaultdict(list)
 
     # Gather all text
-    all_text_chunks: List[str] = []
-
-    if doc_type == "play":
-        for act in units:
-            for scene in act.get("children", []):
-                for block in scene.get("blocks", []):
-                    content = block.get("content", "")
-                    if content:
-                        all_text_chunks.append(content)
-                        words = re.findall(r"[a-zA-Z']+", content.lower())
-                        for w in words:
-                            word_freq[w] += 1
-                            if len(word_contexts[w]) < 2:
-                                # Store sentence context
-                                for sent in re.split(r"[.!?]+", content):
-                                    if w in sent.lower() and sent.strip():
-                                        word_contexts[w].append(sent.strip()[:120])
-                                        break
-    else:
-        for chapter in units:
-            for section in chapter.get("children", []):
-                content = section.get("content", "")
-                if content:
-                    all_text_chunks.append(content)
-                    words = re.findall(r"[a-zA-Z']+", content.lower())
-                    for w in words:
-                        word_freq[w] += 1
-                        if len(word_contexts[w]) < 2:
-                            for sent in re.split(r"[.!?]+", content):
-                                if w in sent.lower() and sent.strip():
-                                    word_contexts[w].append(sent.strip()[:120])
-                                    break
+    for unit in units:
+        # Recursive gather for hierarchical units
+        def _get_text(u):
+            t = u.get("content", "") or ""
+            for child in u.get("children", []):
+                t += " " + _get_text(child)
+            for block in u.get("blocks", []):
+                t += " " + block.get("content", "")
+            return t
+        
+        content = _get_text(unit)
+        if content:
+            words = re.findall(r"[a-zA-Z']+", content.lower())
+            for w in words:
+                word_freq[w] += 1
+                if len(word_contexts[w]) < 2:
+                    # Simple sentence splitter fallback
+                    sentences = re.split(r"[.!?]+", content)
+                    for sent in sentences:
+                        if w in sent.lower() and len(sent.strip()) > 15:
+                            word_contexts[w].append(sent.strip()[:140])
+                            break
 
     vocab_items: List[Dict[str, Any]] = []
 
     for word, count in word_freq.items():
-        if len(word) < 4:
-            continue
-        if word in _COMMON_WORDS:
+        if len(word) < 4 or word in _COMMON_WORDS:
             continue
 
         syllables = _syllable_count(word)
         is_archaic = word in _ARCHAIC_WORDS
 
-        # Difficulty score: longer words + less common = harder
-        difficulty = min(1.0, (syllables - 1) * 0.15 + 0.3)
-        if is_archaic:
-            difficulty = min(1.0, difficulty + 0.3)
+        # Calibrated difficulty: more lenient than v3.0
+        # 1-2 syll: 0.35, 3 syll: 0.5, 4+ syll: 0.7
+        base_diff = 0.35 if syllables <= 2 else (0.5 if syllables == 3 else 0.7)
+        difficulty = base_diff + (0.2 if is_archaic else 0)
+        difficulty = min(1.0, difficulty)
 
-        if difficulty < 0.35:
+        if difficulty < 0.4:
             continue
 
         entry: Dict[str, Any] = {
@@ -372,17 +400,16 @@ Respond in JSON as a list of objects with keys: "word", "meaning", "analogy", "a
             "syllables": syllables,
             "difficulty": round(difficulty, 2),
             "contexts": word_contexts.get(word, [])[:2],
+            "archaic": is_archaic,
+            "modern_meaning": _ARCHAIC_WORDS.get(word, ""),
+            "analogy": "",
         }
-
-        if is_archaic:
-            entry["archaic"] = True
-            entry["modern_meaning"] = _ARCHAIC_WORDS[word]
 
         vocab_items.append(entry)
 
-    # Sort by difficulty descending, then by frequency descending
+    # Sort by difficulty descending
     vocab_items.sort(key=lambda v: (-v["difficulty"], -v["frequency"]))
-    return vocab_items[:150]  # Top 150 hardest words
+    return vocab_items[:120]  # Top 120 words
 
 
 # ── Difficulty mapping ────────────────────────────────────────────────────────
@@ -548,8 +575,8 @@ class BookBrain:
         title: str = "",
         author: str = "",
     ) -> BookBrainResult:
-        # 1. Character graph first (needed for per-chunk character detection)
-        characters = _extract_characters_from_units(units, doc_type)
+        # 1. Character graph first (Phase 3: enhanced with flat indexing & spoiler-safe descs)
+        characters = _extract_characters_from_units(units, doc_type, self._gemini)
         char_names = [c["name"] for c in characters]
 
         # 2. Difficulty mapping (enriched with emotion, setting, characters_present, etc.)

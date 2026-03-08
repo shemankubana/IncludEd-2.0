@@ -95,5 +95,13 @@ export const Literature = sequelize.define('Literature', {
     allowNull: true,
     defaultValue: null,
     comment: 'Pre-computed Book Brain analysis: difficulty_map, vocabulary, characters, struggle_zones'
+  },
+  curriculumOutcomeCode: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  gradeLevel: {
+    type: DataTypes.ENUM('P3', 'P4', 'P5', 'P6'),
+    allowNull: true
   }
 });

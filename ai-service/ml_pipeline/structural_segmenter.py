@@ -41,9 +41,13 @@ _SCENE_SC_RE = re.compile(r"\bSC\.\s*(\d+|[IVX]+)\b", re.IGNORECASE)
 _ACTE_RE     = re.compile(r"\bACTE\s+([IVX]+|\d+)\b", re.IGNORECASE)
 _SCENE_FR_RE = re.compile(r"\bSC[ÈE]NE\s+([IVX]+|\d+)\b", re.IGNORECASE)
 
-# Running-header detector: lines starting with a page number followed by text
-# (e.g. "9 MACBETH ACT 1. SC. 2 DUNCAN MALCOLM...") — must NOT be treated as headings
-_RUNNING_HEADER_RE = re.compile(r"^\d{1,4}\s+\S")
+# Running-header detector: lines starting or ending with a page number, 
+# or containing book title artifacts.
+_RUNNING_HEADER_RE = re.compile(
+    r"^\d{1,4}\s+\S|"          # "9 MACBETH..."
+    r"^.*\s+\d{1,4}$|"         # "...Before Breakfast 3"
+    r"^[A-Z\s]{5,}\s+\d{1,4}$" # "CHARLOTTE'S WEB 4"
+)
 
 # English novel headings
 _CHAPTER_RE  = re.compile(
@@ -89,6 +93,10 @@ class StructuralSegmenter:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
+    def segment(
+        self,
+        all_blocks: List[Dict[str, Any]],
+        doc_type: str,
         language: str = "en",
         add_emotions: bool = True,
         ai_headings: Optional[List[Dict[str, str]]] = None,
@@ -176,10 +184,8 @@ class StructuralSegmenter:
                     # Treat as chapter-level for novels/poems, act/scene follows regex logic below
                     return "chapter", True
 
-        # Skip running headers
-        if _RUNNING_HEADER_RE.match(text.strip()):
-            return "none", False
         t = text[:30]
+        # 2. Strong Regex Patterns (must check BEFORE running header as "CHAPTER 2" matches running header)
         if doc_type == "play":
             if _ACT_RE.search(t):      return "act",   True
             if _ACTE_RE.search(t):     return "act",   True
@@ -191,6 +197,11 @@ class StructuralSegmenter:
             if _CHAPITRE_RE.search(t): return "chapter", True
             if _PARTIE_RE.search(t):   return "chapter", True
             if _LIVRE_RE.search(t):    return "chapter", True
+
+        # 3. Skip running headers (page numbers, book titles at edges)
+        if _RUNNING_HEADER_RE.match(text.strip()):
+            return "none", False
+            
         return "none", False
 
     @staticmethod
@@ -269,10 +280,13 @@ class StructuralSegmenter:
             if not stripped:
                 continue
 
-            # Skip running headers: page-number-prefixed lines
-            # (e.g. "15 Macbeth ACT 1. SC. 3 SECOND WITCH FIRST WITCH...")
-            if re.match(r"^\d{1,4}\s+\S", stripped):
-                continue
+            # Strip leading page numbers smushed with text (e.g. "11She's" -> "She's")
+            stripped = re.sub(r'^\d{1,3}([A-Z])', r'\1', stripped)
+
+            # Skip running headers
+            if _RUNNING_HEADER_RE.match(stripped) or _RUNNING_HEADER_RE.search(stripped):
+                if len(stripped) < 50: # Headers are usually short
+                    continue
 
             # Stage direction: entire line wrapped in () or []
             if _STAGE_INLINE_RE.match(stripped):
@@ -330,43 +344,71 @@ class StructuralSegmenter:
         self, tokens: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         chapters: List[Dict[str, Any]] = []
+        MAX_CHUNK_WORDS = 250
 
         def new_chapter(title: str) -> Dict[str, Any]:
             return {
                 "id": _uid(),
                 "title": title,
-                "children": [{
-                    "id": _uid(),
-                    "title": "",
-                    "paragraphs": [],
-                    "content": "",
-                }],
+                "children": [],  # We will add chunks here
+                "content": "",
             }
 
-        cur = new_chapter("Beginning")
+        def new_chunk(title: str = "") -> Dict[str, Any]:
+            return {
+                "id": _uid(),
+                "title": title,
+                "paragraphs": [],
+                "content": "",
+                "word_count": 0
+            }
 
+        cur_chapter = new_chapter("Beginning")
+        cur_chunk = new_chunk("Introduction")
+        
         for tok in tokens:
             if tok["type"] == "heading" and tok["level"] == "chapter":
-                if cur["children"][0]["paragraphs"]:
-                    self._finalize_chapter(cur)
-                    chapters.append(cur)
-                cur = new_chapter(tok["title"])
+                # Flush current chunk and chapter
+                if cur_chunk["paragraphs"]:
+                    cur_chapter["children"].append(cur_chunk)
+                if cur_chapter["children"]:
+                    self._finalize_chapter(cur_chapter)
+                    chapters.append(cur_chapter)
+                
+                cur_chapter = new_chapter(tok["title"])
+                cur_chunk = new_chunk()
+            
             elif tok["type"] == "content":
-                cur["children"][0]["paragraphs"].append(tok["text"])
+                text = tok["text"]
+                words = len(text.split())
+                
+                # If adding this would explode the chunk, flush first
+                if cur_chunk["word_count"] > 0 and (cur_chunk["word_count"] + words) > MAX_CHUNK_WORDS:
+                    cur_chapter["children"].append(cur_chunk)
+                    cur_chunk = new_chunk()
+                
+                cur_chunk["paragraphs"].append(text)
+                cur_chunk["word_count"] += words
 
-        if cur["children"][0]["paragraphs"]:
-            self._finalize_chapter(cur)
-            chapters.append(cur)
+        # Final flush
+        if cur_chunk["paragraphs"]:
+            cur_chapter["children"].append(cur_chunk)
+        if cur_chapter["children"]:
+            self._finalize_chapter(cur_chapter)
+            chapters.append(cur_chapter)
 
         return chapters
 
     @staticmethod
     def _finalize_chapter(chapter: Dict[str, Any]):
-        """Merge paragraph list into a single content string."""
+        """Finalize all chunks in the chapter and set overall content."""
         all_content = []
-        for section in chapter["children"]:
-            section["content"] = "\n\n".join(section.get("paragraphs", []))
-            all_content.append(section["content"])
+        for i, chunk in enumerate(chapter["children"]):
+            chunk["content"] = "\n\n".join(chunk.get("paragraphs", []))
+            # If no specific title, give it a sequence title
+            if not chunk["title"]:
+                chunk["title"] = f"Part {i+1}"
+            all_content.append(chunk["content"])
         chapter["content"] = "\n\n".join(all_content)
 
     # ── Poem hierarchy ─────────────────────────────────────────────────────────

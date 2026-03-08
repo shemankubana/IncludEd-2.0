@@ -35,6 +35,8 @@ import VocabSidebar from "@/components/reader/VocabSidebar";
 import CharacterTooltip from "@/components/reader/CharacterTooltip";
 import PoemRenderer from "@/components/reader/PoemRenderer";
 import CharacterMapPanel from "@/components/reader/CharacterMapPanel";
+import { useTranslation } from "@/hooks/useTranslation";
+
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -106,6 +108,7 @@ const AdaptiveReader = () => {
     const [showIntro, setShowIntro] = useState(true);
     const [sections, setSections] = useState<Section[]>([]);
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+    const [allQuizzes, setAllQuizzes] = useState<any[]>([]);
     const [showQuizPrompt, setShowQuizPrompt] = useState(false);
     const [contentType, setContentType] = useState<"play" | "novel" | "poem" | "generic">("generic");
     const [sessionId, setSessionId] = useState<string | null>(null);
@@ -120,8 +123,8 @@ const AdaptiveReader = () => {
     const [struggleVocab, setStruggleVocab] = useState<any[]>([]);
 
     // ADHD inline micro-check state (D3 deliverable)
-    const [microCheck, setMicroCheck] = useState<{ question: string; options: string[]; answer: string } | null>(null);
-    const [microCheckAnswer, setMicroCheckAnswer] = useState<string | null>(null);
+    const [microCheck, setMicroCheck] = useState<{ id?: string; question: string; options: string[]; answer: number | string } | null>(null);
+    const [microCheckAnswer, setMicroCheckAnswer] = useState<number | string | null>(null);
     const microCheckWordsRef = useRef(0); // words read since last micro-check
     const MICRO_CHECK_INTERVAL = 250;       // trigger every ~250 words
 
@@ -144,6 +147,9 @@ const AdaptiveReader = () => {
     // Character Map panel state (Phase 5)
     const [showCharacterMap, setShowCharacterMap] = useState(false);
 
+    // Translations
+    const { t } = useTranslation(lesson?.language);
+
     // Session tracking for learner embedding
     const sessionStartRef = useRef<number>(Date.now());
     const wordsReadRef = useRef<number>(0);
@@ -164,7 +170,14 @@ const AdaptiveReader = () => {
         const dt = profile?.disabilityType || "none";
         if (dt === "adhd") return 1.0;
         if (dt === "dyslexia") return 0.5;
-        if (dt === "both") return 1.0;
+        if (dt === "both") return 1.5;
+        return 0.0;
+    })();
+
+    const contentTypeEncoded: number = (() => {
+        if (contentType === "play") return 1.0;
+        if (contentType === "novel") return 0.5;
+        if (contentType === "poem") return 0.5;
         return 0.0;
     })();
 
@@ -180,6 +193,7 @@ const AdaptiveReader = () => {
         sessionId,
         idToken,
         disabilityType: disabilityEncoded,
+        contentType: contentTypeEncoded,
         textDifficulty: 0.5,
         attentionState,
         pollIntervalMs: 5_000,
@@ -277,6 +291,16 @@ const AdaptiveReader = () => {
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
                 const data = await response.json();
+
+                // Fetch quizzes concurrently
+                const quizResp = await fetch(
+                    `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/quiz/${id}`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                if (quizResp.ok) {
+                    const qData = await quizResp.json();
+                    setAllQuizzes(qData);
+                }
 
                 setLesson({ title: data.title, author: data.author, difficulty: data.difficulty || "Adaptive" });
                 if (data.introduction) {
@@ -513,20 +537,35 @@ const AdaptiveReader = () => {
     }, [bookBrain, sections]);
 
     // ── ADHD micro-check: show a simple comprehension pulse every ~250 words ──
-    const maybeTriggerMicroCheck = useCallback((sectionWordCount: number) => {
+    const maybeTriggerMicroCheck = useCallback(() => {
         // Only trigger for ADHD users, not during TTS, not more than once per section
         const isAdhd = (profile?.disabilityType === "adhd" || profile?.disabilityType === "both");
-        if (!isAdhd || adaptation.isTTSEnabled) return;
+        if (!isAdhd || adaptation.isTTSEnabled) return false;
 
-        microCheckWordsRef.current += sectionWordCount;
-        if (microCheckWordsRef.current < MICRO_CHECK_INTERVAL) return;
+        // Try to find a quiz associated with this chunkIndex
+        const chunkQuiz = allQuizzes.find(q => q.chunkIndex === currentSectionIndex);
+
+        if (chunkQuiz) {
+            setMicroCheck({
+                id: chunkQuiz.id,
+                question: chunkQuiz.question,
+                options: chunkQuiz.options,
+                answer: chunkQuiz.correctAnswer,
+            });
+            setMicroCheckAnswer(null);
+            return true; // Triggered real quiz
+        }
+
+        // Fallback: build a lightweight comprehension pulse from the just-read section
+        const sec = sections[currentSectionIndex];
+        if (!sec?.content) return false;
+
+        // Only trigger fallback if words exceeded
+        if (microCheckWordsRef.current < MICRO_CHECK_INTERVAL) return false;
         microCheckWordsRef.current = 0;
 
-        // Build a lightweight comprehension pulse from the just-read section
-        const sec = sections[currentSectionIndex];
-        if (!sec?.content) return;
         const firstSentence = sec.content.split(/[.!?]/)[0]?.trim() || "";
-        if (firstSentence.length < 20) return;
+        if (firstSentence.length < 20) return false;
 
         setMicroCheck({
             question: "Quick check — what was this section mainly about?",
@@ -535,10 +574,11 @@ const AdaptiveReader = () => {
                 "A description of a different character",
                 "A flashback to an earlier event",
             ],
-            answer: firstSentence.slice(0, 60) + "…",
+            answer: 0, // Assume first option is "correct" for fallback
         });
         setMicroCheckAnswer(null);
-    }, [profile, adaptation.isTTSEnabled, sections, currentSectionIndex]);
+        return true;
+    }, [profile, adaptation.isTTSEnabled, allQuizzes, currentSectionIndex, sections]);
 
     const startBreathingBreak = useCallback(() => {
         setBreathingBreak(true);
@@ -563,15 +603,23 @@ const AdaptiveReader = () => {
     }, []);
 
     const handleNextSection = useCallback(() => {
+        const sectionWords = currentSection.wordCount ?? words.length;
+
+        // ADHD bite-sized check: trigger before moving to next section
+        if (!microCheck) {
+            const triggered = maybeTriggerMicroCheck();
+            if (triggered) {
+                // Return early so navigation doesn't happen yet
+                return;
+            }
+        }
+
         if (currentSectionIndex < totalSections - 1) {
             const next = currentSectionIndex + 1;
-            const sectionWords = currentSection.wordCount ?? words.length;
             // Record comprehension for current section before moving
             recordComprehension(currentSectionIndex);
             // Check if next section is a struggle zone
             checkStruggleZone(next);
-            // Trigger ADHD micro-check if applicable
-            maybeTriggerMicroCheck(sectionWords);
 
             // ADHD breathing break every N sections (Phase 3)
             const isAdhd = (profile?.disabilityType === "adhd" || profile?.disabilityType === "both");
@@ -597,6 +645,7 @@ const AdaptiveReader = () => {
             setActiveWordIndex(-1);
             setCurrentTime(0);
             setIsPlaying(false);
+            setMicroCheck(null); // Reset for next section
             window.scrollTo({ top: 0, behavior: "smooth" });
         } else {
             recordComprehension(currentSectionIndex);
@@ -1041,13 +1090,13 @@ const AdaptiveReader = () => {
                             className="flex items-center justify-between mb-8 flex-wrap gap-3"
                         >
                             <Button variant="ghost" size="sm" className="gap-2 font-bold" onClick={() => navigate("/student/lessons")}>
-                                <ArrowLeft className="w-4 h-4" /> Exit Reader
+                                <ArrowLeft className="w-4 h-4" /> {t("reader.exitReader")}
                             </Button>
                             <div className="flex items-center gap-2 flex-wrap">
                                 {/* RL Engine badge */}
                                 <div className="px-3 py-1.5 rounded-xl bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest border border-primary/20 flex items-center gap-2">
                                     <BrainCircuit className="w-3 h-3" />
-                                    {rlLoading ? "Analysing..." : "Adaptive Engine Active"}
+                                    {rlLoading ? t("reader.analysing") : t("reader.adaptiveEngineActive")}
                                 </div>
                                 {/* Attention score */}
                                 <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 flex items-center gap-2">
@@ -1194,9 +1243,11 @@ const AdaptiveReader = () => {
                         >
                             <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
                             <div className="flex-1">
-                                <p className="text-xs font-black text-rose-600 uppercase tracking-widest">Attention Support Active</p>
+                                <p className="text-xs font-black text-rose-600 uppercase tracking-widest">
+                                    {t("reader.attentionSupportActive")}
+                                </p>
                                 <p className="text-sm font-bold text-rose-700 dark:text-rose-300">
-                                    Content chunked into smaller sections for better focus.
+                                    {t("reader.contentChunked")}
                                 </p>
                             </div>
                             {/* Gamification: show how many sections to next quiz checkpoint */}
@@ -1206,10 +1257,12 @@ const AdaptiveReader = () => {
                                 const remaining = Math.max(1, nextCheckpoint - currentSectionIndex);
                                 return (
                                     <div className="shrink-0 text-right">
-                                        <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">To checkpoint</p>
+                                        <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">
+                                            {t("reader.toCheckpoint")}
+                                        </p>
                                         <p className="text-xl font-black text-rose-600">{remaining}</p>
                                         <p className="text-[10px] text-rose-400 font-bold">
-                                            {remaining === 1 ? "section" : "sections"}
+                                            {remaining === 1 ? t("reader.section") : t("reader.sections")}
                                         </p>
                                     </div>
                                 );
@@ -1246,7 +1299,7 @@ const AdaptiveReader = () => {
                                     onClick={() => setShowCharacterMap(v => !v)}
                                 >
                                     <Users className="w-4 h-4" />
-                                    Characters
+                                    {t("reader.characters")}
                                 </Button>
                             )}
                             <Button
@@ -1256,7 +1309,7 @@ const AdaptiveReader = () => {
                                 onClick={() => setFocusMode(!focusMode)}
                             >
                                 {focusMode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                                {focusMode ? "Focus Mode On" : "Focus Mode"}
+                                {focusMode ? t("reader.focusModeOn") : t("reader.focusMode")}
                             </Button>
                         </div>
                     </div>
@@ -1435,7 +1488,7 @@ const AdaptiveReader = () => {
                                 variant="outline" className="rounded-xl px-6 font-bold gap-2"
                                 onClick={handlePrevSection} disabled={currentSectionIndex === 0}
                             >
-                                <ChevronLeft className="w-4 h-4" /> Previous
+                                <ChevronLeft className="w-4 h-4" /> {t("reader.previous")}
                             </Button>
                             <div className="text-center">
                                 <p className="text-sm font-black text-muted-foreground">
@@ -1446,8 +1499,7 @@ const AdaptiveReader = () => {
                                 className="rounded-xl px-6 font-bold gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
                                 onClick={handleNextSection}
                             >
-                                {currentSectionIndex < totalSections - 1 ? "Next" : "Finish & Quiz"}{" "}
-                                <ChevronRight className="w-4 h-4" />
+                                {currentSectionIndex < totalSections - 1 ? t("reader.next") : t("reader.finish")} <ChevronRight className="w-4 h-4" />
                             </Button>
                         </div>
                     )}
@@ -1510,6 +1562,7 @@ const AdaptiveReader = () => {
                             }).catch(() => { });
                         }
                     }}
+                    language={lesson?.language}
                 />
             )}
 
@@ -1528,8 +1581,10 @@ const AdaptiveReader = () => {
                     >
                         <CharacterMapPanel
                             characters={bookBrain.characters}
+                            currentSectionIndex={currentSectionIndex}
                             familiarityScores={lesson?.comprehensionScores ?? {}}
                             onClose={() => setShowCharacterMap(false)}
+                            language={lesson?.language}
                         />
                     </motion.div>
                 )}

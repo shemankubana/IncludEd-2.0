@@ -9,7 +9,7 @@ State space (9-dim, v2):
   [2] scroll_hesitation   — proportion of slow/backward scrolls [0,1]
   [3] backtrack_freq      — backward scrolls / total scrolls [0,1]
   [4] attention_score     — composite attention signal [0,1]
-  [5] disability_type     — 0.0=none, 0.5=dyslexia, 1.0=ADHD
+  [5] disability_type     — 0.0=none, 0.5=dyslexia, 1.0=ADHD, 1.5=both
   [6] text_difficulty     — Flesch-Kincaid normalised [0,1]
   [7] session_fatigue     — elapsed time / max time [0,1]
   [8] content_type        — 0.0=generic, 0.5=novel, 1.0=play
@@ -74,6 +74,7 @@ class IncludEdEnv(gym.Env):
     DISABILITY_NONE     = 0.0
     DISABILITY_DYSLEXIA = 0.5
     DISABILITY_ADHD     = 1.0
+    DISABILITY_BOTH     = 1.5
 
     # Content type encodings
     CONTENT_GENERIC = 0.0
@@ -107,14 +108,16 @@ class IncludEdEnv(gym.Env):
         self.current_step      = 0
         self.cumulative_reward = 0.0
 
-        # Disability distribution: 40% none, 30% dyslexia, 30% ADHD
+        # Disability distribution: 30% none, 25% dyslexia, 25% ADHD, 20% both
         r = random.random()
-        if r < 0.4:
+        if r < 0.30:
             self.disability_type = self.DISABILITY_NONE
-        elif r < 0.7:
+        elif r < 0.55:
             self.disability_type = self.DISABILITY_DYSLEXIA
-        else:
+        elif r < 0.80:
             self.disability_type = self.DISABILITY_ADHD
+        else:
+            self.disability_type = self.DISABILITY_BOTH
 
         # Content type distribution: 30% generic, 40% novel, 30% play
         c = random.random()
@@ -197,6 +200,8 @@ class IncludEdEnv(gym.Env):
             impact_map = {0: -0.3, 1: 0.2, 2: 0.1, 3: 0.7, 4: 0.9, 5: -0.1}
         elif self.disability_type == self.DISABILITY_ADHD:
             impact_map = {0: -0.4, 1: 0.2, 2: 0.8, 3: 0.3, 4: -0.1, 5: 0.9}
+        elif self.disability_type >= self.DISABILITY_BOTH - 0.1: # both
+            impact_map = {0: -0.5, 1: 0.1, 2: 0.7, 3: 0.5, 4: 0.8, 5: 0.9}
         else:
             impact_map = {0: 0.6, 1: 0.1, 2: -0.3, 3: -0.1, 4: -0.2, 5: -0.1}
 
@@ -268,7 +273,7 @@ class IncludEdEnv(gym.Env):
                 0.0: "generic", 0.5: "novel", 1.0: "play"
             }.get(self.content_type, "?")
             disability_name = {
-                0.0: "none", 0.5: "dyslexia", 1.0: "adhd"
+                0.0: "none", 0.5: "dyslexia", 1.0: "adhd", 1.5: "both"
             }.get(self.disability_type, "?")
             print(
                 f"Step {self.current_step:3d} | "

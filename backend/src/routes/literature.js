@@ -1,14 +1,16 @@
 import express from 'express';
-import { upload } from '../config/upload.js';
+import fs from 'fs';
+import FormData from 'form-data';
+import axios from 'axios';
+import { authenticateToken } from '../middleware/auth.js';
+import { upload } from '../config/multer.js';
 import { Literature } from '../models/Literature.js';
 import { processPDF } from '../services/pdfProcessor.js';
-import { generateQuestions } from '../services/questionGenerator.js';
 import { splitIntoChapters } from '../services/chapterSplitter.js';
-import { authenticateToken } from '../middleware/auth.js';
-import axios from 'axios';
+import { generateQuestions } from '../services/questionGenerator.js';
 
 const router = express.Router();
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8082';
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'; // Corrected port based on lsof and .env knowledge
 
 // Upload PDF endpoint
 // Upload PDF and Image endpoint
@@ -17,7 +19,7 @@ router.post('/upload', authenticateToken, upload.fields([
   { name: 'image', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    const { title, author, language, subject, content, simplifyText, generateAudio, difficulty } = req.body;
+    const { title, author, language, subject, content, simplifyText, generateAudio, difficulty, curriculumOutcomeCode, gradeLevel } = req.body;
     const files = req.files;
     const pdfFile = files?.file?.[0];
     const imageFile = files?.image?.[0];
@@ -28,22 +30,79 @@ router.post('/upload', authenticateToken, upload.fields([
     let originalContent, adaptedContent, wordCount;
     let finalContentType = 'generic';
     let finalSections = [];
-    let aiDetectedLanguage = language || 'english'; // form value fallback
+    let aiDetectedLanguage = language || 'english';
+    let aiResp = null;
+
+    let skipBackground = false;
+    let bookBrainData = null;
 
     if (pdfFile) {
       console.log(`📄 Processing PDF: ${pdfFile.originalname}`);
 
-      // Step 1: Extract text (unlinking the file on completion)
-      const processed = await processPDF(pdfFile.path, { simplifyText: isSimplifyEnabled });
-      originalContent = processed.originalContent;
-      adaptedContent = processed.adaptedContent;
-      wordCount = processed.wordCount;
+      try {
+        // High-quality AI analysis (v3.1) — synchronous for immediate structure
+        const form = new FormData();
+        form.append('file', fs.createReadStream(pdfFile.path));
 
-      // Step 2: Fast regex-based chapter detection for immediate response
-      const basicSplit = await splitIntoChapters(originalContent);
-      finalContentType = basicSplit.contentType;
-      finalSections = basicSplit.sections;
-      console.log(`📐 Basic split: ${finalContentType} (${finalSections.length} sections)`);
+        console.log(`🧠 Sending to AI /analyze: ${AI_SERVICE_URL}`);
+        aiResp = await axios.post(`${AI_SERVICE_URL}/analyze`, form, {
+          headers: form.getHeaders(),
+          timeout: 90000 // 90s sync wait for OCR + Book Brain
+        });
+
+        if (aiResp.data && aiResp.data.flat_units?.length > 0) {
+          console.log(`✅ AI analyze success: ${aiResp.data.document_type}`);
+          originalContent = aiResp.data.flat_units.map(u => u.content).join('\n\n');
+          adaptedContent = originalContent;
+          wordCount = originalContent.split(/\s+/).filter(Boolean).length;
+          finalContentType = aiResp.data.document_type;
+
+          // Enriched metadata from AI + Book Brain
+          const difficultyLookup = {};
+          bookBrainData = aiResp.data.book_brain;
+          for (const d of (bookBrainData?.difficulty_map || [])) {
+            if (d.section_id) difficultyLookup[d.section_id] = d;
+            if (d.section_title) difficultyLookup[d.section_title] = d;
+          }
+
+          finalSections = aiResp.data.flat_units.map(unit => {
+            const enrichment = difficultyLookup[unit.id] || difficultyLookup[unit.title] || {};
+            return {
+              title: unit.title || 'Section',
+              content: unit.content || '',
+              dialogue: unit.dialogue || unit.blocks || [],
+              wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
+              emotion: enrichment.emotion || 'neutral',
+              setting: enrichment.setting || '',
+              characters_present: enrichment.characters_present || [],
+              archaic_phrases: enrichment.archaic_phrases || [],
+              literary_devices: enrichment.literary_devices || [],
+              faction: enrichment.faction || '',
+              difficulty: enrichment.overall_difficulty || 0,
+              estimated_read_minutes: enrichment.estimated_read_minutes || 1,
+            };
+          });
+
+          skipBackground = true;
+          // Clean up file
+          try { fs.unlinkSync(pdfFile.path); } catch (e) { }
+        } else {
+          throw new Error('AI service returned empty response');
+        }
+
+      } catch (err) {
+        console.warn(`⚠️ AI analyze failed/timed out, falling back to local extraction: ${err.message}`);
+        // Step 1: Extract text (fallback)
+        const processed = await processPDF(pdfFile.path, { simplifyText: isSimplifyEnabled });
+        originalContent = processed.originalContent;
+        adaptedContent = processed.adaptedContent;
+        wordCount = processed.wordCount;
+
+        // Step 2: Fast regex-based chapter detection
+        const basicSplit = await splitIntoChapters(originalContent);
+        finalContentType = basicSplit.contentType;
+        finalSections = basicSplit.sections;
+      }
 
     } else if (content) {
       console.log(`✍️ Processing raw text input`);
@@ -71,158 +130,169 @@ router.post('/upload', authenticateToken, upload.fields([
       adaptedContent,
       wordCount,
       sections: finalSections,
+      bookBrain: bookBrainData ? {
+        vocabulary: (bookBrainData.vocabulary || []).slice(0, 80),
+        characters: bookBrainData.characters || [],
+        summary_stats: bookBrainData.summary_stats || {},
+        struggle_zones: bookBrainData.struggle_zones || [],
+        difficulty_map: (bookBrainData.difficulty_map || []).filter(d => d.overall_difficulty > 0.4),
+        cultural_context_bank: bookBrainData.cultural_context_bank || [],
+      } : null,
       uploadedBy: req.user.userId,
       schoolId: user?.schoolId || null,
       status: 'ready',
-      questionsGenerated: 0,
+      questionsGenerated: aiResp?.data?.questions?.length || 0,
       generateAudio: isAudioEnabled,
       difficulty: difficulty || 'beginner',
-      contentType: finalContentType
+      contentType: finalContentType,
+      curriculumOutcomeCode: curriculumOutcomeCode || null,
+      gradeLevel: gradeLevel || null
     });
 
     console.log(`💾 Saved to database: ${literature.id}`);
 
-    // Background: run full ML analysis (structure + emotion + questions)
-    // Uses /reanalyze-text so no PDF file needed
-    setImmediate(async () => {
-      try {
-        console.log(`🧠 Background ML analysis for: ${literature.title}`);
-        const aiResp = await axios.post(`${AI_SERVICE_URL}/reanalyze-text`, {
-          text: originalContent,
-          filename: `${literature.title}.txt`,
-          generate_questions: true,
-          question_count: 10,
-        }, { timeout: 180000 }); // 3 min — allows cold model start
-
-        if (aiResp.data && aiResp.data.flat_units?.length > 0) {
-          const aiContentType = aiResp.data.document_type;
-          const langCode = aiResp.data.language || 'en';
-          const detectedLang = langCode === 'fr' ? 'french' : 'english';
-
-          // Build a lookup from difficulty_map for per-section enriched metadata
-          const difficultyLookup = {};
-          for (const d of (aiResp.data.book_brain?.difficulty_map || [])) {
-            if (d.section_id) difficultyLookup[d.section_id] = d;
-            if (d.section_title) difficultyLookup[d.section_title] = d;
-          }
-
-          const aiSections = aiResp.data.flat_units.map(unit => {
-            const enrichment = difficultyLookup[unit.id] || difficultyLookup[unit.title] || {};
-            return {
-              title: unit.title || 'Section',
-              content: unit.content || '',
-              dialogue: unit.dialogue || unit.blocks || [],
-              wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
-              // Enriched per-section metadata (Phase 1)
-              emotion: enrichment.emotion || 'neutral',
-              setting: enrichment.setting || '',
-              characters_present: enrichment.characters_present || [],
-              archaic_phrases: enrichment.archaic_phrases || [],
-              literary_devices: enrichment.literary_devices || [],
-              faction: enrichment.faction || '',
-              difficulty: enrichment.overall_difficulty || 0,
-              estimated_read_minutes: enrichment.estimated_read_minutes || 1,
-            };
-          });
-
-          // Use AI-extracted author if current one is unknown
-          const aiAuthor = aiResp.data.author;
-          const updatePayload = {
-            contentType: aiContentType,
-            sections: aiSections,
-            language: detectedLang,
-            status: 'ready',
-          };
-          if (aiAuthor && (!literature.author || literature.author === 'Unknown')) {
-            updatePayload.author = aiAuthor;
-          }
-
-          // Store Book Brain pre-analysis (difficulty map, vocabulary, characters, struggle zones)
-          if (aiResp.data.book_brain) {
-            const bb = aiResp.data.book_brain;
-            updatePayload.bookBrain = {
-              vocabulary: (bb.vocabulary || []).slice(0, 80),
-              characters: bb.characters || [],
-              summary_stats: bb.summary_stats || {},
-              struggle_zones: bb.struggle_zones || [],
-              difficulty_map: (bb.difficulty_map || []).filter(d => d.overall_difficulty > 0.4),
-              cultural_context_bank: bb.cultural_context_bank || [],
-            };
-          }
-
-          // Per-section simplification — process in small batches to avoid overwhelming AI service
-          console.log(`🔤 Simplifying ${aiSections.length} sections for: ${literature.title}`);
-          let simplifiedCount = 0;
-          for (const section of aiSections) {
-            if (!section.content || section.content.trim().length === 0) continue;
-            try {
-              const sResp = await axios.post(`${AI_SERVICE_URL}/adapt-text`, {
-                text: section.content.slice(0, 3000), // cap per-section to avoid slow Ollama calls
-                doc_type: aiContentType,
-              }, { timeout: 15000 });
-              if (sResp.data?.adaptedText && sResp.data.adaptedText !== section.content.slice(0, 3000)) {
-                section.simplified_content = sResp.data.adaptedText;
-                simplifiedCount++;
-              }
-            } catch (_) { /* non-critical — section still readable without simplified_content */ }
-          }
-          console.log(`✅ Simplified ${simplifiedCount}/${aiSections.length} sections`);
-          updatePayload.sections = aiSections; // re-assign with simplified_content added
-
-          await literature.update(updatePayload);
-          console.log(`✅ ML update: ${literature.title} → ${aiContentType} (${aiSections.length} sections)`);
-
-          // Save AI questions
-          const aiQuestions = aiResp.data.questions || [];
-          if (aiQuestions.length > 0) {
-            const { Quiz } = await import('../models/Quiz.js');
-            const diffMap = {
-              beginner: 'easy', intermediate: 'medium', advanced: 'hard',
-              easy: 'easy', medium: 'medium', hard: 'hard'
-            };
-            const quizRecords = aiQuestions.map(q => ({
-              literatureId: literature.id,
-              question: q.question || q.q || 'Question',
-              options: q.options || q.choices || [],
-              correctAnswer: q.correct_answer ?? q.answer ?? q.correct ?? 0,
-              explanation: q.explanation || '',
-              difficulty: diffMap[q.difficulty] || 'medium',
-            }));
-            await Quiz.bulkCreate(quizRecords, { ignoreDuplicates: true });
-            await literature.update({ questionsGenerated: quizRecords.length });
-            console.log(`✅ Saved ${quizRecords.length} AI questions for: ${literature.title}`);
-          }
-
-          // Generate AI introduction — use first body section content, not raw front matter
-          const firstBodyContent = aiSections.find(s => s.content?.trim().length > 50)?.content || '';
-          try {
-            const introResp = await axios.post(`${AI_SERVICE_URL}/introduction/generate`, {
-              title: literature.title,
-              author: updatePayload.author || literature.author,
-              content_summary: firstBodyContent.slice(0, 1000),
-              doc_type: aiContentType,
-              language: langCode === 'fr' ? 'fr' : 'en'
-            }, { timeout: 60000 });
-
-            if (introResp.data?.introduction) {
-              await literature.update({ introduction: introResp.data.introduction });
-              console.log(`✅ Generated introduction for: ${literature.title}`);
-            }
-          } catch (err) {
-            console.warn(`⚠️ Introduction generation failed: ${err.message}`);
-            // Not critical - literature still works without it
-          }
-        }
-      } catch (err) {
-        console.warn(`⚠️ Background ML analysis failed for ${literature.title}: ${err.message}`);
-        // Literature still usable with basic sections from splitIntoChapters
-        // Fallback: generate questions via quiz service
+    // Background: run full ML analysis (if synchronous AI wasn't used)
+    if (!skipBackground) {
+      setImmediate(async () => {
         try {
-          const questionCount = await generateQuestions(literature.id, adaptedContent || originalContent);
-          await literature.update({ questionsGenerated: questionCount });
-        } catch (_) { /* questions optional */ }
-      }
-    });
+          console.log(`🧠 Background ML analysis for: ${literature.title}`);
+          aiResp = await axios.post(`${AI_SERVICE_URL}/reanalyze-text`, {
+            text: originalContent,
+            filename: `${literature.title}.txt`,
+            generate_questions: true,
+            question_count: 10,
+          }, { timeout: 180000 }); // 3 min — allows cold model start
+
+          if (aiResp.data && aiResp.data.flat_units?.length > 0) {
+            const aiContentType = aiResp.data.document_type;
+            const langCode = aiResp.data.language || 'en';
+            const detectedLang = langCode === 'fr' ? 'french' : 'english';
+
+            // Build a lookup from difficulty_map for per-section enriched metadata
+            const difficultyLookup = {};
+            for (const d of (aiResp.data.book_brain?.difficulty_map || [])) {
+              if (d.section_id) difficultyLookup[d.section_id] = d;
+              if (d.section_title) difficultyLookup[d.section_title] = d;
+            }
+
+            const aiSections = aiResp.data.flat_units.map(unit => {
+              const enrichment = difficultyLookup[unit.id] || difficultyLookup[unit.title] || {};
+              return {
+                title: unit.title || 'Section',
+                content: unit.content || '',
+                dialogue: unit.dialogue || unit.blocks || [],
+                wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
+                // Enriched per-section metadata (Phase 1)
+                emotion: enrichment.emotion || 'neutral',
+                setting: enrichment.setting || '',
+                characters_present: enrichment.characters_present || [],
+                archaic_phrases: enrichment.archaic_phrases || [],
+                literary_devices: enrichment.literary_devices || [],
+                faction: enrichment.faction || '',
+                difficulty: enrichment.overall_difficulty || 0,
+                estimated_read_minutes: enrichment.estimated_read_minutes || 1,
+              };
+            });
+
+            // Use AI-extracted author if current one is unknown
+            const aiAuthor = aiResp.data.author;
+            const updatePayload = {
+              contentType: aiContentType,
+              sections: aiSections,
+              language: detectedLang,
+              status: 'ready',
+            };
+            if (aiAuthor && (!literature.author || literature.author === 'Unknown')) {
+              updatePayload.author = aiAuthor;
+            }
+
+            // Store Book Brain pre-analysis (difficulty map, vocabulary, characters, struggle zones)
+            if (aiResp.data.book_brain) {
+              const bb = aiResp.data.book_brain;
+              updatePayload.bookBrain = {
+                vocabulary: (bb.vocabulary || []).slice(0, 80),
+                characters: bb.characters || [],
+                summary_stats: bb.summary_stats || {},
+                struggle_zones: bb.struggle_zones || [],
+                difficulty_map: (bb.difficulty_map || []).filter(d => d.overall_difficulty > 0.4),
+                cultural_context_bank: bb.cultural_context_bank || [],
+              };
+            }
+
+            // Per-section simplification — process in small batches to avoid overwhelming AI service
+            console.log(`🔤 Simplifying ${aiSections.length} sections for: ${literature.title}`);
+            let simplifiedCount = 0;
+            for (const section of aiSections) {
+              if (!section.content || section.content.trim().length === 0) continue;
+              try {
+                const sResp = await axios.post(`${AI_SERVICE_URL}/adapt-text`, {
+                  text: section.content.slice(0, 3000), // cap per-section to avoid slow Ollama calls
+                  doc_type: aiContentType,
+                }, { timeout: 15000 });
+                if (sResp.data?.adaptedText && sResp.data.adaptedText !== section.content.slice(0, 3000)) {
+                  section.simplified_content = sResp.data.adaptedText;
+                  simplifiedCount++;
+                }
+              } catch (_) { /* non-critical — section still readable without simplified_content */ }
+            }
+            console.log(`✅ Simplified ${simplifiedCount}/${aiSections.length} sections`);
+            updatePayload.sections = aiSections; // re-assign with simplified_content added
+
+            await literature.update(updatePayload);
+            console.log(`✅ ML update: ${literature.title} → ${aiContentType} (${aiSections.length} sections)`);
+
+            // Save AI questions
+            const aiQuestions = aiResp.data.questions || [];
+            if (aiQuestions.length > 0) {
+              const { Quiz } = await import('../models/Quiz.js');
+              const diffMap = {
+                beginner: 'easy', intermediate: 'medium', advanced: 'hard',
+                easy: 'easy', medium: 'medium', hard: 'hard'
+              };
+              const quizRecords = aiQuestions.map(q => ({
+                literatureId: literature.id,
+                question: q.question || q.q || 'Question',
+                options: q.options || q.choices || [],
+                correctAnswer: q.correct_answer ?? q.answer ?? q.correct ?? 0,
+                explanation: q.explanation || '',
+                difficulty: diffMap[q.difficulty] || 'medium',
+              }));
+              await Quiz.bulkCreate(quizRecords, { ignoreDuplicates: true });
+              await literature.update({ questionsGenerated: quizRecords.length });
+              console.log(`✅ Saved ${quizRecords.length} AI questions for: ${literature.title}`);
+            }
+
+            // Generate AI introduction — use first body section content, not raw front matter
+            const firstBodyContent = aiSections.find(s => s.content?.trim().length > 50)?.content || '';
+            try {
+              const introResp = await axios.post(`${AI_SERVICE_URL}/introduction/generate`, {
+                title: literature.title,
+                author: updatePayload.author || literature.author,
+                content_summary: firstBodyContent.slice(0, 1000),
+                doc_type: aiContentType,
+                language: langCode === 'fr' ? 'fr' : 'en'
+              }, { timeout: 60000 });
+
+              if (introResp.data?.introduction) {
+                await literature.update({ introduction: introResp.data.introduction });
+                console.log(`✅ Generated introduction for: ${literature.title}`);
+              }
+            } catch (err) {
+              console.warn(`⚠️ Introduction generation failed: ${err.message}`);
+              // Not critical - literature still works without it
+            }
+          }
+        } catch (err) {
+          console.warn(`⚠️ Background ML analysis failed for ${literature.title}: ${err.message}`);
+          // Literature still usable with basic sections from splitIntoChapters
+          // Fallback: generate questions via quiz service
+          try {
+            const questionCount = await generateQuestions(literature.id, adaptedContent || originalContent);
+            await literature.update({ questionsGenerated: questionCount });
+          } catch (_) { /* questions optional */ }
+        }
+      });
+    }
 
     res.json({
       id: literature.id,
@@ -236,6 +306,8 @@ router.post('/upload', authenticateToken, upload.fields([
       difficulty: literature.difficulty,
       questionsGenerated: 0,
       sectionCount: finalSections.length,
+      curriculumOutcomeCode: literature.curriculumOutcomeCode,
+      gradeLevel: literature.gradeLevel
     });
 
   } catch (error) {
@@ -243,7 +315,6 @@ router.post('/upload', authenticateToken, upload.fields([
     res.status(500).json({ error: error.message });
   }
 });
-
 // Get current/latest literature for student
 router.get('/current', authenticateToken, async (req, res) => {
   try {
@@ -297,7 +368,9 @@ What's in a name? A rose by any other name would smell just as sweet.`,
         uploadedBy: req.user.userId,
         status: 'ready',
         subject: 'Literature',
-        questionsGenerated: 5
+        questionsGenerated: 5,
+        gradeLevel: 'P6',
+        curriculumOutcomeCode: 'P6-LIT-DEMO'
       });
 
       console.log('✅ Demo literature created');
@@ -318,7 +391,7 @@ router.get('/my-content', authenticateToken, async (req, res) => {
     const literature = await Literature.findAll({
       where: { uploadedBy: req.user.userId },
       order: [['createdAt', 'DESC']],
-      attributes: ['id', 'title', 'author', 'subject', 'language', 'wordCount', 'questionsGenerated', 'status', 'imageUrl', 'difficulty', 'averageRating', 'ratingCount', 'createdAt']
+      attributes: ['id', 'title', 'author', 'subject', 'language', 'wordCount', 'questionsGenerated', 'status', 'imageUrl', 'difficulty', 'averageRating', 'ratingCount', 'createdAt', 'curriculumOutcomeCode', 'gradeLevel']
     });
     console.log(`✅ Found ${literature.length} items`);
     const result = literature.map(l => ({
@@ -489,47 +562,59 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
 // Delete a literature entry (only the uploader can delete)
 router.delete('/:id', authenticateToken, async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const literature = await Literature.findByPk(req.params.id);
 
     if (!literature) {
+      await transaction.rollback();
       return res.status(404).json({ error: 'Literature not found' });
     }
 
-    if (literature.uploadedBy !== req.user.userId) {
+    if (literature.uploadedBy !== req.user.userId && req.user.role !== 'admin') {
+      await transaction.rollback();
       return res.status(403).json({ error: 'You do not have permission to delete this content' });
     }
 
-    // Delete associated records first to avoid foreign key constraints
     const { Quiz } = await import('../models/Quiz.js');
     const { LessonProgress } = await import('../models/LessonProgress.js');
     const { Session } = await import('../models/Session.js');
     const { RLTrainingData } = await import('../models/RLTrainingData.js');
 
-    // 1. Delete Quizzes
-    await Quiz.destroy({ where: { literatureId: req.params.id } });
+    console.log(`🗑️  Starting cleanup for literature: ${req.params.id}`);
 
-    // 2. Delete Lesson Progress
-    await LessonProgress.destroy({ where: { literatureId: req.params.id } });
-
-    // 3. Delete Session-related data (RLTrainingData depends on Session)
+    // 1. Delete associated data in correct order (children first)
+    // a. RL Training Data (depends on Session)
     const sessionIds = (await Session.findAll({
       where: { literatureId: req.params.id },
       attributes: ['id']
     })).map(s => s.id);
 
     if (sessionIds.length > 0) {
-      await RLTrainingData.destroy({ where: { sessionId: sessionIds } });
-      await Session.destroy({ where: { id: sessionIds } });
+      console.log(`   - Deleting ${sessionIds.length} sessions and related RL data`);
+      await RLTrainingData.destroy({ where: { sessionId: sessionIds }, transaction });
+      await Session.destroy({ where: { id: sessionIds }, transaction });
     }
 
-    await literature.destroy();
-    console.log(`🗑️  Deleted: ${literature.title}`);
+    // b. Quizzes
+    const quizCount = await Quiz.destroy({ where: { literatureId: req.params.id }, transaction });
+    console.log(`   - Deleted ${quizCount} quizzes`);
 
-    res.json({ success: true, message: 'Content deleted successfully' });
+    // c. Lesson Progress
+    const progressCount = await LessonProgress.destroy({ where: { literatureId: req.params.id }, transaction });
+    console.log(`   - Deleted ${progressCount} progress records`);
+
+    // 2. Finally delete the literature entry
+    await literature.destroy({ transaction });
+
+    await transaction.commit();
+    console.log(`✅ Fully deleted: ${literature.title}`);
+
+    res.json({ success: true, message: 'Content and associated data deleted successfully' });
   } catch (error) {
+    if (transaction) await transaction.rollback();
     console.error('❌ Delete error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: `Delete failed: ${error.message}` });
   }
 });
 

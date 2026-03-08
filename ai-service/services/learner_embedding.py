@@ -47,7 +47,7 @@ class SessionMetrics:
     highlights_made: int = 0
     vocab_lookups: int = 0
     time_of_day_hour: int = 12  # 0-23
-    disability_type: float = 0  # 0.0=none, 0.5=dyslexia, 1.0=ADHD
+    disability_type: float = 0  # 0.0=none, 0.5=dyslexia, 1.0=ADHD, 1.5=both
     doc_type: str = "generic"   # play, novel, poem, generic
     adaptations_applied: List[int] = field(default_factory=list)  # action IDs
     adaptation_accepted: List[bool] = field(default_factory=list)  # did student keep it?

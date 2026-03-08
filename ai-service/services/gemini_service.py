@@ -10,9 +10,9 @@ class GeminiService:
     Provides high-performance simplification, analysis, and generation.
     """
     
-    def __init__(self):
-        self.api_key = os.environ.get("GEMINI_API_KEY")
-        self.model_name = "gemini-pro"
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.model_name = "gemini-2.5-flash"
         self._is_active = False
         
         if self.api_key and self.api_key != "your_gemini_api_key_here":
@@ -51,6 +51,7 @@ class GeminiService:
         if not self._is_active:
             return {}
             
+        response = None
         try:
             # Append JSON instruction to ensure structured output
             json_prompt = f"{prompt}\n\nRespond ONLY with a valid JSON object."
@@ -71,5 +72,5 @@ class GeminiService:
                 
             return json.loads(text)
         except Exception as e:
-            print(f"❌ Gemini JSON request failed: {e}\nResponse text was: {getattr(response, 'text', 'N/A')}")
+            print(f"❌ Gemini JSON request failed: {e}\nResponse text was: {getattr(response, 'text', 'N/A') if response else 'N/A'}")
             return {}

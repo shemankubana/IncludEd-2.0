@@ -181,7 +181,17 @@ class SimplificationService:
                 if result and result.get("simple_version"):
                     result["tier"] = "gemini"
                     # Supplement with local assets + Gemini Vocab
-                    result["vocabulary"] = self._extract_vocabulary_gemini(highlighted_text, reading_level)
+                    llm_vocab = self._extract_vocabulary_gemini(highlighted_text, reading_level)
+                    rule_vocab = self._extract_vocabulary(highlighted_text)
+                    
+                    # Merge (LLM takes priority)
+                    final_vocab = llm_vocab
+                    seen_words = {v["word"].lower() for v in llm_vocab}
+                    for rv in rule_vocab:
+                        if rv["word"].lower() not in seen_words:
+                            final_vocab.append(rv)
+                    
+                    result["vocabulary"] = final_vocab
                     result["literary_devices"] = self._detect_devices(highlighted_text)
                     if not result.get("kinyarwanda_bridge"):
                         result["kinyarwanda_bridge"] = _get_kinyarwanda_bridge(highlighted_text)
@@ -199,7 +209,17 @@ class SimplificationService:
                 if result and result.get("simple_version"):
                     result["tier"] = "ollama"
                     # Supplement with rule-based vocab + Kinyarwanda bridge
-                    result["vocabulary"] = self._extract_vocabulary(highlighted_text)
+                    llm_vocab = result.get("vocabulary", [])
+                    rule_vocab = self._extract_vocabulary(highlighted_text)
+                    
+                    # Merge
+                    final_vocab = llm_vocab
+                    seen_words = {v["word"].lower() for v in llm_vocab}
+                    for rv in rule_vocab:
+                        if rv["word"].lower() not in seen_words:
+                            final_vocab.append(rv)
+                            
+                    result["vocabulary"] = final_vocab
                     result["literary_devices"] = self._detect_devices(highlighted_text)
                     if not result.get("kinyarwanda_bridge"):
                         result["kinyarwanda_bridge"] = _get_kinyarwanda_bridge(highlighted_text)
@@ -250,7 +270,7 @@ Réponds en JSON avec exactement ces clés:
   "cultural_context": "Contexte culturel si pertinent, sinon null",
   "kinyarwanda_bridge": "Analogie culturelle rwandaise — compare avec un concept rwandais (imigabane, umuganda, icyubahiro, etc.)",
   "vocabulary": [
-    {"word": "string", "meaning": "définition simple pour un enfant", "analogy": "comparaison simple"}
+    {{"word": "string", "meaning": "définition simple pour un enfant", "analogy": "comparaison simple", "category": "ex: Archaïque, Vocabulaire, Métaphore"}}
   ]
 }}"""
         else:
@@ -267,7 +287,7 @@ Respond in JSON with exactly these keys:
   "cultural_context": "Cultural context if relevant, otherwise null",
   "kinyarwanda_bridge": "Rwanda cultural connection — compare to umuganda, gacaca, icyubahiro, or another Rwandan concept",
   "vocabulary": [
-    {"word": "string", "meaning": "simple child-friendly definition", "analogy": "simple comparison for a 10-year-old"}
+    {{"word": "string", "meaning": "simple child-friendly definition", "analogy": "simple comparison for a 10-year-old", "category": "e.g. Archaic, Vocabulary, Idiom"}}
   ]
 }}"""
 
@@ -309,7 +329,7 @@ Réponds en JSON avec exactement ces clés:
   "cultural_context": "Contexte culturel si pertinent, sinon null",
   "kinyarwanda_bridge": "Analogie culturelle rwandaise si applicable (ex: comparer à imigabane, gacaca, icyubahiro), sinon null",
   "vocabulary": [
-    {"word": "string", "meaning": "définition simple", "analogy": "comparaison simple"}
+    {{"word": "string", "meaning": "définition simple", "analogy": "comparaison simple", "category": "catégorie du mot"}}
   ]
 }}
 
@@ -328,7 +348,7 @@ Respond in JSON with exactly these keys:
   "cultural_context": "Cultural context if relevant, otherwise null",
   "kinyarwanda_bridge": "Rwanda cultural connection if applicable (e.g. compare to umuganda, gacaca, icyubahiro, or another Rwandan concept), otherwise null",
   "vocabulary": [
-    {"word": "string", "meaning": "simple child-friendly definition", "analogy": "simple comparison for a 10-year-old"}
+    {{"word": "string", "meaning": "simple child-friendly definition", "analogy": "simple comparison for a 10-year-old", "category": "word category"}}
   ]
 }}
 
@@ -424,8 +444,8 @@ Adapt for {level_desc}. Preserve the literary voice — don't dumb it down."""
 "{text}"
 
 The definitions should be suitable for a {level_desc}.
-Respond in JSON as a list of objects with "word", "meaning", and "analogy" (a simple comparison to help them understand).
-Example: [{{"word": "astounded", "meaning": "very surprised", "analogy": "like when you see a magic trick"}}]
+Respond in JSON as a list of objects with "word", "meaning", "analogy" (a simple comparison), and "category" (e.g. Vocabulary, Archaic, Figurative).
+Example: [{{"word": "astounded", "meaning": "very surprised", "analogy": "like when you see a magic trick", "category": "Vocabulary"}}]
 """
         result = self.gemini.generate_json(prompt)
         return result if isinstance(result, list) else self._extract_vocabulary(text)
@@ -443,6 +463,7 @@ Example: [{{"word": "astounded", "meaning": "very surprised", "analogy": "like w
                     "meaning": _ARCHAIC_GLOSSARY[clean],
                     "analogy": f'Think of it as a fancy old way of saying "{_ARCHAIC_GLOSSARY[clean]}".',
                     "type": "archaic",
+                    "category": "Archaic",
                 })
 
         # Deduplicate

@@ -223,17 +223,74 @@ Respond in JSON with refined metadata focusing on Primary School (P4-P6) categor
         )
         flat_units = self._flatten_units(units, doc_type=clf.type)
 
-        # ── Step 7: Generate questions ─────────────────────────────────────────
+        # ── Step 8: AI Introduction Enhancement (Tier 0) ───────────────────
+        if self._gemini.is_available() and flat_units:
+            # Check if there's a good introduction
+            has_intro = any("intro" in u["title"].lower() or "prologue" in u["title"].lower() for u in flat_units)
+            if not has_intro:
+                try:
+                    intro_prompt = f"""Create a warm, encouraging 1-paragraph introduction for a Primary 6 student (age 11) about to read:
+Title: {title}
+Author: {author}
+Type: {clf.type}
+
+Focus on why this book is exciting and what they might learn about characters or values like courage, friendship, or honesty.
+Keep it strictly under 100 words.
+"""
+                    ai_intro = self._gemini.generate(intro_prompt)
+                    if ai_intro:
+                        flat_units.insert(0, {
+                            "title": "About This Book",
+                            "content": ai_intro,
+                            "dialogue": []
+                        })
+                except Exception as e:
+                    print(f"Failed to generate AI intro: {e}")
+
+        # ── Step 7: Generate questions (ADHD Bite-sized Learning) ─────────────
         questions: List[Dict[str, Any]] = []
         if generate_questions:
-            sample_content = self._extract_first_content(units, clf.type)
-            if sample_content:
-                questions = self._qgen.generate(
-                    content  = sample_content,
-                    doc_type = clf.type,
-                    count    = question_count,
-                    language = language,
-                )
+            # If it's a novel or informational text with multiple chunks, generate per-chunk
+            if clf.type in ["novel", "informational", "generic"] and len(flat_units) > 1:
+                print(f"🧩 Generating micro-quizzes for {len(flat_units)} chunks...")
+                for i, unit in enumerate(flat_units):
+                    # Skip short/intro units
+                    if len(unit.get("content", "")) < 300:
+                        continue
+                    
+                    unit_content = unit.get("content", "")
+                    unit_qs = self._qgen.generate(
+                        content  = unit_content,
+                        doc_type = clf.type,
+                        count    = 1, # 1 question per chunk for high engagement
+                        language = language,
+                    )
+                    for q in unit_qs:
+                        q["chunk_index"] = i
+                        q["chapter_title"] = unit.get("title", "")
+                        questions.append(q)
+                
+                # If still too few questions, generate generic ones for the whole book
+                if len(questions) < question_count:
+                    sample_content = self._extract_first_content(units, clf.type)
+                    extra_qs = self._qgen.generate(
+                        content  = sample_content,
+                        doc_type = clf.type,
+                        count    = question_count - len(questions),
+                        language = language,
+                    )
+                    questions.extend(extra_qs)
+
+            else:
+                # Original logic for plays or single-unit docs
+                sample_content = self._extract_first_content(units, clf.type)
+                if sample_content:
+                    questions = self._qgen.generate(
+                        content  = sample_content,
+                        doc_type = clf.type,
+                        count    = question_count,
+                        language = language,
+                    )
 
         elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
 
@@ -355,24 +412,28 @@ Respond in JSON with refined metadata focusing on Primary School (P4-P6) categor
                 "dict", flags=fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_DEHYPHENATE
             )
             
-            # Simple layout filtering: skip blocks that look like headers/footers
-            # Usually top 50 or bottom 50 points of a page
+            # Broad layout filtering for headers/footers
             page_rect = page.rect
-            header_threshold = page_rect.height * 0.08 # top 8%
-            footer_threshold = page_rect.height * 0.92 # bottom 8%
+            header_threshold = page_rect.height * 0.10 # top 10%
+            footer_threshold = page_rect.height * 0.90 # bottom 10%
 
             for block in page_dict.get("blocks", []):
-                # Skip if block is in header/footer area and is small
                 bbox = block.get("bbox", (0, 0, 0, 0))
                 is_header_area = bbox[3] < header_threshold
                 is_footer_area = bbox[1] > footer_threshold
                 
-                # Heuristic: headers/footers are often single lines or just numbers
-                if (is_header_area or is_footer_area) and len(block.get("lines", [])) <= 1:
-                    # Check if it's just a page number
+                if is_header_area or is_footer_area:
+                    # Scrub headers/footers that contain book title/author or page numbers
                     txt = "".join("".join(s["text"] for s in l["spans"]) for l in block.get("lines", [])).strip()
-                    if txt.isdigit() or len(txt) < 5:
-                        continue # Skip suspected page number or small footer/header
+                    simple_txt = re.sub(r'[^a-zA-Z0-9]', '', txt.lower())
+                    
+                    # Fuzzy match against known title/author if available or short junk
+                    if txt.isdigit() or len(txt) < 3:
+                        continue 
+                    
+                    # If it's a single line in a margin, it's very likely noise
+                    if len(block.get("lines", [])) <= 1 and (len(txt) < 40 or txt.isupper()):
+                        continue
 
                 block["_page"] = page_idx
                 all_blocks.append(block)
@@ -619,9 +680,9 @@ Respond in JSON with refined metadata focusing on Primary School (P4-P6) categor
                         or "\n\n".join(section.get("paragraphs", []))
                     )
                     
-                    # ADHD Sub-chunking: If a section is too long (> 4000 chars),
-                    # break it into smaller manageable chunks for the reader.
-                    chunks = self._sub_chunk_content(content, max_chars=3000)
+                    # ADHD Sub-chunking: If a section is too long (> 250 words),
+                    # break it into smaller manageable chunks for the reader (v3.1 micro-chunks).
+                    chunks = self._sub_chunk_content(content, max_words=200)
                     
                     for i, chunk in enumerate(chunks):
                         title = (
@@ -640,25 +701,28 @@ Respond in JSON with refined metadata focusing on Primary School (P4-P6) categor
 
         return flat
 
-    def _sub_chunk_content(self, text: str, max_chars: int = 3000) -> List[str]:
-        """Split long text into chunks at paragraph boundaries."""
-        if len(text) <= max_chars * 1.2:  # Allow 20% overflow to avoid tiny fragments
-            return [text]
-            
-        paragraphs = text.split("\n\n")
+    def _sub_chunk_content(self, text: str, max_words: int = 200) -> List[str]:
+        """Split long text into micro-chunks at paragraph boundaries (< 220 words)."""
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        if not paragraphs: return [text]
+        
         chunks = []
         current_chunk = []
-        current_len = 0
+        current_word_count = 0
         
+        # Allow 30% overflow to avoid tiny fragments (e.g. 260 words is okay)
+        overflow_limit = int(max_words * 1.3)
+
         for p in paragraphs:
-            p_len = len(p)
-            if current_len + p_len > max_chars and current_chunk:
+            p_word_count = len(p.split())
+            
+            if current_chunk and (current_word_count + p_word_count > overflow_limit):
                 chunks.append("\n\n".join(current_chunk))
                 current_chunk = [p]
-                current_len = p_len
+                current_word_count = p_word_count
             else:
                 current_chunk.append(p)
-                current_len += p_len + 2
+                current_word_count += p_word_count
                 
         if current_chunk:
             chunks.append("\n\n".join(current_chunk))

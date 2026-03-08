@@ -16,6 +16,7 @@
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Users, ZoomIn } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -25,19 +26,23 @@ interface Character {
     line_count?: number;
     scene_count?: number;
     relationships?: Array<{ character: string; co_appearances: number }>;
+    first_seen_index?: number;
+    description?: string;
 }
 
 interface CharacterMapPanelProps {
     characters: Character[];
+    currentSectionIndex: number;
     familiarityScores?: Record<string, number>;
     onClose?: () => void;
+    language?: string;
 }
 
 // ── Colour palette per importance ─────────────────────────────────────────────
 
 const IMPORTANCE_STYLE = {
-    major:      { fill: "#4F46E5", stroke: "#3730a3", radius: 40, textSize: 11 },
-    minor:      { fill: "#0891B2", stroke: "#0e7490", radius: 28, textSize: 9 },
+    major: { fill: "#4F46E5", stroke: "#3730a3", radius: 40, textSize: 11 },
+    minor: { fill: "#0891B2", stroke: "#0e7490", radius: 28, textSize: 9 },
     background: { fill: "#6B7280", stroke: "#4B5563", radius: 18, textSize: 7 },
 };
 
@@ -57,21 +62,25 @@ function circularLayout(n: number, cx: number, cy: number, r: number) {
 
 const CharacterMapPanel: React.FC<CharacterMapPanelProps> = ({
     characters,
+    currentSectionIndex,
     familiarityScores = {},
     onClose,
+    language,
 }) => {
+    const { t } = useTranslation(language);
     const [selectedChar, setSelectedChar] = useState<string | null>(null);
 
-    // Limit to top 12 characters by line count
-    const displayChars = useMemo(() =>
-        characters
+    // Filter to characters seen AT OR BEFORE current progress (Spoiler Prevention Phase 3)
+    const displayChars = useMemo(() => {
+        const seen = characters.filter(c => (c.first_seen_index ?? 0) <= currentSectionIndex);
+        return seen
+            .sort((a, b) => (b.line_count || 0) - (a.line_count || 0))
             .slice(0, 12)
             .sort((a, b) => {
                 const order = { major: 0, minor: 1, background: 2 };
                 return order[a.importance] - order[b.importance];
-            }),
-        [characters]
-    );
+            });
+    }, [characters, currentSectionIndex]);
 
     const SVG_W = 500;
     const SVG_H = 420;
@@ -118,7 +127,7 @@ const CharacterMapPanel: React.FC<CharacterMapPanelProps> = ({
             <div className="flex items-center justify-between p-5 border-b border-border">
                 <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-black uppercase tracking-widest">Character Map</span>
+                    <span className="text-sm font-black uppercase tracking-widest">{t("character.map")}</span>
                 </div>
                 {onClose && (
                     <button
@@ -253,19 +262,24 @@ const CharacterMapPanel: React.FC<CharacterMapPanelProps> = ({
                         <div className="p-4 space-y-2">
                             <div className="flex items-center justify-between">
                                 <p className="font-black text-sm">{selected.name}</p>
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
-                                    selected.importance === "major" ? "bg-primary/15 text-primary"
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${selected.importance === "major" ? "bg-primary/15 text-primary"
                                     : selected.importance === "minor" ? "bg-amber-100 text-amber-700"
-                                    : "bg-slate-100 text-slate-600"
-                                }`}>
-                                    {selected.importance}
+                                        : "bg-slate-100 text-slate-600"
+                                    }`}>
+                                    {selected.importance === "major" ? t("character.major") : selected.importance === "minor" ? t("character.minor") : t("character.background")}
                                 </span>
                             </div>
+
+                            {selected.description && (
+                                <p className="text-[11px] text-foreground/80 italic leading-relaxed bg-secondary/30 p-2 rounded-xl border border-border/50">
+                                    {selected.description}
+                                </p>
+                            )}
 
                             {familiarityScores[selected.name] !== undefined && (
                                 <div>
                                     <div className="flex justify-between text-[10px] font-bold text-muted-foreground mb-1">
-                                        <span>Your familiarity</span>
+                                        <span>{t("character.familiarityLabel")}</span>
                                         <span>{Math.round((familiarityScores[selected.name] ?? 0) * 100)}%</span>
                                     </div>
                                     <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
@@ -279,8 +293,8 @@ const CharacterMapPanel: React.FC<CharacterMapPanelProps> = ({
                             )}
 
                             <p className="text-[10px] text-muted-foreground">
-                                {selected.scene_count ?? 0} scene{(selected.scene_count ?? 0) !== 1 ? "s" : ""}
-                                {selected.line_count ? ` · ${selected.line_count} line${selected.line_count !== 1 ? "s" : ""}` : ""}
+                                {selected.scene_count ?? 0} {(selected.scene_count ?? 0) !== 1 ? t("character.scenes") : t("character.scene")}
+                                {selected.line_count ? ` · ${selected.line_count} ${selected.line_count !== 1 ? t("character.lines") : t("character.line")}` : ""}
                             </p>
 
                             {(selected.relationships?.length ?? 0) > 0 && (
@@ -309,12 +323,14 @@ const CharacterMapPanel: React.FC<CharacterMapPanelProps> = ({
                                 background: IMPORTANCE_STYLE[imp].fill,
                             }}
                         />
-                        <span className="text-[9px] font-bold text-muted-foreground capitalize">{imp}</span>
+                        <span className="text-[9px] font-bold text-muted-foreground capitalize">
+                            {imp === "major" ? t("character.major") : imp === "minor" ? t("character.minor") : t("character.background")}
+                        </span>
                     </div>
                 ))}
                 <div className="flex items-center gap-1.5 ml-auto">
                     <div className="w-4 h-0.5 rounded-full bg-emerald-500" />
-                    <span className="text-[9px] font-bold text-muted-foreground">familiarity</span>
+                    <span className="text-[9px] font-bold text-muted-foreground">{t("character.familiarity")}</span>
                 </div>
             </div>
         </div>

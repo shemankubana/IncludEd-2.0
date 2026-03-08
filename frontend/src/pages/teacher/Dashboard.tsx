@@ -46,6 +46,7 @@ const TeacherDashboard = () => {
         alerts: any[];
         recommendations: Record<string, any[]>;
         loading: boolean;
+        classInsights?: string;
     }>({ summaries: [], alerts: [], recommendations: {}, loading: false });
     const { toast } = useToast();
 
@@ -215,7 +216,17 @@ const TeacherDashboard = () => {
                 }
             } catch { /* common-highlight alerts optional */ }
 
-            setIntelligenceData({ summaries, alerts, loading: false });
+            // Fetch the new AI Class Insights (D2)
+            let classInsights = "";
+            try {
+                const insightsRes = await fetch(`${baseUrl}/api/analytics/insights`, { headers });
+                if (insightsRes.ok) {
+                    const insightsData = await insightsRes.json();
+                    classInsights = insightsData.insights;
+                }
+            } catch { /* insights optional */ }
+
+            setIntelligenceData(prev => ({ ...prev, summaries, alerts, loading: false, classInsights }));
 
             // ── Fetch per-student recommendations (D6 actionable intelligence) ──
             const recMap: Record<string, any[]> = {};
@@ -469,6 +480,25 @@ const TeacherDashboard = () => {
                             </div>
                         ) : (
                             <div className="space-y-8">
+                                {/* Overall Class Insights */}
+                                {intelligenceData.classInsights && (
+                                    <section>
+                                        <h3 className="text-lg font-black mb-4 flex items-center gap-2">
+                                            <TrendingUp className="w-5 h-5 text-primary" />
+                                            Overall Class Engagement
+                                        </h3>
+                                        <Card className="rounded-[28px] border-2 border-primary/20 bg-primary/5">
+                                            <CardContent className="p-6">
+                                                <div className="prose prose-sm dark:prose-invert max-w-none space-y-3">
+                                                    {intelligenceData.classInsights.split('\n').map((para, i) => (
+                                                        para.trim() ? <p key={i} className="leading-relaxed font-medium">{para.replace(/^- /, '• ')}</p> : null
+                                                    ))}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </section>
+                                )}
+
                                 {/* Class-wide alerts */}
                                 {intelligenceData.alerts.length > 0 && (
                                     <section>

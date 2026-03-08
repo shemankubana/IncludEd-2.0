@@ -11,6 +11,7 @@ import schoolsRoutes from './routes/schools.js';
 import adminRoutes from './routes/admin.js';
 import progressRoutes from './routes/progress.js';
 import sessionsRoutes from './routes/sessions.js';
+import vocabRoutes from './routes/vocab.js';
 import { sequelize } from './config/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -83,6 +84,7 @@ app.use('/api/progress', progressRoutes);
 app.use('/api/sessions', sessionsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/vocab', vocabRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

@@ -11,8 +11,7 @@ router.get('/:literatureId', authenticateToken, async (req, res) => {
   try {
     const questions = await Quiz.findAll({
       where: { literatureId: req.params.literatureId },
-      limit: 10,
-      order: Sequelize.literal('RANDOM()')
+      order: [['chunkIndex', 'ASC'], [Sequelize.literal('RANDOM()')]]
     });
 
     res.json(questions.map(q => ({
@@ -20,7 +19,9 @@ router.get('/:literatureId', authenticateToken, async (req, res) => {
       question: q.question,
       options: q.options,
       correctAnswer: q.correctAnswer,
-      explanation: q.explanation
+      explanation: q.explanation,
+      chunkIndex: q.chunkIndex,
+      chapterTitle: q.chapterTitle
     })));
   } catch (error) {
     console.error('Quiz fetch error:', error);

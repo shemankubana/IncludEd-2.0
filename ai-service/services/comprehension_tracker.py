@@ -177,6 +177,7 @@ class ComprehensionTracker:
             book_title=book_title,
             doc_type=doc_type,
             first_session=time.time(),
+            sessions_count=1,
         )
         self._cache[key] = graph
         return graph
@@ -238,6 +239,11 @@ class ComprehensionTracker:
     ):
         """Record that a student read a section."""
         graph = self.get_or_create(student_id, book_id)
+        
+        # If more than 30 minutes have passed since the last read, count as a new session
+        if time.time() - graph.last_session > 1800:
+            graph.sessions_count += 1
+            
         graph.last_session = time.time()
         graph.total_time_s += time_spent_s
 

@@ -3,11 +3,13 @@ import { Quiz } from '../models/Quiz.js';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8082';
 
-const DIFF_MAP = { beginner: 'easy', intermediate: 'medium', advanced: 'hard',
-                   easy: 'easy', medium: 'medium', hard: 'hard' };
+const DIFF_MAP = {
+  beginner: 'easy', intermediate: 'medium', advanced: 'hard',
+  easy: 'easy', medium: 'medium', hard: 'hard'
+};
 
 export async function generateQuestions(literatureId, content, options = {}) {
-  const { count = 10, docType = 'generic', language = 'en' } = options;
+  const { count = 10, docType = 'generic', language = 'en', chunkIndex = null, chapterTitle = null } = options;
   try {
     const response = await axios.post(
       `${AI_SERVICE_URL}/quiz/generate`,
@@ -22,17 +24,21 @@ export async function generateQuestions(literatureId, content, options = {}) {
 
     const questions = response.data.questions || [];
 
-    const diffMap = { beginner: 'easy', intermediate: 'medium', advanced: 'hard',
-                      easy: 'easy', medium: 'medium', hard: 'hard' };
+    const diffMap = {
+      beginner: 'easy', intermediate: 'medium', advanced: 'hard',
+      easy: 'easy', medium: 'medium', hard: 'hard'
+    };
 
     await Promise.all(
       questions.map(q => Quiz.create({
         literatureId,
-        question:      q.question || q.q || 'Question',
-        options:       q.options  || q.choices || [],
+        question: q.question || q.q || 'Question',
+        options: q.options || q.choices || [],
         correctAnswer: q.correct_answer ?? q.correctAnswer ?? q.answer ?? 0,
-        explanation:   q.explanation || '',
-        difficulty:    diffMap[q.difficulty] || 'medium',
+        explanation: q.explanation || '',
+        difficulty: diffMap[q.difficulty] || 'medium',
+        chunkIndex,
+        chapterTitle,
       }))
     );
 

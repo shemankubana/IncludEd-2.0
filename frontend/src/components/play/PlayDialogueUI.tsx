@@ -38,9 +38,9 @@ export type Emotion =
 
 export interface EmotionAnim {
     expression: string;
-    eyebrows:   string;  // raised | furrowed | drooped | neutral
-    mouth:      string;  // smile | frown | open | tight | closed | curled
-    eyes:       string;  // wide | narrowed | downcast | bright | normal | squinted
+    eyebrows: string;  // raised | furrowed | drooped | neutral
+    mouth: string;  // smile | frown | open | tight | closed | curled
+    eyes: string;  // wide | narrowed | downcast | bright | normal | squinted
     color_tint: string;  // CSS colour for avatar background tint
 }
 
@@ -49,9 +49,9 @@ export interface DialogueLine {
     character?: string | null;
     content: string;
     // ML-enriched emotion data (from ai-service EmotionAnalyzer)
-    emotion?:    Emotion;
-    intensity?:  number;   // 0–1
-    anim?:       EmotionAnim;
+    emotion?: Emotion;
+    intensity?: number;   // 0–1
+    anim?: EmotionAnim;
 }
 
 interface PlayDialogueUIProps {
@@ -70,33 +70,33 @@ interface PlayDialogueUIProps {
 // ── Emotion config ─────────────────────────────────────────────────────────────
 
 const EMOTION_EMOJI: Record<Emotion, string> = {
-    anger:    "😠",
-    disgust:  "🤢",
-    fear:     "😨",
-    joy:      "😄",
-    neutral:  "😐",
-    sadness:  "😢",
+    anger: "😠",
+    disgust: "🤢",
+    fear: "😨",
+    joy: "😄",
+    neutral: "😐",
+    sadness: "😢",
     surprise: "😲",
 };
 
 const EMOTION_LABEL_COLOR: Record<Emotion, string> = {
-    anger:    "bg-red-100 text-red-700",
-    disgust:  "bg-green-100 text-green-700",
-    fear:     "bg-yellow-100 text-yellow-700",
-    joy:      "bg-yellow-50 text-amber-600",
-    neutral:  "bg-slate-100 text-slate-500",
-    sadness:  "bg-blue-100 text-blue-700",
+    anger: "bg-red-100 text-red-700",
+    disgust: "bg-green-100 text-green-700",
+    fear: "bg-yellow-100 text-yellow-700",
+    joy: "bg-yellow-50 text-amber-600",
+    neutral: "bg-slate-100 text-slate-500",
+    sadness: "bg-blue-100 text-blue-700",
     surprise: "bg-purple-100 text-purple-700",
 };
 
 const DEFAULT_ANIM: Record<Emotion, EmotionAnim> = {
-    anger:    { expression: "angry",    eyebrows: "furrowed", mouth: "tight",  eyes: "narrowed",  color_tint: "#fee2e2" },
-    disgust:  { expression: "disgusted",eyebrows: "furrowed", mouth: "curled", eyes: "squinted",  color_tint: "#d1fae5" },
-    fear:     { expression: "scared",   eyebrows: "raised",   mouth: "open",   eyes: "wide",      color_tint: "#fef9c3" },
-    joy:      { expression: "happy",    eyebrows: "raised",   mouth: "smile",  eyes: "bright",    color_tint: "#fef08a" },
-    neutral:  { expression: "neutral",  eyebrows: "neutral",  mouth: "closed", eyes: "normal",    color_tint: "#f1f5f9" },
-    sadness:  { expression: "sad",      eyebrows: "drooped",  mouth: "frown",  eyes: "downcast",  color_tint: "#dbeafe" },
-    surprise: { expression: "surprised",eyebrows: "raised",   mouth: "open",   eyes: "wide",      color_tint: "#ede9fe" },
+    anger: { expression: "angry", eyebrows: "furrowed", mouth: "tight", eyes: "narrowed", color_tint: "#fee2e2" },
+    disgust: { expression: "disgusted", eyebrows: "furrowed", mouth: "curled", eyes: "squinted", color_tint: "#d1fae5" },
+    fear: { expression: "scared", eyebrows: "raised", mouth: "open", eyes: "wide", color_tint: "#fef9c3" },
+    joy: { expression: "happy", eyebrows: "raised", mouth: "smile", eyes: "bright", color_tint: "#fef08a" },
+    neutral: { expression: "neutral", eyebrows: "neutral", mouth: "closed", eyes: "normal", color_tint: "#f1f5f9" },
+    sadness: { expression: "sad", eyebrows: "drooped", mouth: "frown", eyes: "downcast", color_tint: "#dbeafe" },
+    surprise: { expression: "surprised", eyebrows: "raised", mouth: "open", eyes: "wide", color_tint: "#ede9fe" },
 };
 
 // ── Character colour palette ───────────────────────────────────────────────────
@@ -114,14 +114,14 @@ const CHAR_PALETTE = [
 
 // Faction-based palettes — characters of the same faction share a hue family
 const FACTION_PALETTES: Record<string, (typeof CHAR_PALETTE)[number]> = {
-    montague:  { bg: "#1D4ED8", text: "#FFFFFF", bubble: "#DBEAFE" },
-    capulet:   { bg: "#B91C1C", text: "#FFFFFF", bubble: "#FEE2E2" },
-    roman:     { bg: "#7C3AED", text: "#FFFFFF", bubble: "#EDE9FE" },
-    plebeian:  { bg: "#065F46", text: "#FFFFFF", bubble: "#D1FAE5" },
-    okonkwo:   { bg: "#92400E", text: "#FFFFFF", bubble: "#FEF3C7" },
-    colonist:  { bg: "#374151", text: "#FFFFFF", bubble: "#F3F4F6" },
-    danish:    { bg: "#1E3A5F", text: "#FFFFFF", bubble: "#DBEAFE" },
-    ghost:     { bg: "#4B5563", text: "#FFFFFF", bubble: "#F9FAFB" },
+    montague: { bg: "#1D4ED8", text: "#FFFFFF", bubble: "#DBEAFE" },
+    capulet: { bg: "#B91C1C", text: "#FFFFFF", bubble: "#FEE2E2" },
+    roman: { bg: "#7C3AED", text: "#FFFFFF", bubble: "#EDE9FE" },
+    plebeian: { bg: "#065F46", text: "#FFFFFF", bubble: "#D1FAE5" },
+    okonkwo: { bg: "#92400E", text: "#FFFFFF", bubble: "#FEF3C7" },
+    colonist: { bg: "#374151", text: "#FFFFFF", bubble: "#F3F4F6" },
+    danish: { bg: "#1E3A5F", text: "#FFFFFF", bubble: "#DBEAFE" },
+    ghost: { bg: "#4B5563", text: "#FFFFFF", bubble: "#F9FAFB" },
 };
 
 function getCharColour(
@@ -146,15 +146,15 @@ function getCharColour(
 
 interface BlinkingEyeProps {
     isSpeaking: boolean;
-    eyeState:   string;
+    eyeState: string;
 }
 
 const BlinkingEye: React.FC<BlinkingEyeProps> = ({ isSpeaking, eyeState }) => {
-    const scaleY = eyeState === "wide"     ? 1.4
-                 : eyeState === "narrowed" ? 0.5
-                 : eyeState === "squinted" ? 0.3
-                 : eyeState === "downcast" ? 0.7
-                 : 1.0;
+    const scaleY = eyeState === "wide" ? 1.4
+        : eyeState === "narrowed" ? 0.5
+            : eyeState === "squinted" ? 0.3
+                : eyeState === "downcast" ? 0.7
+                    : 1.0;
 
     return (
         <motion.div
@@ -175,31 +175,31 @@ const BlinkingEye: React.FC<BlinkingEyeProps> = ({ isSpeaking, eyeState }) => {
 };
 
 interface AvatarProps {
-    name:       string;
-    colours:    (typeof CHAR_PALETTE)[number];
+    name: string;
+    colours: (typeof CHAR_PALETTE)[number];
     isSpeaking: boolean;
-    initials:   string;
-    emotion:    Emotion;
-    anim:       EmotionAnim;
+    initials: string;
+    emotion: Emotion;
+    anim: EmotionAnim;
 }
 
 const Avatar: React.FC<AvatarProps> = ({
     name, colours, isSpeaking, initials, emotion, anim,
 }) => {
     const eyebrowTranslateY =
-        anim.eyebrows === "raised"   ? -4 :
-        anim.eyebrows === "drooped"  ?  3 :
-        anim.eyebrows === "furrowed" ? -2 : 0;
+        anim.eyebrows === "raised" ? -4 :
+            anim.eyebrows === "drooped" ? 3 :
+                anim.eyebrows === "furrowed" ? -2 : 0;
 
     const eyebrowRotate = anim.eyebrows === "furrowed" ? 8 : 0;
 
     const mouthShape: React.CSSProperties & { width: number; height: number } = (
-        anim.mouth === "smile"  ? { width: 20, height: 8,  borderRadius: "0 0 12px 12px" } :
-        anim.mouth === "frown"  ? { width: 20, height: 8,  borderRadius: "12px 12px 0 0" } :
-        anim.mouth === "open"   ? { width: 14, height: 12, borderRadius: "6px" } :
-        anim.mouth === "tight"  ? { width: 14, height: 3,  borderRadius: "2px" } :
-        anim.mouth === "curled" ? { width: 16, height: 4,  borderRadius: "2px 2px 8px 2px" } :
-                                  { width: 12, height: 3,  borderRadius: "2px" }
+        anim.mouth === "smile" ? { width: 20, height: 8, borderRadius: "0 0 12px 12px" } :
+            anim.mouth === "frown" ? { width: 20, height: 8, borderRadius: "12px 12px 0 0" } :
+                anim.mouth === "open" ? { width: 14, height: 12, borderRadius: "6px" } :
+                    anim.mouth === "tight" ? { width: 14, height: 3, borderRadius: "2px" } :
+                        anim.mouth === "curled" ? { width: 16, height: 4, borderRadius: "2px 2px 8px 2px" } :
+                            { width: 12, height: 3, borderRadius: "2px" }
     ) as React.CSSProperties & { width: number; height: number };
 
     return (
@@ -285,66 +285,120 @@ const Avatar: React.FC<AvatarProps> = ({
 // ── Speech Bubble ─────────────────────────────────────────────────────────────
 
 interface BubbleProps {
-    text:         string;
-    colours:      (typeof CHAR_PALETTE)[number];
+    text: string;
+    colours: (typeof CHAR_PALETTE)[number];
     dyslexicFont: boolean;
-    charName:     string;
-    emotion:      Emotion;
-    intensity:    number;
+    charName: string;
+    emotion: Emotion;
+    intensity: number;
+    isRight: boolean;
+    sceneTitle?: string;
 }
 
 const SpeechBubble: React.FC<BubbleProps> = ({
-    text, colours, dyslexicFont, charName, emotion, intensity,
-}) => (
-    <motion.div
-        key={text}
-        initial={{ opacity: 0, x: 40,  scale: 0.96 }}
-        animate={{ opacity: 1, x: 0,   scale: 1 }}
-        exit={{   opacity: 0, x: -40,  scale: 0.96 }}
-        transition={{ type: "spring", stiffness: 400, damping: 28 }}
-        className="relative flex flex-col gap-2 p-6 rounded-3xl shadow-lg border-2"
-        style={{ background: colours.bubble, borderColor: colours.bg + "40", maxWidth: "100%" }}
-    >
-        <div
-            className="absolute left-[-18px] top-8 w-0 h-0"
-            style={{
-                borderTop:    "10px solid transparent",
-                borderBottom: "10px solid transparent",
-                borderRight:  `18px solid ${colours.bubble}`,
-            }}
-        />
+    text, colours, dyslexicFont, charName, emotion, intensity, isRight, sceneTitle
+}) => {
+    const [translation, setTranslation] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
 
-        <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: colours.bg }}>
-                {charName}
-            </span>
-            {emotion !== "neutral" && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${EMOTION_LABEL_COLOR[emotion]}`}>
-                    {EMOTION_EMOJI[emotion]} {emotion}
-                </span>
-            )}
-        </div>
+    const handleTranslate = async () => {
+        if (translation) {
+            setTranslation(null); // toggle off
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const aiUrl = import.meta.env.VITE_AI_URL || "http://localhost:8000";
+            const response = await fetch(`${aiUrl}/simplify`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    highlighted_text: text,
+                    doc_type: "play",
+                    speaker: charName,
+                    chapter_context: sceneTitle || "A scene in a play"
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setTranslation(data.simple_version);
+            } else {
+                setTranslation("Could not translate at this time.");
+            }
+        } catch (e) {
+            setTranslation("Error translating.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-        <p
-            className={`text-base leading-relaxed font-medium text-gray-800 dark:text-gray-100 ${dyslexicFont ? "font-dyslexic" : ""}`}
-            style={{ lineHeight: 1.8 }}
+    return (
+        <motion.div
+            initial={{ opacity: 0, x: isRight ? 40 : -40, scale: 0.96 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+            className="relative flex flex-col gap-2 p-4 rounded-3xl shadow-md border"
+            style={{ background: colours.bubble, borderColor: colours.bg + "40", maxWidth: "85%" }}
         >
-            {text}
-        </p>
+            <div
+                className={`absolute top-6 w-0 h-0 ${isRight ? 'right-[-12px]' : 'left-[-12px]'}`}
+                style={{
+                    borderTop: "8px solid transparent",
+                    borderBottom: "8px solid transparent",
+                    [isRight ? "borderLeft" : "borderRight"]: `12px solid ${colours.bubble}`,
+                }}
+            />
 
-        {intensity > 0.65 && emotion !== "neutral" && (
-            <div className="w-full h-0.5 rounded-full bg-gray-200 overflow-hidden mt-1">
-                <motion.div
-                    className="h-full rounded-full"
-                    style={{ background: colours.bg }}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${intensity * 100}%` }}
-                    transition={{ duration: 0.6, ease: "easeOut" }}
-                />
+            <div className={`flex items-center gap-2 flex-wrap ${isRight ? 'flex-row-reverse' : ''}`}>
+                <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: colours.bg }}>
+                    {charName}
+                </span>
+                {emotion !== "neutral" && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${EMOTION_LABEL_COLOR[emotion]}`}>
+                        {EMOTION_EMOJI[emotion]} {emotion}
+                    </span>
+                )}
+                <button
+                    onClick={handleTranslate}
+                    className="ml-auto flex items-center justify-center p-1.5 rounded-full hover:bg-black/5"
+                    title="Translate to simpler terms"
+                >
+                    <div className="w-5 h-5 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full text-xs font-bold border border-blue-200 shadow-sm animate-pulse-once">i</div>
+                </button>
             </div>
-        )}
-    </motion.div>
-);
+
+            <p
+                className={`text-base leading-relaxed font-medium text-gray-800 dark:text-gray-100 ${dyslexicFont ? "font-dyslexic" : ""}`}
+                style={{ lineHeight: 1.6 }}
+            >
+                {text}
+            </p>
+
+            {isLoading && (
+                <div className="text-xs text-blue-500 italic animate-pulse mt-2 border-t pt-2 border-black/10">Translating...</div>
+            )}
+
+            {translation && !isLoading && (
+                <div className="mt-2 pt-2 border-t border-black/10">
+                    <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Translation:</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-200 mt-1 italic">{translation}</p>
+                </div>
+            )}
+
+            {intensity > 0.65 && emotion !== "neutral" && (
+                <div className="w-full h-0.5 rounded-full bg-gray-200 overflow-hidden mt-1">
+                    <motion.div
+                        className="h-full rounded-full"
+                        style={{ background: colours.bg }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${intensity * 100}%` }}
+                        transition={{ duration: 0.6, ease: "easeOut" }}
+                    />
+                </div>
+            )}
+        </motion.div>
+    );
+};
 
 // ── Stage Direction ────────────────────────────────────────────────────────────
 
@@ -352,13 +406,12 @@ const StageDirectionCard: React.FC<{ text: string; isNarrative?: boolean }> = ({
     <motion.div
         key={text}
         initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0  }}
-        exit={{   opacity: 0, y: -10 }}
-        className={`w-full py-4 px-6 rounded-2xl ${
-            isNarrative
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className={`w-full py-4 px-6 rounded-2xl ${isNarrative
                 ? "border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/20 text-gray-700 dark:text-gray-300 text-base leading-relaxed"
                 : "border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/40 italic text-sm text-gray-500 dark:text-gray-400 flex items-center justify-center"
-        }`}
+            }`}
     >
         {isNarrative ? text : `[${text}]`}
     </motion.div>
@@ -377,16 +430,16 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
     charactersOnStage,
     characterFactions,
 }) => {
-    const [currentIdx,    setCurrentIdx]    = useState(0);
+    const [currentIdx, setCurrentIdx] = useState(0);
     const [isAutoPlaying, setIsAutoPlaying] = useState(autoAdvance);
-    const [isMuted,       setIsMuted]       = useState(false);
-    const [dyslexicFont,  setDyslexicFont]  = useState(initialDyslexic);
-    const colourMap    = useRef(new Map<string, (typeof CHAR_PALETTE)[number]>());
-    const timerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [isMuted, setIsMuted] = useState(false);
+    const [dyslexicFont, setDyslexicFont] = useState(initialDyslexic);
+    const colourMap = useRef(new Map<string, (typeof CHAR_PALETTE)[number]>());
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-    const current  = lines[currentIdx];
-    const total    = lines.length;
+    const current = lines[currentIdx];
+    const total = lines.length;
     const progress = ((currentIdx + 1) / total) * 100;
 
     const allChars = useMemo(() => {
@@ -401,17 +454,17 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
         allChars.forEach((c) => getCharColour(c, colourMap.current, characterFactions));
     }, [allChars, characterFactions]);
 
-    const currentEmotion:  Emotion      = (current?.emotion  as Emotion)   || "neutral";
-    const currentIntensity: number      = current?.intensity                 ?? 0.5;
-    const currentAnim:     EmotionAnim  = current?.anim ?? DEFAULT_ANIM[currentEmotion];
+    const currentEmotion: Emotion = (current?.emotion as Emotion) || "neutral";
+    const currentIntensity: number = current?.intensity ?? 0.5;
+    const currentAnim: EmotionAnim = current?.anim ?? DEFAULT_ANIM[currentEmotion];
 
     const speakLine = useCallback(
         (text: string, charName?: string) => {
             if (isMuted || !window.speechSynthesis) return;
             window.speechSynthesis.cancel();
-            const utter   = new SpeechSynthesisUtterance(text);
-            utter.rate    = 0.9;
-            utter.pitch   = charName ? 0.8 + (allChars.indexOf(charName.toUpperCase()) % 5) * 0.1 : 1.0;
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.rate = 0.9;
+            utter.pitch = charName ? 0.8 + (allChars.indexOf(charName.toUpperCase()) % 5) * 0.1 : 1.0;
             utteranceRef.current = utter;
             window.speechSynthesis.speak(utter);
         },
@@ -455,7 +508,7 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
         ? current.character.toUpperCase()
         : null;
 
-    const colours    = charName ? getCharColour(charName, colourMap.current, characterFactions) : CHAR_PALETTE[0];
+    const colours = charName ? getCharColour(charName, colourMap.current, characterFactions) : CHAR_PALETTE[0];
     const isStageDir = current.type === "stage_direction"
         || current.type === "narrative"
         || current.type === "paragraph";
@@ -492,7 +545,7 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex flex-col gap-0.5">
-                    {actTitle   && <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{actTitle}</span>}
+                    {actTitle && <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{actTitle}</span>}
                     {sceneTitle && <h3 className="text-base font-bold">{sceneTitle}</h3>}
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -536,73 +589,73 @@ const PlayDialogueUI: React.FC<PlayDialogueUIProps> = ({
                 </Badge>
             </div>
 
-            {/* Scene area */}
-            {/* For narrative/paragraph blocks, show full-width text without an avatar */}
-            {(current.type === "narrative" || current.type === "paragraph") ? (
-                <AnimatePresence mode="wait">
-                    <StageDirectionCard key={`narr-${currentIdx}`} text={current.content} isNarrative />
-                </AnimatePresence>
-            ) : (
-            <div className="flex items-start gap-6 min-h-[200px]">
-                <div className="flex-shrink-0 flex items-center justify-center w-32 md:w-40 pt-2">
-                    <AnimatePresence mode="wait">
-                        {isStageDir ? (
-                            <motion.div key="stage" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                className="w-20 h-20 rounded-full border-4 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
-                                <span className="text-2xl">🎬</span>
-                            </motion.div>
-                        ) : (
-                            <motion.div
-                                key={`${charName}-${currentEmotion}`}
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{   opacity: 0, scale: 0.8 }}
-                                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                            >
-                                <Avatar
-                                    name={charName!}
-                                    colours={colours}
-                                    isSpeaking={isAutoPlaying}
-                                    initials={charName!.slice(0, 2)}
-                                    emotion={currentEmotion}
-                                    anim={currentAnim}
-                                />
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
+            {/* Scene area - Chat Interface */}
+            <div className="flex flex-col gap-6 overflow-y-auto pr-4 py-4" style={{ maxHeight: "60vh" }}>
+                <AnimatePresence initial={false}>
+                    {lines.slice(0, currentIdx + 1).map((line, idx) => {
+                        const isStageDir = line.type === "stage_direction" || line.type === "narrative" || line.type === "paragraph";
 
-                <div className="flex-1 min-w-0 pt-2">
-                    <AnimatePresence mode="wait">
-                        {isStageDir ? (
-                            <StageDirectionCard key={`sd-${currentIdx}`} text={current.content} />
-                        ) : (
-                            <SpeechBubble
-                                key={`line-${currentIdx}`}
-                                text={current.content}
-                                colours={colours}
-                                dyslexicFont={dyslexicFont}
-                                charName={charName!}
-                                emotion={currentEmotion}
-                                intensity={currentIntensity}
-                            />
-                        )}
-                    </AnimatePresence>
-                </div>
+                        if (isStageDir) {
+                            return <StageDirectionCard key={`dir-${idx}`} text={line.content} isNarrative={line.type === "narrative" || line.type === "paragraph"} />;
+                        }
+
+                        const lineCharName = line.character ? line.character.toUpperCase() : "UNKNOWN";
+                        const lineColours = getCharColour(lineCharName, colourMap.current, characterFactions);
+                        const isRight = allChars.indexOf(lineCharName) % 2 !== 0; // Alternating sides
+                        const lineEmotion = (line.emotion as Emotion) || "neutral";
+                        const lineAnim = line.anim ?? DEFAULT_ANIM[lineEmotion];
+
+                        return (
+                            <motion.div
+                                key={`chat-${idx}`}
+                                className={`flex items-end gap-3 md:gap-4 w-full ${isRight ? 'flex-row-reverse' : 'flex-row'}`}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                            >
+                                <div className="flex-shrink-0 w-16 h-16 md:w-20 md:h-20" style={{ transform: "scale(0.8)", transformOrigin: isRight ? "bottom right" : "bottom left" }}>
+                                    <Avatar
+                                        name={lineCharName.slice(0, 8)}
+                                        colours={lineColours}
+                                        isSpeaking={idx === currentIdx && isAutoPlaying}
+                                        initials={lineCharName.slice(0, 2)}
+                                        emotion={lineEmotion}
+                                        anim={lineAnim}
+                                    />
+                                </div>
+                                <div className={`flex flex-col ${isRight ? 'items-end' : 'items-start'} max-w-[85%]`}>
+                                    <SpeechBubble
+                                        text={line.content}
+                                        colours={lineColours}
+                                        dyslexicFont={dyslexicFont}
+                                        charName={lineCharName}
+                                        emotion={lineEmotion}
+                                        intensity={line.intensity ?? 0.5}
+                                        isRight={isRight}
+                                        sceneTitle={sceneTitle}
+                                    />
+                                </div>
+                            </motion.div>
+                        );
+                    })}
+                </AnimatePresence>
+
+                {/* Invisible element to scroll to bottom */}
+                <div ref={(el) => {
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }} />
             </div>
-            )}
 
             {/* Controls */}
-            <div className="flex items-center justify-between gap-3 pt-2">
+            <div className="flex items-center justify-between gap-3 pt-4 mt-2 border-t border-border">
                 <Button variant="outline" size="sm" className="gap-1 rounded-xl font-bold" onClick={retreat} disabled={currentIdx === 0}>
                     <ChevronLeft className="w-4 h-4" /> Previous
                 </Button>
 
                 <button
                     onClick={() => setIsAutoPlaying((v) => !v)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                        isAutoPlaying ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary text-secondary-foreground"
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${isAutoPlaying ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary text-secondary-foreground"
+                        }`}
                 >
                     {isAutoPlaying ? <><Pause className="w-3.5 h-3.5" /> Auto-Play On</> : <><Play className="w-3.5 h-3.5" /> Auto-Play</>}
                 </button>

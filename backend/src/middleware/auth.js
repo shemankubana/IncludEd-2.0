@@ -23,10 +23,16 @@ export const authenticateToken = async (req, res, next) => {
     const decodedToken = await admin.auth().verifyIdToken(token);
     // You can attach the decoded token or fetch a more detailed user profile from db
 
+    // Use dynamic import for User to avoid circular dependencies in server startup
+    const { User } = await import('../models/User.js');
+    const dbUser = await User.findByPk(decodedToken.uid);
+
     // NOTE: attaching decodedToken.uid as userId for compatibility with existing routes
     req.user = {
       ...decodedToken,
-      userId: decodedToken.uid
+      userId: decodedToken.uid,
+      role: dbUser?.role || 'student', // Fallback to student if not found
+      schoolId: dbUser?.schoolId
     };
     next();
   } catch (error) {

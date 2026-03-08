@@ -10,7 +10,10 @@
 
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, ChevronRight, ChevronLeft, X } from "lucide-react";
+import { BookOpen, ChevronRight, ChevronLeft, X, Loader2 } from "lucide-react";
+import { auth } from "@/lib/firebase";
+import { API_BASE } from "@/lib/api";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface VocabWord {
     word: string;
@@ -19,6 +22,8 @@ interface VocabWord {
     contexts?: string[];
     archaic?: boolean;
     modern_meaning?: string;
+    analogy?: string;
+    category?: string;
 }
 
 interface VocabSidebarProps {
@@ -26,6 +31,7 @@ interface VocabSidebarProps {
     bookVocabulary: VocabWord[];
     archiPhrases?: Array<{ word: string; modern_meaning: string }>;
     onWordLookup?: (word: string) => void;
+    language?: string;
 }
 
 const VocabSidebar: React.FC<VocabSidebarProps> = ({
@@ -33,9 +39,12 @@ const VocabSidebar: React.FC<VocabSidebarProps> = ({
     bookVocabulary,
     archiPhrases = [],
     onWordLookup,
+    language,
 }) => {
+    const { t } = useTranslation(language);
     const [open, setOpen] = useState(false);
     const [expandedWord, setExpandedWord] = useState<string | null>(null);
+    const [explanations, setExplanations] = useState<Record<string, { modern_meaning?: string; analogy?: string; category?: string; loading?: boolean }>>({});
 
     // Filter book vocabulary to words present in this section
     const sectionWords = useMemo(() => {
@@ -58,12 +67,50 @@ const VocabSidebar: React.FC<VocabSidebarProps> = ({
         return [...archiItems, ...fromVocab].sort((a, b) => b.difficulty - a.difficulty);
     }, [sectionContent, bookVocabulary, archiPhrases]);
 
+    const fetchExplanation = async (word: string) => {
+        if (explanations[word]?.modern_meaning || explanations[word]?.loading) return;
+
+        setExplanations(prev => ({ ...prev, [word]: { ...prev[word], loading: true } }));
+
+        try {
+            const idToken = await auth.currentUser?.getIdToken();
+            const res = await fetch(`${API_BASE}/api/vocab/explain`, {
+                method: 'POST',
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${idToken}`
+                },
+                body: JSON.stringify({
+                    word,
+                    context: sectionContent.slice(0, 800)
+                })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setExplanations(prev => ({
+                    ...prev,
+                    [word]: {
+                        modern_meaning: data.modern_meaning,
+                        analogy: data.analogy,
+                        category: data.category,
+                        loading: false
+                    }
+                }));
+            } else {
+                setExplanations(prev => ({ ...prev, [word]: { ...prev[word], loading: false } }));
+            }
+        } catch (err) {
+            console.error("Failed to fetch explanation:", err);
+            setExplanations(prev => ({ ...prev, [word]: { ...prev[word], loading: false } }));
+        }
+    };
+
     if (sectionWords.length === 0) return null;
 
     const difficultyColor = (d: number) =>
         d >= 0.7 ? "text-red-600 bg-red-50 border-red-200"
-        : d >= 0.5 ? "text-amber-600 bg-amber-50 border-amber-200"
-        : "text-emerald-600 bg-emerald-50 border-emerald-200";
+            : d >= 0.5 ? "text-amber-600 bg-amber-50 border-amber-200"
+                : "text-emerald-600 bg-emerald-50 border-emerald-200";
 
     return (
         <>
@@ -77,7 +124,7 @@ const VocabSidebar: React.FC<VocabSidebarProps> = ({
                 <BookOpen className="w-4 h-4 text-primary" />
                 {!open && (
                     <span className="writing-mode-vertical text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-                        {sectionWords.length} words
+                        {sectionWords.length} {t("vocab.words")}
                     </span>
                 )}
                 {open ? <ChevronRight className="w-3 h-3 text-muted-foreground" /> : <ChevronLeft className="w-3 h-3 text-muted-foreground" />}
@@ -97,7 +144,7 @@ const VocabSidebar: React.FC<VocabSidebarProps> = ({
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-2">
                                     <BookOpen className="w-4 h-4 text-primary" />
-                                    <span className="text-xs font-black uppercase tracking-widest">Vocab Helper</span>
+                                    <span className="text-xs font-black uppercase tracking-widest">{t("vocab.helper")}</span>
                                 </div>
                                 <button
                                     className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
@@ -108,7 +155,7 @@ const VocabSidebar: React.FC<VocabSidebarProps> = ({
                             </div>
 
                             <p className="text-[10px] text-muted-foreground font-medium mb-4 leading-relaxed">
-                                Difficult words in this section. Tap any word to see what it means.
+                                {t("vocab.description")}
                             </p>
 
                             <div className="space-y-2">
@@ -117,20 +164,27 @@ const VocabSidebar: React.FC<VocabSidebarProps> = ({
                                         <button
                                             className="w-full flex items-center justify-between px-4 py-3 hover:bg-secondary/40 transition-colors text-left"
                                             onClick={() => {
-                                                setExpandedWord(expandedWord === vocab.word ? null : vocab.word);
-                                                onWordLookup?.(vocab.word);
+                                                const nextState = expandedWord === vocab.word ? null : vocab.word;
+                                                setExpandedWord(nextState);
+                                                if (nextState) {
+                                                    onWordLookup?.(vocab.word);
+                                                    if (!vocab.modern_meaning) {
+                                                        fetchExplanation(vocab.word);
+                                                    }
+                                                }
                                             }}
                                         >
                                             <div className="flex items-center gap-2">
-                                                <span className="font-bold text-sm">{vocab.word}</span>
-                                                {vocab.archaic && (
-                                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700">
-                                                        archaic
-                                                    </span>
-                                                )}
+                                                <span className="font-bold text-sm text-foreground">{vocab.word}</span>
+                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${(explanations[vocab.word]?.category?.toLowerCase() === 'archaic' || vocab.category?.toLowerCase() === 'archaic' || vocab.archaic)
+                                                        ? 'bg-purple-100 text-purple-700'
+                                                        : 'bg-blue-100 text-blue-700'
+                                                    }`}>
+                                                    {explanations[vocab.word]?.category || vocab.category || (vocab.archaic ? t("vocab.archaic") : "Vocabulary")}
+                                                </span>
                                             </div>
                                             <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md border ${difficultyColor(vocab.difficulty)}`}>
-                                                {vocab.difficulty >= 0.7 ? "hard" : vocab.difficulty >= 0.5 ? "medium" : "ok"}
+                                                {vocab.difficulty >= 0.7 ? t("vocab.hard") : vocab.difficulty >= 0.5 ? t("vocab.medium") : t("vocab.ok")}
                                             </span>
                                         </button>
 
@@ -143,18 +197,36 @@ const VocabSidebar: React.FC<VocabSidebarProps> = ({
                                                     className="overflow-hidden"
                                                 >
                                                     <div className="px-4 pb-4 pt-1 space-y-2 bg-secondary/20">
-                                                        {vocab.modern_meaning && (
-                                                            <p className="text-xs font-medium text-foreground">
-                                                                <span className="font-black text-primary">Means:</span> {vocab.modern_meaning}
-                                                            </p>
+                                                        {explanations[vocab.word]?.loading ? (
+                                                            <div className="flex items-center gap-2 py-2">
+                                                                <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                                                                <span className="text-[10px] text-muted-foreground">{t("vocab.thinking")}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                {(vocab.modern_meaning || explanations[vocab.word]?.modern_meaning) && (
+                                                                    <p className="text-xs font-medium text-foreground leading-snug">
+                                                                        <span className="font-black text-primary uppercase text-[9px] mr-1">{t("vocab.means")}</span>
+                                                                        {vocab.modern_meaning || explanations[vocab.word]?.modern_meaning}
+                                                                    </p>
+                                                                )}
+                                                                {(vocab.analogy || explanations[vocab.word]?.analogy) && (
+                                                                    <div className="p-2 rounded-xl bg-primary/5 border border-primary/10">
+                                                                        <p className="text-[11px] text-foreground leading-relaxed">
+                                                                            <span className="font-black text-primary uppercase text-[8px] block mb-0.5">{t("vocab.analogy")}</span>
+                                                                            {vocab.analogy || explanations[vocab.word]?.analogy}
+                                                                        </p>
+                                                                    </div>
+                                                                )}
+                                                            </>
                                                         )}
                                                         {vocab.syllables && (
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {vocab.syllables} syllable{vocab.syllables !== 1 ? "s" : ""}
+                                                            <p className="text-[10px] text-muted-foreground font-medium">
+                                                                {vocab.syllables} {vocab.syllables !== 1 ? t("vocab.syllables") : t("vocab.syllable")}
                                                             </p>
                                                         )}
                                                         {vocab.contexts?.[0] && (
-                                                            <p className="text-xs text-muted-foreground italic leading-relaxed border-l-2 border-primary/30 pl-2">
+                                                            <p className="text-[11px] text-muted-foreground italic leading-relaxed border-l-2 border-primary/20 pl-2 py-0.5">
                                                                 "…{vocab.contexts[0]}…"
                                                             </p>
                                                         )}

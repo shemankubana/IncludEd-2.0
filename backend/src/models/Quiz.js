@@ -33,5 +33,13 @@ export const Quiz = sequelize.define('Quiz', {
   difficulty: {
     type: DataTypes.ENUM('easy', 'medium', 'hard'),
     defaultValue: 'medium'
+  },
+  chunkIndex: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  chapterTitle: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 });

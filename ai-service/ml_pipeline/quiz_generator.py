@@ -345,6 +345,114 @@ def _generic_templates(content: str, count: int) -> List[Dict[str, Any]]:
     ][:count]
 
 
+def _play_templates_fr(content: str, count: int) -> List[Dict[str, Any]]:
+    sentences = _extract_sentences(content)
+    snippet = sentences[0][:120] if sentences else content[:120]
+
+    questions = [
+        {
+            "question":      f"Quelle émotion est la plus clairement exprimée dans la réplique : \"{snippet}...\" ?",
+            "options":       ["Colère et ressentiment", "Joie et célébration", "Peur et incertitude", "Amour et tendresse"],
+            "correctAnswer": 2,
+            "explanation":   "La diction et le contexte de la réplique traduisent une tension et une incertitude.",
+            "difficulty":    "medium",
+        },
+        {
+            "question":      "Quel procédé littéraire est le plus utilisé dans les dialogues des personnages ?",
+            "options":       ["Allitération", "Ironie dramatique", "Onomatopée", "Hyperbole"],
+            "correctAnswer": 1,
+            "explanation":   "Le public détient souvent des informations que les personnages ignorent — une caractéristique de l'ironie dramatique.",
+            "difficulty":    "medium",
+        },
+        {
+            "question":      "Que suggère le décor au début de cette scène ?",
+            "options":       ["Paix et sécurité", "Tension et conflit", "Richesse et prospérité", "Isolement et solitude"],
+            "correctAnswer": 1,
+            "explanation":   "Les didascalies et l'imagerie établissent une atmosphère tendue.",
+            "difficulty":    "easy",
+        },
+        {
+            "question":      "Qu'est-ce qui décrit le mieux la relation entre les deux personnages principaux ?",
+            "options":       ["Alliés travaillant ensemble", "Rivaux en conflit direct", "Inconnus se rencontrant pour la première fois", "Vieux amis se réconciliant"],
+            "correctAnswer": 1,
+            "explanation":   "Leurs échanges révèlent des motivations et des objectifs opposés.",
+            "difficulty":    "hard",
+        },
+        {
+            "question":      "Quel thème est le plus développé dans cet extrait ?",
+            "options":       ["L'importance de la loyauté", "Le conflit entre l'amour et le devoir", "La poursuite de la richesse", "La peur de la mort"],
+            "correctAnswer": 1,
+            "explanation":   "Les choix et le langage des personnages reflètent une tension centrale entre les sentiments personnels et les obligations.",
+            "difficulty":    "hard",
+        },
+    ]
+    return questions[:count]
+
+
+def _novel_templates_fr(content: str, count: int) -> List[Dict[str, Any]]:
+    sentences = _extract_sentences(content)
+    snippet = sentences[0][:120] if sentences else content[:120]
+
+    questions = [
+        {
+            "question":      "Quelle perspective narrative est utilisée dans ce passage ?",
+            "options":       ["Première personne", "Deuxième personne", "Troisième personne limitée", "Troisième personne omnisciente"],
+            "correctAnswer": 2,
+            "explanation":   "Le narrateur décrit les pensées mais reste proche de la perspective d'un seul personnage.",
+            "difficulty":    "easy",
+        },
+        {
+            "question":      f"Que suggère très probablement l'expression \"{snippet[:60]}...\" concernant l'attitude du narrateur ?",
+            "options":       ["Indifférence face aux événements", "Distance critique vis-à-vis de la société", "Admiration pour le protagoniste", "Peur de l'antagoniste"],
+            "correctAnswer": 1,
+            "explanation":   "Le choix des mots implique une voix détachée, observatrice — et subtilement critique.",
+            "difficulty":    "medium",
+        },
+        {
+            "question":      "Quelle atmosphère s'installe au début de ce chapitre ?",
+            "options":       ["Joyeuse et optimiste", "Tendue et instable", "Mélancolique et résignée", "Humoristique et légère"],
+            "correctAnswer": 1,
+            "explanation":   "Le langage descriptif et l'imagerie créent un sentiment de malaise.",
+            "difficulty":    "medium",
+        },
+        {
+            "question":      "Quelle technique l'auteur utilise-t-il pour révéler le caractère du protagoniste ?",
+            "options":       ["Description directe par le narrateur", "Dialogue avec un autre personnage", "Monologue intérieur", "Toutes ces réponses"],
+            "correctAnswer": 3,
+            "explanation":   "Les auteurs combinent généralement plusieurs techniques pour une caractérisation multidimensionnelle.",
+            "difficulty":    "hard",
+        },
+        {
+            "question":      "Que symbolise le décor dans ce chapitre ?",
+            "options":       ["Liberté et possibilité", "Enfermement et contrainte", "Prospérité et ambition", "Décadence et corruption"],
+            "correctAnswer": 1,
+            "explanation":   "L'environnement décrit reflète l'état émotionnel du protagoniste.",
+            "difficulty":    "hard",
+        },
+    ]
+    return questions[:count]
+
+
+def _generic_templates_fr(content: str, count: int) -> List[Dict[str, Any]]:
+    snippet = content[:100].replace('"', "'")
+    return [
+        {
+            "question":      "Quel est le sujet principal de ce passage ?",
+            "options":       ["Un récit personnel", "Une description d'événements", "Une argumentation sur des idées", "Une description de lieu"],
+            "correctAnswer": 1,
+            "explanation":   "Le passage se concentre sur une séquence d'événements décrits.",
+            "difficulty":    "easy",
+        },
+        {
+            "question":      f"Le passage commence par : \"{snippet}...\" Que suggère cela sur le texte ?",
+            "options":       ["Le narrateur n'est pas fiable", "Le lecteur a besoin de connaissances préalables", "L'histoire a déjà commencé", "L'auteur s'adresse directement au lecteur"],
+            "correctAnswer": 2,
+            "explanation":   "Un début in medias res plonge le lecteur dans une situation en cours.",
+            "difficulty":    "medium",
+        },
+    ][:count]
+
+
 # ── Main generator class ───────────────────────────────────────────────────────
 
 class PedagogicalQuestionGenerator:
@@ -413,12 +521,12 @@ class PedagogicalQuestionGenerator:
             if len(questions) >= min(count, 2):
                 # Pad with templates if T5 didn't produce enough
                 if len(questions) < count:
-                    templates = self._get_templates(text_sample, doc_type, count - len(questions))
+                    templates = self._get_templates(text_sample, doc_type, count - len(questions), language)
                     questions.extend(templates)
                 return questions[:count]
 
         # ── Tier 3: Content-aware templates ───────────────────────────────────
-        return self._get_templates(text_sample, doc_type, count)
+        return self._get_templates(text_sample, doc_type, count, language)
 
     def generate_for_unit(
         self,
@@ -522,16 +630,30 @@ class PedagogicalQuestionGenerator:
                 correct = 0
         correct = max(0, min(correct, len(options) - 1))
 
-        return {
+        res = {
             "question":      str(q.get("question", "What is the main theme of this passage?")),
             "options":       options[:4],
             "correctAnswer": correct,
             "explanation":   str(q.get("explanation", "Based on the passage.")),
             "difficulty":    q.get("difficulty", "medium"),
         }
+        
+        if "chunk_index" in q:
+            res["chunk_index"] = q["chunk_index"]
+        if "chapter_title" in q:
+            res["chapter_title"] = q["chapter_title"]
+            
+        return res
 
     @staticmethod
-    def _get_templates(content: str, doc_type: str, count: int) -> List[Dict[str, Any]]:
+    def _get_templates(content: str, doc_type: str, count: int, language: str = "en") -> List[Dict[str, Any]]:
+        if language == "fr":
+            if doc_type == "play":
+                return _play_templates_fr(content, count)
+            if doc_type == "novel":
+                return _novel_templates_fr(content, count)
+            return _generic_templates_fr(content, count)
+
         if doc_type == "play":
             return _play_templates(content, count)
         if doc_type == "novel":
