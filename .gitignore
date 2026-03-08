@@ -5,6 +5,7 @@ backend/serviceAccountKey.json
 venv/
 text.txt
 .env
+ai-service/.env
 
 # ML Models & Large Binary Files (use cloud storage instead)
 *.zip
