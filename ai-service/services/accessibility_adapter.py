@@ -49,7 +49,7 @@ class FreeAccessibilityAdapter:
         use_llm: bool = True
     ) -> str:
         """
-        Main adaptation function. Uses Ollama for quality, falls back to rules for speed.
+        Main adaptation function. Uses Gemini for quality, falls back to rules for speed.
         """
         if use_llm and self.gemini.is_available():
             try:

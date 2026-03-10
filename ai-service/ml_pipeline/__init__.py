@@ -7,7 +7,7 @@ Components:
   • ContentClassifier        – Heuristic + sklearn play/novel classifier (EN + FR).
   • StructuralSegmenter      – Regex heading detector → Act/Scene or Chapter hierarchy
                                with optional emotion tagging on dialogue blocks.
-  • PedagogicalQuestionGen   – 3-tier MCQ generator: Ollama → FLAN-T5 → templates.
+  • PedagogicalQuestionGen   – 3-tier MCQ generator: Gemini → FLAN-T5 → templates.
   • LiteratureAnalyzer       – Orchestrator: PDF bytes → AnalysisResult.
   • EmotionAnalyzer          – DistilRoBERTa + NRC lexicon emotion detection.
   • LanguageDetector         – langdetect + keyword heuristics (EN/FR).

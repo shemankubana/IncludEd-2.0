@@ -226,7 +226,7 @@ router.post('/upload', authenticateToken, upload.fields([
               if (!section.content || section.content.trim().length === 0) continue;
               try {
                 const sResp = await axios.post(`${AI_SERVICE_URL}/adapt-text`, {
-                  text: section.content.slice(0, 3000), // cap per-section to avoid slow Ollama calls
+                  text: section.content.slice(0, 3000), // cap per-section to avoid slow LLM calls
                   doc_type: aiContentType,
                 }, { timeout: 15000 });
                 if (sResp.data?.adaptedText && sResp.data.adaptedText !== section.content.slice(0, 3000)) {

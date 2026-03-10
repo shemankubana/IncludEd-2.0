@@ -376,7 +376,7 @@ class TeacherIntelligence:
     ) -> str:
         """
         Generate a 'Story So Far' recap text from comprehension data.
-        Uses Ollama if available, otherwise templates.
+        Uses Gemini if available, otherwise templates.
         """
         book_title = recap_data.get("book_title", "the book")
         chapters = recap_data.get("chapters_completed", [])

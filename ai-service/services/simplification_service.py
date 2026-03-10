@@ -164,7 +164,7 @@ class SimplificationService:
                 "vocabulary": [{word, meaning, analogy}],
                 "literary_devices": [{device, explanation}],
                 "cultural_context": str | None,
-                "tier": "ollama" | "flan_t5" | "rule_based",
+                "tier": "gemini" | "rule_based",
             }
         """
         # Primary: Gemini Cloud LLM
