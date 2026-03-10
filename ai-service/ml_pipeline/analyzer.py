@@ -33,6 +33,7 @@ from .structural_segmenter  import StructuralSegmenter
 from .question_generator    import PedagogicalQuestionGenerator
 from .front_matter_detector import FrontMatterDetector, filter_body_blocks
 from .language_detector     import get_language_detector
+from .nougat_extractor      import get_nougat_extractor
 from services.gemini_service import GeminiService
 
 try:
@@ -125,10 +126,28 @@ class LiteratureAnalyzer:
 
         t0 = time.monotonic()
 
+        # ── Step 0: Nougat Tier-0 extraction (structured markdown) ────────────
+        # Nougat produces heading-annotated markdown that greatly improves
+        # structural segmentation quality, especially for older or scanned PDFs.
+        _nougat_blocks = None
+        try:
+            _nougat_ext = get_nougat_extractor()
+            _nougat_blocks, _nougat_chars = _nougat_ext.extract(pdf_bytes)
+        except Exception as _ne:
+            print(f"⚠️  Nougat step skipped: {_ne}")
+
         # ── Step 1: Open & extract ─────────────────────────────────────────────
         doc   = fitz.open(stream=pdf_bytes, filetype="pdf")
         pages = doc.page_count
-        all_blocks, total_chars = self._extract_blocks(doc)
+
+        if _nougat_blocks and _nougat_chars and _nougat_chars > 200:
+            # Nougat succeeded — use its richer structured output
+            print(f"✅ Using Nougat extraction ({_nougat_chars} chars)")
+            all_blocks  = _nougat_blocks
+            total_chars = _nougat_chars
+        else:
+            # Fall back to PyMuPDF
+            all_blocks, total_chars = self._extract_blocks(doc)
 
         # ── Step 2: Check for Gibberish (Broken Unicode CMap) ──────────────────
         is_junk = False

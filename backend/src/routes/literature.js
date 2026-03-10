@@ -8,6 +8,7 @@ import { Literature } from '../models/Literature.js';
 import { processPDF } from '../services/pdfProcessor.js';
 import { splitIntoChapters } from '../services/chapterSplitter.js';
 import { generateQuestions } from '../services/questionGenerator.js';
+import { sequelize } from '../config/database.js';
 
 const router = express.Router();
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'; // Corrected port based on lsof and .env knowledge

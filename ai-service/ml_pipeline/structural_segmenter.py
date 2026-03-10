@@ -19,6 +19,99 @@ import uuid
 from collections import namedtuple
 from typing import Any, Dict, List, Optional, Tuple
 
+# ── Mistral-7B heading classifier (lazy-loaded, Tier-3) ───────────────────────
+#
+# Used only for short, isolated text blocks that fail all regex patterns.
+# Identifies non-obvious chapter/section headings that lack standard keywords
+# (e.g. unnamed sections, unique structural markers in non-Western texts).
+#
+# Model: mistralai/Mistral-7B-v0.1 (base model, few-shot prompted)
+# Falls back silently if model unavailable.
+
+_MISTRAL_OK = False
+_MISTRAL_MODEL = "mistralai/Mistral-7B-v0.1"
+_mistral_pipe: Optional[Any] = None
+
+try:
+    from transformers import pipeline as _hf_pipeline
+    import torch as _torch
+    _MISTRAL_OK = True
+except ImportError:
+    pass
+
+# Few-shot prompt template for base model completion
+_MISTRAL_HEADING_PROMPT = """\
+Below are examples of chapter/section headings found in literary works:
+YES: Chapter One
+YES: ACT III
+YES: PART TWO — The Flood
+YES: I. The Beginning
+YES: Prologue
+YES: SCENE 4
+NO: "Come here," she said.
+NO: The old man walked slowly toward the door.
+NO: It was a dark and stormy night.
+NO: He had always known this day would come.
+
+Is the following text a chapter or section heading? Answer YES or NO.
+Text: {text}
+Answer:"""
+
+
+def _load_mistral() -> bool:
+    """Lazy-load Mistral-7B-v0.1. Returns True on success."""
+    global _mistral_pipe
+    if _mistral_pipe is not None:
+        return True
+    if not _MISTRAL_OK:
+        return False
+    try:
+        print(f"🔬 Loading Mistral-7B heading classifier ({_MISTRAL_MODEL}) …")
+        # Use device_map=auto for multi-GPU / CPU offload; load_in_4bit if available
+        kwargs: Dict[str, Any] = {
+            "model": _MISTRAL_MODEL,
+            "torch_dtype": _torch.float16 if _torch.cuda.is_available() else _torch.float32,
+            "device_map": "auto",
+            "max_new_tokens": 3,
+            "do_sample": False,
+        }
+        try:
+            # Try 4-bit quantisation (requires bitsandbytes)
+            from transformers import BitsAndBytesConfig
+            kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
+        except ImportError:
+            pass
+
+        _mistral_pipe = _hf_pipeline("text-generation", **kwargs)
+        print("✅ Mistral-7B heading classifier ready")
+        return True
+    except Exception as exc:
+        print(f"⚠️  Mistral-7B load failed: {exc}. Heading detection will use regex only.")
+        _mistral_pipe = None
+        return False
+
+
+def _mistral_is_heading(text: str) -> bool:
+    """
+    Ask Mistral-7B whether ``text`` is a chapter/section heading.
+    Returns False (not a heading) if the model is unavailable or errors.
+    Only called for short (≤ 80 char), isolated text blocks.
+    """
+    if not _load_mistral() or _mistral_pipe is None:
+        return False
+    # Skip if text is too long or looks like prose
+    if len(text) > 80 or len(text.split()) > 12:
+        return False
+    try:
+        prompt = _MISTRAL_HEADING_PROMPT.format(text=text.strip())
+        output = _mistral_pipe(prompt)[0]["generated_text"]
+        # The model completion starts after our prompt
+        answer = output[len(prompt):].strip().upper()
+        return answer.startswith("YES")
+    except Exception as exc:
+        print(f"⚠️  Mistral heading check error: {exc}")
+        return False
+
 # ── Data types ────────────────────────────────────────────────────────────────
 
 Span = namedtuple("Span", ["text", "size", "flags", "page"])
@@ -201,7 +294,13 @@ class StructuralSegmenter:
         # 3. Skip running headers (page numbers, book titles at edges)
         if _RUNNING_HEADER_RE.match(text.strip()):
             return "none", False
-            
+
+        # 4. Mistral-7B fallback: ask the model for short, isolated text
+        #    that looks like it could be an unnamed heading (e.g. "The Storm",
+        #    "I.", roman numerals, numbered titles without the word CHAPTER).
+        if len(text.strip()) <= 80 and _mistral_is_heading(text.strip()):
+            return "chapter", True
+
         return "none", False
 
     @staticmethod

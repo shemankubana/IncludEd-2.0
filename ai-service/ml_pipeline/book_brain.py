@@ -21,6 +21,39 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 from services.gemini_service import GeminiService
 
+# ── FLAN-T5 vocab pipeline (lazy-loaded) ──────────────────────────────────────
+
+_FLANT5_VOCAB_PIPELINE: Optional[Any] = None
+_FLANT5_MODEL = "google/flan-t5-base"
+_FLANT5_OK = False
+
+try:
+    from transformers import pipeline as _hf_pipeline
+    _FLANT5_OK = True
+except ImportError:
+    pass
+
+
+def _load_flant5_vocab() -> bool:
+    global _FLANT5_VOCAB_PIPELINE
+    if _FLANT5_VOCAB_PIPELINE is not None:
+        return True
+    if not _FLANT5_OK:
+        return False
+    try:
+        print(f"🔬 Loading FLAN-T5 vocab pipeline ({_FLANT5_MODEL}) …")
+        _FLANT5_VOCAB_PIPELINE = _hf_pipeline(
+            "text2text-generation",
+            model=_FLANT5_MODEL,
+            max_new_tokens=300,
+        )
+        print("✅ FLAN-T5 vocab ready")
+        return True
+    except Exception as exc:
+        print(f"⚠️  FLAN-T5 vocab load failed: {exc}")
+        _FLANT5_VOCAB_PIPELINE = None
+        return False
+
 # ── Difficulty scoring ────────────────────────────────────────────────────────
 
 # Common English words (top 3000) — students at reading level 3-4 should know these
@@ -261,6 +294,32 @@ def _extract_characters_from_units(
                         char_all_seen[name].append(flat_idx)
                 flat_idx += 1
 
+    # ── BERT NER supplement for novels ────────────────────────────────────
+    # For novels the dialogue-regex misses characters who are described but
+    # never directly quoted.  BERT NER catches them.
+    if doc_type != "play":
+        try:
+            from services.character_service import get_character_service
+            _char_svc = get_character_service()
+            # Gather a representative sample of text (~8000 chars)
+            _ner_text = ""
+            for _chap in units:
+                for _sec in _chap.get("children", []):
+                    _ner_text += _sec.get("content", "") + " "
+                    if len(_ner_text) > 8000:
+                        break
+                if len(_ner_text) > 8000:
+                    break
+            ner_names = _char_svc.extract_person_names(_ner_text[:8000])
+            for _name in ner_names:
+                _key = _name.upper()
+                if _key not in char_lines and _key not in {"I", "A"}:
+                    char_lines[_key] = [""]   # 1 mention — background
+                    if _key not in char_first_seen:
+                        char_first_seen[_key] = flat_idx
+        except Exception as _ner_exc:
+            print(f"⚠️  BERT NER character supplement failed: {_ner_exc}")
+
     characters = []
     noise = {"AND", "THE", "ALL", "BOTH", "ENTER", "EXIT", "ACT", "SCENE", "STORY", "TIME", "DAY", "NIGHT", "MAN", "WOMAN", "BOY", "GIRL"}
     for name, lines in char_lines.items():
@@ -348,7 +407,53 @@ Respond in JSON as a list of objects with keys: "word", "modern_meaning", "analo
         except Exception as e:
             print(f"Gemini BookBrain vocab extraction failed: {e}")
 
-    # ── Tier 1: Local Heuristics ───────────────────────────────────────────
+    # ── Tier 1: FLAN-T5 offline model ─────────────────────────────────────
+    if _load_flant5_vocab() and _FLANT5_VOCAB_PIPELINE is not None:
+        try:
+            all_content = ""
+            for u in units[:5]:
+                def _get_t(u):
+                    t = u.get("content", "") or ""
+                    for c in u.get("children", []): t += " " + _get_t(c)
+                    for b in u.get("blocks", []): t += " " + b.get("content", "")
+                    return t
+                all_content += _get_t(u) + "\n"
+            all_content = all_content[:2000]
+
+            prompt = (
+                "Identify 10 difficult vocabulary words at C1 level in this text and "
+                "for each provide a simple one-sentence definition and a short analogy "
+                "that a 12-year-old student would understand. "
+                "Format each entry as: WORD | definition | analogy\n\n"
+                f"Text:\n{all_content}"
+            )
+            raw_output = _FLANT5_VOCAB_PIPELINE(prompt)[0]["generated_text"]
+
+            # Parse pipe-separated lines
+            flant5_vocab = []
+            for line in raw_output.strip().split("\n"):
+                parts = [p.strip() for p in line.split("|")]
+                if len(parts) >= 2:
+                    word = parts[0].lower().strip(".,!? ")
+                    if len(word) >= 3 and " " not in word:
+                        flant5_vocab.append({
+                            "word": word,
+                            "modern_meaning": parts[1] if len(parts) > 1 else "",
+                            "analogy": parts[2] if len(parts) > 2 else "",
+                            "difficulty": 0.65,
+                            "archaic": word in _ARCHAIC_WORDS,
+                            "syllables": _syllable_count(word),
+                            "contexts": [],
+                            "frequency": 1,
+                        })
+
+            if len(flant5_vocab) >= 5:
+                print(f"✅ FLAN-T5 vocab: {len(flant5_vocab)} words extracted")
+                return flant5_vocab
+        except Exception as exc:
+            print(f"⚠️  FLAN-T5 vocab extraction failed: {exc}")
+
+    # ── Tier 2: Local Heuristics ───────────────────────────────────────────
     word_freq: Counter = Counter()
     word_contexts: Dict[str, List[str]] = defaultdict(list)
 

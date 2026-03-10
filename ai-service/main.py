@@ -400,49 +400,6 @@ async def quiz_generate(req: QuizGenerateRequest):
     return {"questions": questions}
 
 
-# ── Character Intelligence ───────────────────────────────────────────────────
-
-class CharacterDescribeRequest(BaseModel):
-    character: str                         # e.g. "Okonkwo"
-    context:   str                         # text read so far
-    max_context_chars: Optional[int] = 4000
-
-
-class CharacterNERRequest(BaseModel):
-    text: str                              # prose to extract names from
-
-
-@app.post("/characters/describe", tags=["characters"])
-async def character_describe(req: CharacterDescribeRequest):
-    """
-    Describe a character based on the text read so far using DeBERTa Q&A.
-
-    Returns an extractive description grounded in the student's current
-    reading position — no spoilers from chapters not yet read.
-    """
-    from services.character_service import get_character_service
-    svc = get_character_service()
-    result = await asyncio.to_thread(
-        svc.describe_character,
-        req.character,
-        req.context,
-        req.max_context_chars,
-    )
-    return result
-
-
-@app.post("/characters/extract-names", tags=["characters"])
-async def character_extract_names(req: CharacterNERRequest):
-    """
-    Extract PERSON entity names from a text block using BERT NER
-    (dbmdz/bert-large-cased-finetuned-conll03-english).
-    """
-    from services.character_service import get_character_service
-    svc = get_character_service()
-    names = await asyncio.to_thread(svc.extract_person_names, req.text)
-    return {"names": names, "count": len(names)}
-
-
 # ── Comprehension Tracking ───────────────────────────────────────────────────
 
 @app.post("/comprehension/record", tags=["comprehension"])
