@@ -400,6 +400,35 @@ async def quiz_generate(req: QuizGenerateRequest):
     return {"questions": questions}
 
 
+# ── Character Intelligence ────────────────────────────────────────────────────
+
+class CharacterDescribeRequest(BaseModel):
+    character: str
+    context: str
+    max_context_chars: Optional[int] = 4000
+
+class CharacterNERRequest(BaseModel):
+    text: str
+
+@app.post("/characters/describe", tags=["characters"])
+async def character_describe(req: CharacterDescribeRequest):
+    """Describe a character based on the text read so far (DeBERTa Q&A, no spoilers)."""
+    from services.character_service import get_character_service
+    svc = get_character_service()
+    result = await asyncio.to_thread(
+        svc.describe_character, req.character, req.context, req.max_context_chars
+    )
+    return result
+
+@app.post("/characters/extract-names", tags=["characters"])
+async def character_extract_names(req: CharacterNERRequest):
+    """Extract PERSON entity names from text using BERT NER."""
+    from services.character_service import get_character_service
+    svc = get_character_service()
+    names = await asyncio.to_thread(svc.extract_person_names, req.text)
+    return {"names": names, "count": len(names)}
+
+
 # ── Comprehension Tracking ───────────────────────────────────────────────────
 
 @app.post("/comprehension/record", tags=["comprehension"])
