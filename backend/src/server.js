@@ -30,6 +30,8 @@ import { StudentStats } from './models/StudentStats.js';
 import { User } from './models/User.js';
 import { Session } from './models/Session.js';
 import { RLTrainingData } from './models/RLTrainingData.js';
+import { Vocabulary } from './models/Vocabulary.js';
+import { VocabularyMastery } from './models/VocabularyMastery.js';
 
 // ── Define Associations ──────────────────────────────────────────────────────
 LessonProgress.belongsTo(Literature, { foreignKey: 'literatureId' });
@@ -48,6 +50,13 @@ Session.belongsTo(Literature, { foreignKey: 'literatureId' });
 Session.hasMany(RLTrainingData, { foreignKey: 'sessionId' });
 RLTrainingData.belongsTo(Session, { foreignKey: 'sessionId' });
 RLTrainingData.belongsTo(User, { foreignKey: 'studentId' });
+
+// Vocabulary associations
+Vocabulary.belongsTo(Literature, { foreignKey: 'literatureId' });
+Literature.hasMany(Vocabulary, { foreignKey: 'literatureId' });
+VocabularyMastery.belongsTo(Vocabulary, { foreignKey: 'vocabularyId' });
+VocabularyMastery.belongsTo(User, { foreignKey: 'userId' });
+User.hasMany(VocabularyMastery, { foreignKey: 'userId' });
 
 const app = express();
 const PORT = process.env.PORT || 3000;

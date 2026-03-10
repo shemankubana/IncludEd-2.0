@@ -43,6 +43,8 @@ from services.learner_embedding          import LearnerEmbedding, SessionMetrics
 from services.comprehension_tracker      import ComprehensionTracker
 from services.teacher_intelligence       import TeacherIntelligence
 from services.teacher_recommendations    import get_recommendation_engine, StudentRecommendation
+from services.stt_service                import STTAssessmentService
+from services.word_difficulty_service    import WordDifficultyService
 from ml_pipeline import LiteratureAnalyzer, BookBrain
 from ml_pipeline.quiz_generator import PedagogicalQuestionGenerator
 
@@ -72,6 +74,8 @@ simplification_svc    = SimplificationService()
 learner_embedding     = LearnerEmbedding()
 comprehension_tracker = ComprehensionTracker()
 teacher_intelligence  = TeacherIntelligence()
+stt_assessment        = STTAssessmentService()
+word_difficulty       = WordDifficultyService()
 
 # ── Request/Response Models ──────────────────────────────────────────────────
 
@@ -886,13 +890,85 @@ Keep it strictly under 250 words."""
         return {"insights": "Error generating insights."}
 
 
+# ── STT Reading Assessment ──────────────────────────────────────────────────
+
+class STTAssessmentRequest(BaseModel):
+    expected_text: str
+    spoken_text: str
+    duration_seconds: float = 0
+    student_id: Optional[str] = None
+    book_id: Optional[str] = None
+
+
+@app.post("/stt/assess", tags=["stt"])
+async def assess_reading(req: STTAssessmentRequest):
+    """
+    Assess a student's reading by comparing expected text with spoken text.
+    Returns accuracy, WPM, missed words, mispronunciations, and feedback.
+    """
+    result = await asyncio.to_thread(
+        stt_assessment.assess_reading,
+        req.expected_text,
+        req.spoken_text,
+        req.duration_seconds,
+    )
+
+    # Update comprehension tracker if student context provided
+    if req.student_id and req.book_id:
+        comprehension_tracker.record_section_read(
+            req.student_id, req.book_id, "stt_assessment",
+            "Reading Assessment", "",
+            req.duration_seconds, result.get("accuracy", 0) / 100,
+        )
+
+    return result
+
+
+# ── Word Difficulty & Pronunciation ─────────────────────────────────────────
+
+class WordDifficultyRequest(BaseModel):
+    text: str
+    difficulty_threshold: float = 0.5
+
+
+@app.post("/vocab/difficulty", tags=["vocabulary"])
+async def analyze_word_difficulty(req: WordDifficultyRequest):
+    """
+    Analyze a passage and return difficult words with pronunciation guides.
+    """
+    words = await asyncio.to_thread(
+        word_difficulty.analyze_passage,
+        req.text,
+        req.difficulty_threshold,
+    )
+    return {"difficult_words": words, "count": len(words)}
+
+
+class PronunciationRequest(BaseModel):
+    word: str
+
+
+@app.post("/vocab/pronunciation", tags=["vocabulary"])
+async def get_pronunciation(req: PronunciationRequest):
+    """Get phonetic pronunciation guide for a single word."""
+    pronunciation = word_difficulty.generate_pronunciation(req.word)
+    syllables = word_difficulty.count_syllables(req.word)
+    difficulty = word_difficulty.estimate_difficulty(req.word)
+    return {
+        "word": req.word,
+        "pronunciation": pronunciation,
+        "syllables": syllables,
+        "difficulty": round(difficulty, 3),
+    }
+
+
 # ── System ───────────────────────────────────────────────────────────────────
 
 @app.get("/health", tags=["system"])
 async def health():
     return {
         "status":         "healthy",
-        "version":        "3.0.0",
+        "version":        "3.1.0",
         "rl_model_ready": rl_agent.model_ready,
         "features": [
             "highlight_to_understand",
@@ -907,6 +983,10 @@ async def health():
             "dyslexia_rendering",
             "focus_sounds",
             "gemini_acceleration",
+            "stt_reading_assessment",
+            "word_difficulty_analysis",
+            "pronunciation_guides",
+            "vocabulary_mastery_tracking",
         ],
         "timestamp":      time.time(),
     }
