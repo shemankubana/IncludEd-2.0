@@ -172,12 +172,15 @@ const ReadingRuler: React.FC<{ containerRef: React.RefObject<HTMLDivElement | nu
 
 // ── Main DyslexiaRenderer ────────────────────────────────────────────────────
 
+export type DyslexiaFontChoice = "default" | "openDyslexic" | "lexend";
+
 export interface DyslexiaSettings {
     bionicReading: boolean;
     syllableColors: boolean;
     readingRuler: boolean;
     alternatingLines: boolean;
     openDyslexicFont: boolean;
+    fontChoice: DyslexiaFontChoice;
     syllableMarkers: boolean;
     letterSpacing: number;   // px
     wordSpacing: number;     // px
@@ -191,11 +194,18 @@ export const DEFAULT_DYSLEXIA_SETTINGS: DyslexiaSettings = {
     readingRuler: false,
     alternatingLines: false,
     openDyslexicFont: false,
+    fontChoice: "default",
     syllableMarkers: true,
     letterSpacing: 2,
     wordSpacing: 4,
     lineHeight: 1.8,
     fontSize: 1.1,
+};
+
+const FONT_FAMILIES: Record<DyslexiaFontChoice, string> = {
+    default: "inherit",
+    openDyslexic: "'OpenDyslexic', 'Comic Sans MS', sans-serif",
+    lexend: "'Lexend', 'Inter', sans-serif",
 };
 
 interface DyslexiaRendererProps {
@@ -224,10 +234,13 @@ export const DyslexiaText: React.FC<DyslexiaRendererProps> = ({
     // Split into lines for alternating backgrounds
     const lines = text.split(/\n/);
 
+    // Determine font: fontChoice takes precedence, fall back to openDyslexicFont toggle
+    const effectiveFont: DyslexiaFontChoice = settings.fontChoice !== "default"
+        ? settings.fontChoice
+        : settings.openDyslexicFont ? "openDyslexic" : "default";
+
     const style: React.CSSProperties = {
-        fontFamily: settings.openDyslexicFont
-            ? "'OpenDyslexic', 'Comic Sans MS', sans-serif"
-            : "inherit",
+        fontFamily: FONT_FAMILIES[effectiveFont],
         letterSpacing: `${settings.letterSpacing}px`,
         wordSpacing: `${settings.wordSpacing}px`,
         lineHeight: settings.lineHeight,
@@ -340,14 +353,22 @@ export const DyslexiaControls: React.FC<DyslexiaControlsProps> = ({
                         Alternating line backgrounds
                     </label>
 
-                    <label className="dyslexia-controls__option">
-                        <input
-                            type="checkbox"
-                            checked={settings.openDyslexicFont}
-                            onChange={() => toggle("openDyslexicFont")}
-                        />
-                        OpenDyslexic font
-                    </label>
+                    <div className="dyslexia-controls__font-select">
+                        <span className="text-xs font-medium">Font:</span>
+                        <select
+                            value={settings.fontChoice}
+                            onChange={(e) => onChange({
+                                ...settings,
+                                fontChoice: e.target.value as DyslexiaFontChoice,
+                                openDyslexicFont: e.target.value === "openDyslexic",
+                            })}
+                            className="text-xs px-2 py-1 rounded border border-border bg-background"
+                        >
+                            <option value="default">Default</option>
+                            <option value="openDyslexic">OpenDyslexic</option>
+                            <option value="lexend">Lexend</option>
+                        </select>
+                    </div>
 
                     <div className="dyslexia-controls__slider">
                         <span>Font size</span>
