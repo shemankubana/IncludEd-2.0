@@ -21,7 +21,7 @@ import time
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional
 
-from .ollama_service import OllamaService
+from .gemini_service import GeminiService
 
 
 class TeacherIntelligence:
@@ -36,7 +36,7 @@ class TeacherIntelligence:
     """
 
     def __init__(self):
-        self.ollama = OllamaService()
+        self.gemini = GeminiService()
 
     def student_summary(
         self,
@@ -376,14 +376,14 @@ class TeacherIntelligence:
     ) -> str:
         """
         Generate a 'Story So Far' recap text from comprehension data.
-        Uses Ollama if available, otherwise templates.
+        Uses Gemini if available, otherwise templates.
         """
         book_title = recap_data.get("book_title", "the book")
         chapters = recap_data.get("chapters_completed", [])
         characters = recap_data.get("main_characters", [])
         vocab = recap_data.get("recent_vocabulary", [])
 
-        if self.ollama.is_available():
+        if self.gemini.is_available():
             try:
                 chapter_list = ", ".join(c["title"] for c in chapters[-5:])
                 char_list = ", ".join(c["name"] for c in characters)
@@ -402,7 +402,7 @@ class TeacherIntelligence:
                         f"Main characters: {char_list}. "
                         f"Keep it simple, engaging, and suitable for a primary school student (ages 9-12)."
                     )
-                result = self.ollama.generate(prompt)
+                result = self.gemini.generate(prompt)
                 if result and len(result.strip()) > 30:
                     return result.strip()
             except Exception:

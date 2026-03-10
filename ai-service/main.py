@@ -36,7 +36,6 @@ from services.tts_service                import TTSService
 from services.accessibility_adapter      import FreeAccessibilityAdapter
 from services.rl_agent_service           import RLAgentService
 from services.smart_question_generator   import SmartQuestionGenerator
-from services.ollama_service             import OllamaService
 from services.gemini_service             import GeminiService
 from services.simplification_service     import SimplificationService
 from services.learner_embedding          import LearnerEmbedding, SessionMetrics
@@ -68,7 +67,6 @@ question_gen          = SmartQuestionGenerator()
 accessibility_adapter = FreeAccessibilityAdapter()
 rl_agent              = RLAgentService()
 tts_service           = TTSService()
-ollama_service        = OllamaService()
 gemini_service        = GeminiService(os.getenv("GEMINI_API_KEY"))
 simplification_svc    = SimplificationService()
 learner_embedding     = LearnerEmbedding()
@@ -367,19 +365,13 @@ Format: Return only the text of the introduction.
 """
     system_instruction = "You are an expert literature teacher helping students with learning differences feel excited about reading."
     
-    # Tier 0: Gemini
+    # Primary: Gemini
     if gemini_service.is_available():
         intro = gemini_service.generate(prompt, system_instruction)
         if intro:
             return {"introduction": intro, "tier": "gemini"}
-            
-    # Tier 1: Ollama
-    if ollama_service.is_available():
-        intro = ollama_service.generate(prompt, system_instruction)
-        if intro:
-            return {"introduction": intro, "tier": "ollama"}
 
-    # Fallback: Static template (legacy)
+    # Fallback: Static template
     return {
         "introduction": f"Welcome to {req.title} by {req.author}. This {req.doc_type} is a classic work that explores important themes and characters.",
         "tier": "template"
@@ -469,14 +461,9 @@ Respond in JSON with keys: "modern_meaning", "analogy", "category".
 """
     system_instruction = "You are a kind teacher explaining difficult words to children with dyslexia and ADHD. Keep it simple, visual, and encouraging."
     
-    # Tier 0: Gemini
+    # Primary: Gemini
     if gemini_service.is_available():
         res = gemini_service.generate_json(prompt, system_instruction)
-        if res: return res
-        
-    # Tier 1: Ollama
-    if ollama_service.is_available():
-        res = ollama_service.generate_json(prompt, system_instruction)
         if res: return res
 
     return {

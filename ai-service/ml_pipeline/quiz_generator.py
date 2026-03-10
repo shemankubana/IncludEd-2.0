@@ -3,8 +3,8 @@ quiz_generator.py
 =================
 PedagogicalQuestionGenerator — 3-tier generation pipeline.
 
-Tier 1 (Primary)   — Ollama LLM (llama3 / any local model)
-                     Best quality; requires Ollama running.
+Tier 1 (Primary)   — Google Gemini API
+                     Best quality; requires GEMINI_API_KEY.
 Tier 2 (Secondary) — FLAN-T5 via HuggingFace Transformers
                      Good quality; ~900MB one-time model download.
                      Works fully offline after first download.
@@ -36,35 +36,6 @@ from typing import Any, Dict, List, Optional, Tuple
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from services.gemini_service import GeminiService
-from services.ollama_service import OllamaService
-
-
-# ── System prompts (Ollama) ────────────────────────────────────────────────────
-
-_PLAY_SYSTEM = (
-    "You are an expert drama teacher. Create pedagogical multiple-choice questions "
-    "about the play passage provided. Focus on: character motivation, dramatic irony, "
-    "use of language, staging, themes, and conflicts. "
-    "IMPORTANT: Return ONLY valid JSON with this exact schema:\n"
-    '{"questions": [{"question": "...", "options": ["A", "B", "C", "D"], '
-    '"correctAnswer": 0, "explanation": "...", "difficulty": "easy|medium|hard"}]}'
-)
-
-_NOVEL_SYSTEM = (
-    "You are an expert literature teacher. Create pedagogical multiple-choice questions "
-    "about the novel passage. Focus on: narrative perspective, characterisation, "
-    "setting, imagery, themes, and plot structure. "
-    "IMPORTANT: Return ONLY valid JSON with this exact schema:\n"
-    '{"questions": [{"question": "...", "options": ["A", "B", "C", "D"], '
-    '"correctAnswer": 0, "explanation": "...", "difficulty": "easy|medium|hard"}]}'
-)
-
-_GENERIC_SYSTEM = (
-    "You are an expert educator. Create comprehension questions for the passage. "
-    "IMPORTANT: Return ONLY valid JSON with this exact schema:\n"
-    '{"questions": [{"question": "...", "options": ["A", "B", "C", "D"], '
-    '"correctAnswer": 0, "explanation": "...", "difficulty": "easy|medium|hard"}]}'
-)
 
 # ── FLAN-T5 prompt templates ───────────────────────────────────────────────────
 
@@ -459,21 +430,13 @@ class PedagogicalQuestionGenerator:
     """
     Three-tier pedagogical question generator.
 
-    Priority: Ollama → FLAN-T5 → Content-aware templates
+    Priority: Gemini → FLAN-T5 → Content-aware templates
     """
 
     def __init__(self):
         self._gemini = GeminiService()
-        self._ollama: Optional[OllamaService] = None
         self._t5: Optional[FlanT5Generator] = None
-        self._init_ollama()
         # T5 loaded lazily to avoid startup delay
-
-    def _init_ollama(self):
-        try:
-            self._ollama = OllamaService()
-        except Exception:
-            self._ollama = None
 
     def _get_t5(self) -> FlanT5Generator:
         if self._t5 is None:
@@ -502,15 +465,9 @@ class PedagogicalQuestionGenerator:
         count = max(1, min(count, 10))
         text_sample = content[:4000]
 
-        # ── Tier 0: Gemini (Primary Cloud Acceleration) ────────────────────────
+        # ── Tier 1: Gemini (Primary) ────────────────────────────────────────────
         if self._gemini.is_available():
             questions = self._generate_gemini(text_sample, doc_type, count, language)
-            if questions:
-                return questions[:count]
-
-        # ── Tier 1: Ollama ────────────────────────────────────────────────────
-        if self._ollama and self._is_ollama_available():
-            questions = self._generate_ollama(text_sample, doc_type, count, language)
             if questions:
                 return questions[:count]
 
@@ -582,37 +539,6 @@ class PedagogicalQuestionGenerator:
             print(f"⚠️  PedagogicalQGen Gemini error: {e}")
         return []
 
-    def _generate_ollama(
-        self,
-        content: str,
-        doc_type: str,
-        count: int,
-        language: str,
-    ) -> List[Dict[str, Any]]:
-        system_map = {
-            "play":    _PLAY_SYSTEM,
-            "novel":   _NOVEL_SYSTEM,
-        }
-        system = system_map.get(doc_type, _GENERIC_SYSTEM)
-
-        lang_hint = (
-            " Answer in French." if language == "fr"
-            else ""
-        )
-        user_prompt = (
-            f"Create {count} pedagogical multiple-choice questions about this "
-            f"literary text.{lang_hint}\n\nTEXT:\n{content}"
-        )
-
-        try:
-            result = self._ollama.generate_json(user_prompt, system)
-            raw_qs = result.get("questions", [])
-            if raw_qs:
-                return [self._normalise_question(q) for q in raw_qs]
-        except Exception as e:
-            print(f"⚠️  PedagogicalQGen Ollama error: {e}")
-        return []
-
     @staticmethod
     def _normalise_question(q: Dict[str, Any]) -> Dict[str, Any]:
         """Ensure question dict matches the required schema."""
@@ -678,8 +604,3 @@ class PedagogicalQuestionGenerator:
                 content = "\n\n".join(paras)
             return content[:3000]
 
-    def _is_ollama_available(self) -> bool:
-        try:
-            return bool(self._ollama and self._ollama.is_available())
-        except Exception:
-            return False

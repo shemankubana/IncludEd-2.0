@@ -1,6 +1,6 @@
 import re
 from typing import List, Dict, Optional
-from .ollama_service import OllamaService
+from .gemini_service import GeminiService
 
 class FreeAccessibilityAdapter:
     def __init__(self):
@@ -39,7 +39,7 @@ class FreeAccessibilityAdapter:
             'locate': 'find', 'observe': 'see', 'perceive': 'see',
         }
         
-        self.ollama = OllamaService()
+        self.gemini = GeminiService()
     
     def adapt_text(
         self, 
@@ -49,9 +49,9 @@ class FreeAccessibilityAdapter:
         use_llm: bool = True
     ) -> str:
         """
-        Main adaptation function. Uses Ollama for quality, falls back to rules for speed.
+        Main adaptation function. Uses Gemini for quality, falls back to rules for speed.
         """
-        if use_llm and self.ollama.is_available():
+        if use_llm and self.gemini.is_available():
             try:
                 return self.adapt_text_llm(text, level, disability_profile)
             except Exception as e:
@@ -92,20 +92,20 @@ class FreeAccessibilityAdapter:
 
     def adapt_text_llm(self, text: str, level: str, disability_profile: Optional[Dict]) -> str:
         """
-        Uses Llama 3 to intelligently simplify and adapt educational content.
+        Uses Gemini to intelligently simplify and adapt educational content.
         """
         disabilities = disability_profile.get("disabilities", []) if disability_profile else []
-        
+
         system_prompt = (
             "You are an expert in accessible education. Your task is to rewrite the provided "
             "educational text to be more accessible for students with diverse learning needs."
         )
-        
+
         prompt = f"""
         REWRITE the following text for a student with these priorities:
         - Target Level: {level}
         - Learning Needs: {', '.join(disabilities) if disabilities else 'General Accessibility'}
-        
+
         GUIDELINES:
         1. Replace complex or archaic words with simple, modern alternatives.
         2. Break down long, complex sentences into shorter, clearer ones.
@@ -119,12 +119,8 @@ class FreeAccessibilityAdapter:
 
         Return ONLY the adapted text. No headers, no conversational filler.
         """
-        
-        # Note: generate_json is for JSON. Using generate for raw text if available, 
-        # but let's see if OllamaService has a generic generate.
-        # Actually OllamaService only has generate_json. Let's add generate_text.
-        
-        return self.ollama.generate(prompt, system_prompt) or text
+
+        return self.gemini.generate(prompt, system_prompt) or text
     
     def _normalize_text(self, text: str) -> str:
         """Clean up text formatting"""

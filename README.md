@@ -63,7 +63,7 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 │ • Focus Mode            │     │                         │     │ Services:               │
 │                         │     │                         │     │  • TTS (edge-tts)       │
 │                         │     │                         │     │  • RL Agent             │
-│                         │     │                         │     │  • Ollama / Gemini LLM  │
+│                         │     │                         │     │  • Gemini LLM           │
 └─────────────────────────┘     └──────────┬──────────────┘     └─────────────────────────┘
                                            │
                                 ┌──────────▼──────────────┐
@@ -83,7 +83,7 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 - **Front Matter Filter** — Automatically detects and removes TOC, forewords, prefaces, prologues, dedications, epigraphs, and copyright pages
 - **Content Classifier** — Heuristic + ML classification distinguishing plays from novels from generic text
 - **Structural Segmenter** — Font-size analysis + regex heading detection to build Act/Scene or Chapter/Section hierarchy
-- **Question Generator** — Pedagogy-aware comprehension questions via Ollama LLM
+- **Question Generator** — Pedagogy-aware comprehension questions via Gemini LLM
 - **Emotion Analyzer** — Dialogue emotion detection for enriched play rendering
 
 ### Student Reading Experience
@@ -118,8 +118,8 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 | [Node.js](https://nodejs.org/) | v18+ | Backend & Frontend runtime |
 | [Python](https://www.python.org/) | 3.11+ | AI Service runtime |
 | [Docker & Docker Compose](https://www.docker.com/) | Latest | Database infrastructure |
-| [Ollama](https://ollama.com/) | Latest | Local LLM for question generation |
 | [Git](https://git-scm.com/) | Latest | Version control |
+| [Gemini API Key](https://aistudio.google.com/apikey) | — | LLM for question generation, simplification, and insights |
 
 ### Step 1 — Clone the Repository
 
@@ -151,9 +151,10 @@ VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
 
 **AI Service** — create `ai-service/.env`:
 ```env
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
+
+> Get a free Gemini API key at [Google AI Studio](https://aistudio.google.com/apikey).
 
 > **Tip**: Copy from `.env.example` at the project root if available, and fill in your own values.
 
@@ -193,16 +194,7 @@ python main.py
 
 The FastAPI server will start on **http://localhost:8082**.
 
-### Step 6 — Set Up Ollama (for Smart Question Generation)
-
-```bash
-ollama pull llama3
-ollama serve                     # Keep running in a separate terminal
-```
-
-Ollama will be available on **http://localhost:11434**.
-
-### Step 7 — Install & Start the Frontend
+### Step 6 — Install & Start the Frontend
 
 ```bash
 cd frontend
@@ -212,7 +204,7 @@ npm run dev
 
 The React app will start on **http://localhost:8080**.
 
-### Step 8 — Open the App
+### Step 7 — Open the App
 
 Navigate to **http://localhost:8080** in your browser. You should see the IncludEd landing page.
 
@@ -223,8 +215,7 @@ Navigate to **http://localhost:8080** in your browser. You should see the Includ
 | 1 | `docker-compose up -d` | Databases |
 | 2 | `cd backend && npm install && npm run dev` | Backend API (`:3000`) |
 | 3 | `cd ai-service && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt && python -m spacy download en_core_web_sm && python main.py` | AI Service (`:8082`) |
-| 4 | `ollama serve` | Ollama LLM (`:11434`) |
-| 5 | `cd frontend && npm install && npm run dev` | Frontend (`:8080`) |
+| 4 | `cd frontend && npm install && npm run dev` | Frontend (`:8080`) |
 
 ---
 
@@ -299,8 +290,7 @@ Navigate to **http://localhost:8080** in your browser. You should see the Includ
 | `services/tts_service.py` | Text-to-Speech (edge-tts) |
 | `services/rl_agent_service.py` | Reinforcement Learning agent |
 | `services/accessibility_adapter.py` | Content accessibility transforms |
-| `services/ollama_service.py` | Ollama LLM integration |
-| `services/gemini_service.py` | Gemini API integration |
+| `services/gemini_service.py` | Gemini API integration (primary LLM provider) |
 | `services/simplification_service.py` | Text simplification |
 | `services/comprehension_tracker.py` | Comprehension monitoring |
 | `services/teacher_intelligence.py` | Teacher insights engine |
