@@ -24,7 +24,7 @@ export const Quiz = sequelize.define('Quiz', {
     allowNull: false
   },
   correctAnswer: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING,
     allowNull: false
   },
   explanation: {

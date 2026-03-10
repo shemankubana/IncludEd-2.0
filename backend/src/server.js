@@ -116,6 +116,23 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('Database connected');
 
+    // Migrate Vocabularies.difficulty from ENUM to FLOAT if needed
+    try {
+      await sequelize.query(`
+        ALTER TABLE "Vocabularies"
+        ALTER COLUMN "difficulty" TYPE FLOAT
+        USING CASE difficulty::text
+          WHEN 'easy' THEN 0.25
+          WHEN 'medium' THEN 0.5
+          WHEN 'hard' THEN 0.75
+          ELSE 0.5
+        END;
+      `);
+      console.log('Migrated Vocabularies.difficulty to FLOAT');
+    } catch (_) {
+      // Column already FLOAT or table doesn't exist yet — sync will handle it
+    }
+
     await sequelize.sync({ alter: true });
     console.log('Database synced');
 
