@@ -10,10 +10,9 @@ When a student highlights text, this service:
 4. Adjusts explanation level based on student reading profile
 5. Detects literary devices (metaphor, irony, foreshadowing, etc.)
 
-3-tier architecture:
-  Tier 1: Ollama LLM (best quality)
-  Tier 2: FLAN-T5 (local, no server needed)
-  Tier 3: Rule-based (always available)
+2-tier architecture:
+  Tier 1: Gemini API (best quality)
+  Tier 2: Rule-based (always available)
 """
 
 from __future__ import annotations
@@ -21,7 +20,6 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from services.ollama_service import OllamaService
 from services.gemini_service import GeminiService
 
 
@@ -143,7 +141,6 @@ class SimplificationService:
     """
 
     def __init__(self):
-        self.ollama = OllamaService()
         self.gemini = GeminiService()
 
     def simplify(
@@ -170,10 +167,9 @@ class SimplificationService:
                 "tier": "ollama" | "flan_t5" | "rule_based",
             }
         """
-        # Tier 0: Gemini Cloud LLM (Primary)
+        # Primary: Gemini Cloud LLM
         if self.gemini.is_available():
             try:
-                # Reuse the Ollama prompt logic as it's already well-structured
                 result = self._simplify_gemini(
                     highlighted_text, book_title, author, doc_type,
                     chapter_context, speaker, reading_level, language,
@@ -183,14 +179,14 @@ class SimplificationService:
                     # Supplement with local assets + Gemini Vocab
                     llm_vocab = self._extract_vocabulary_gemini(highlighted_text, reading_level)
                     rule_vocab = self._extract_vocabulary(highlighted_text)
-                    
+
                     # Merge (LLM takes priority)
                     final_vocab = llm_vocab
                     seen_words = {v["word"].lower() for v in llm_vocab}
                     for rv in rule_vocab:
                         if rv["word"].lower() not in seen_words:
                             final_vocab.append(rv)
-                    
+
                     result["vocabulary"] = final_vocab
                     result["literary_devices"] = self._detect_devices(highlighted_text)
                     if not result.get("kinyarwanda_bridge"):
@@ -199,35 +195,7 @@ class SimplificationService:
             except Exception as e:
                 print(f"Gemini simplification failed: {e}")
 
-        # Tier 1: Ollama LLM
-        if self.ollama.is_available():
-            try:
-                result = self._simplify_ollama(
-                    highlighted_text, book_title, author, doc_type,
-                    chapter_context, speaker, reading_level, language,
-                )
-                if result and result.get("simple_version"):
-                    result["tier"] = "ollama"
-                    # Supplement with rule-based vocab + Kinyarwanda bridge
-                    llm_vocab = result.get("vocabulary", [])
-                    rule_vocab = self._extract_vocabulary(highlighted_text)
-                    
-                    # Merge
-                    final_vocab = llm_vocab
-                    seen_words = {v["word"].lower() for v in llm_vocab}
-                    for rv in rule_vocab:
-                        if rv["word"].lower() not in seen_words:
-                            final_vocab.append(rv)
-                            
-                    result["vocabulary"] = final_vocab
-                    result["literary_devices"] = self._detect_devices(highlighted_text)
-                    if not result.get("kinyarwanda_bridge"):
-                        result["kinyarwanda_bridge"] = _get_kinyarwanda_bridge(highlighted_text)
-                    return result
-            except Exception as e:
-                print(f"Ollama simplification failed: {e}")
-
-        # Tier 3: Rule-based (always works)
+        # Fallback: Rule-based (always works)
         return self._simplify_rule_based(
             highlighted_text, book_title, author, doc_type,
             speaker, reading_level, language,
@@ -292,69 +260,6 @@ Respond in JSON with exactly these keys:
 }}"""
 
         result = self.gemini.generate_json(prompt, system_instruction)
-        return result if isinstance(result, dict) else {}
-
-    def _simplify_ollama(
-        self,
-        text: str,
-        book_title: str,
-        author: str,
-        doc_type: str,
-        chapter_context: str,
-        speaker: str,
-        reading_level: str,
-        language: str,
-    ) -> Dict[str, Any]:
-        """Use Ollama for intelligent simplification."""
-        level_desc = {
-            "beginner": "a 9-year-old Primary 4 (P4) student",
-            "intermediate": "a 10-year-old Primary 5 (P5) student",
-            "advanced": "an 11-12 year old Primary 6 (P6) student",
-        }.get(reading_level, "a 10-year-old Primary 5 student")
-
-        speaker_ctx = f' spoken by the character "{speaker}"' if speaker else ""
-        book_ctx = f' from "{book_title}" by {author}' if book_title else ""
-
-        if language == "fr":
-            prompt = f"""Analyse ce passage{book_ctx}{speaker_ctx}:
-
-"{text}"
-
-Contexte du chapitre: {chapter_context[:300] if chapter_context else 'Non fourni'}
-
-Réponds en JSON avec exactement ces clés:
-{{
-  "simple_version": "Version simplifiée qui préserve le style littéraire (2-3 phrases)",
-  "author_intent": "Pourquoi l'auteur a écrit cela ainsi (1-2 phrases)",
-  "cultural_context": "Contexte culturel si pertinent, sinon null",
-  "kinyarwanda_bridge": "Analogie culturelle rwandaise si applicable (ex: comparer à imigabane, gacaca, icyubahiro), sinon null",
-  "vocabulary": [
-    {{"word": "string", "meaning": "définition simple", "analogy": "comparaison simple", "category": "catégorie du mot"}}
-  ]
-}}
-
-Adapte pour {level_desc}. Préserve la voix littéraire."""
-        else:
-            prompt = f"""Analyze this passage{book_ctx}{speaker_ctx}:
-
-"{text}"
-
-Chapter context: {chapter_context[:300] if chapter_context else 'Not provided'}
-
-Respond in JSON with exactly these keys:
-{{
-  "simple_version": "Simplified version that preserves literary voice (2-3 sentences)",
-  "author_intent": "Why the author wrote it this way (1-2 sentences)",
-  "cultural_context": "Cultural context if relevant, otherwise null",
-  "kinyarwanda_bridge": "Rwanda cultural connection if applicable (e.g. compare to umuganda, gacaca, icyubahiro, or another Rwandan concept), otherwise null",
-  "vocabulary": [
-    {{"word": "string", "meaning": "simple child-friendly definition", "analogy": "simple comparison for a 10-year-old", "category": "word category"}}
-  ]
-}}
-
-Adapt for {level_desc}. Preserve the literary voice — don't dumb it down."""
-
-        result = self.ollama.generate_json(prompt)
         return result if isinstance(result, dict) else {}
 
     def _simplify_rule_based(

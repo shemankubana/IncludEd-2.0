@@ -37,7 +37,7 @@ interface SimplificationResult {
     }>;
     cultural_context: string | null;
     kinyarwanda_bridge: string | null;
-    tier: "ollama" | "flan_t5" | "rule_based";
+    tier: "gemini" | "flan_t5" | "rule_based";
 }
 
 // Highlight category types for Phase 4 feedback loop
