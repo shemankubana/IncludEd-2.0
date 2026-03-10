@@ -321,11 +321,3 @@ Navigate to **http://localhost:8080** in your browser. You should see the Includ
 ## Research Context
 
 This project serves as the technical implementation for the **ALU BSc. Software Engineering Capstone (2026)**. It focuses on making literature accessible to neurodivergent learners (Dyslexia, ADHD) in the Rwandan educational context through ML-driven adaptive reading experiences.
-
-**Lead Developer**: Ivan Shema
-
----
-
-## License
-
-All rights reserved. This project is part of an academic capstone and is not licensed for redistribution.
