@@ -17,9 +17,7 @@ import LiteratureViewer, {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const AI_SERVICE_URL =
-    (import.meta.env.VITE_AI_URL as string | undefined) ??
-    "http://localhost:8000";
+const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -156,7 +154,7 @@ const LiteratureAnalyzerPage: React.FC = () => {
 
         try {
             const resp = await fetch(
-                `${AI_SERVICE_URL}/analyze?generate_questions=true&question_count=5`,
+                `${AI_URL}/analyze?generate_questions=true&question_count=5`,
                 { method: "POST", body: formData }
             );
 

@@ -20,7 +20,7 @@ interface VocabHelperProps {
     onMasterWord?: (word: string) => void;
 }
 
-const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
+const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
 
 const VocabHelper: React.FC<VocabHelperProps> = ({
     content,

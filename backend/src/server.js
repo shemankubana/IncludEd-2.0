@@ -65,15 +65,17 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (origin.startsWith('http') || origin.startsWith('http')) {
+    
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      'http://localhost:8080',
+      'http://localhost:5173'
+    ];
+    
+    if (allowedOrigins.includes(origin) || origin.startsWith('http') || origin.endsWith('.cloudspaces.litng.ai') || origin.endsWith('.github.dev')) {
       return callback(null, true);
     }
-    // Allow cloud workspace origins (Lightning AI, Codespaces, etc.)
-    if (origin.endsWith('.cloudspaces.litng.ai') || origin.endsWith('.github.dev')) {
-      return callback(null, true);
-    }
-    const allowed = process.env.FRONTEND_URL;
-    if (allowed && origin === allowed) return callback(null, true);
+    
     callback(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true
