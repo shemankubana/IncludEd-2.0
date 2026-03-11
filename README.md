@@ -54,16 +54,11 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 │   Frontend (React/TS)   │────▶│  Backend (Express.js)   │────▶│  AI Service (FastAPI)   │
 │       Port 8080         │     │       Port 3000          │     │       Port 8082          │
 ├─────────────────────────┤     ├─────────────────────────┤     ├─────────────────────────┤
-│ • Student Reader        │     │ • Auth (Firebase + JWT) │     │ ML Pipeline:            │
-│ • Teacher Dashboard     │     │ • Literature CRUD       │     │  • FrontMatterFilter    │
-│ • Admin Panel           │     │ • Quiz Management       │     │  • ContentClassifier    │
-│ • Chat-bubble Dialogue  │     │ • Progress Tracking     │     │  • StructuralSegmenter  │
-│ • TTS Controls          │     │ • Session Management    │     │  • QuestionGenerator    │
-│ • Bionic Reading        │     │ • Analytics             │     │  • EmotionAnalyzer      │
-│ • Focus Mode            │     │                         │     │ Services:               │
-│                         │     │                         │     │  • TTS (edge-tts)       │
-│                         │     │                         │     │  • RL Agent             │
-│                         │     │                         │     │  • FLAN-T5-large        │
+│ • Sliding Chapter Nav   │     │ • Auth (Firebase + JWT) │     │ Cloud ML Infrastructure:│
+│ • Character Map Panel   │     │ • Literature CRUD       │     │  • HF Inference API     │
+│ • Phonics Breakdown     │     │ • Quiz Management       │     │  • Google Gemini API    │
+│ • Focus Mode            │     │ • Progress Tracking     │     │  • Mistral/Qwen/BERT    │
+│ • TTS + Word Sync       │     │ • Analytics             │     │  • RL Agent Integration │
 └─────────────────────────┘     └──────────┬──────────────┘     └─────────────────────────┘
                                            │
                                 ┌──────────▼──────────────┐
@@ -79,28 +74,24 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 
 ## Key Features
 
-### ML Pipeline (AI Service)
-- **Front Matter Filter** — Automatically detects and removes TOC, forewords, prefaces, prologues, dedications, epigraphs, and copyright pages
-- **Content Classifier** — Heuristic + ML classification distinguishing plays from novels from generic text
-- **Structural Segmenter** — Font-size analysis + regex heading detection to build Act/Scene or Chapter/Section hierarchy
-- **Question Generator** — Pedagogy-aware comprehension questions via FLAN-T5-large (offline)
-- **Emotion Analyzer** — Dialogue emotion detection for enriched play rendering
+### Cloud-First ML Pipeline (AI Service)
+- **Structural Analysis** — Mistral-7B via HF Inference for precise Act/Chapter detection.
+- **Pedagogical Quiz Gen** — Multi-tier generation via Gemini and Qwen 2.5 (Hugging Face).
+- **Intelligence Services** — BERT NER for characters and DeBERTa for contextual Q&A.
+- **Contextual Simplification** — Real-time text simplification + Author's Intent via Gemini.
+- **Phonics Engine** — Phonetic breakdown for any English/French word to aid pronunciation.
 
 ### Student Reading Experience
-- **Chat-Bubble Dialogue** — Play scripts rendered as a messaging interface with character avatars
-- **Accessible Fonts** — OpenDyslexic and Lexend font toggles for dyslexia-friendly typography
-- **Bionic Reading** — Bold first syllables of words to create visual anchors for faster reading
-- **TTS with Word Sync** — Text-to-speech (edge-tts) with real-time word-level highlighting
-- **Focus Mode** — Dimmed surroundings to reduce visual distraction for ADHD learners
-- **Vocabulary Mastery** — Track and practice difficult words across reading sessions
-- **Speech-to-Text Assessment** — Evaluate reading fluency through voice input
-- **Quizzes & Achievements** — Comprehension quizzes with gamification elements
+- **Sliding Chapter Navigation** — A modern, touch-friendly navigation bar at the top of the reader.
+- **Character Map** — Dynamic relationship tracker that updates as the student reads.
+- **Highlight to Understand** — Instant simplification of difficult passages with cultural analogies (Rwanda context).
+- **Pronunciation Helper** — Phonics breakdown and audio playback for struggling readers.
+- **Chat-Bubble Dialogue** — Play scripts rendered as an interactive messaging interface.
+- **Adaptive RL Engine** — Adjusts text complexity and provides "Breathing Breaks" based on engagement.
 
 ### Teacher Tools
-- **PDF Analyzer** — Upload, analyze, and preview how content appears to students
-- **Content Management** — Manage literature assignments across classes
-- **Student Progress Dashboards** — Monitor reading speed, comprehension, and engagement
-- **AI Recommendations** — Adaptive suggestions for supporting individual learners
+- **PDF Analyzer** — Upload, analyze, and preview how content appears to students.
+- **Progress Insights** — Monitor reading speed, comprehension, and vocabulary mastery.
 
 ### Reinforcement Learning Engine
 - **9-dimensional state space** (reading speed, attention, disability type, text difficulty, etc.)
@@ -119,7 +110,7 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 | [Python](https://www.python.org/) | 3.11+ | AI Service runtime |
 | [Docker & Docker Compose](https://www.docker.com/) | Latest | Database infrastructure |
 | [Git](https://git-scm.com/) | Latest | Version control |
-| ~8 GB free RAM | — | Required for local HuggingFace models (FLAN-T5-large, BERT NER, DeBERTa) |
+| Internet Connection | — | Required for cloud-based ML models (Hugging Face / Gemini) |
 
 ### Step 1 — Clone the Repository
 
@@ -151,11 +142,12 @@ VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
 
 **AI Service** — create `ai-service/.env`:
 ```env
-# No API keys required — all models run locally via HuggingFace
-DISABLE_MISTRAL=1     # Set to 0 to enable Mistral-7B heading detection (~14 GB, GPU only)
+HF_API_TOKEN=your_huggingface_token
+GEMINI_API_KEY=your_gemini_api_key
+USE_HF_INFERENCE=1
 ```
 
-> All AI features run fully offline using HuggingFace models downloaded on first use (~3–5 GB total for FLAN-T5-large, BERT NER, DeBERTa).
+> **Note**: This version of IncludEd 2.0 uses a **Cloud-First AI architecture**. All heavy processing is offloaded to Hugging Face Serverless endpoints and Google Gemini, ensuring smooth performance even on low-RAM laptops.
 
 > **Tip**: Copy from `.env.example` at the project root if available, and fill in your own values.
 
@@ -279,27 +271,15 @@ Navigate to **http://localhost:8080** in your browser. You should see the Includ
 |------------------|-------------|
 | `main.py` | FastAPI application (20+ endpoints) |
 | `requirements.txt` | Python dependencies |
-| `ml_pipeline/analyzer.py` | LiteratureAnalyzer orchestrator |
-| `ml_pipeline/book_brain.py` | BookBrain semantic analysis |
-| `ml_pipeline/content_classifier.py` | Play vs. novel classification |
-| `ml_pipeline/front_matter_detector.py` | TOC/foreword detection |
-| `ml_pipeline/front_matter_filter.py` | Non-learning content filtering |
-| `ml_pipeline/structural_segmenter.py` | Chapter/Act/Scene segmentation |
-| `ml_pipeline/quiz_generator.py` | Pedagogical question generation |
-| `ml_pipeline/emotion_analyzer.py` | Dialogue emotion analysis |
-| `ml_pipeline/language_detector.py` | English/French detection |
+| `ml_pipeline/structural_segmenter.py` | Cloud-powered Chapter/Act/Scene segmentation |
+| `ml_pipeline/quiz_generator.py` | Multi-tier Pedagogical question generation |
+| `services/hf_inference_service.py` | Hugging Face InferenceClient wrapper for all cloud models |
+| `services/gemini_service.py` | Primary service for Simplification and Author's Intent |
+| `services/character_service.py` | Cloud-based character extraction and Q&A descriptions |
+| `services/pronunciation_service.py` | Phonics breakdown and pronunciation logic |
 | `services/tts_service.py` | Text-to-Speech (edge-tts) |
 | `services/rl_agent_service.py` | Reinforcement Learning agent |
-| `services/accessibility_adapter.py` | Content accessibility transforms |
-| `services/gemini_service.py` | Disabled stub (Gemini replaced by local models) |
-| `services/character_service.py` | BERT NER character extraction + DeBERTa Q&A descriptions |
-| `services/simplification_service.py` | Text simplification |
-| `services/comprehension_tracker.py` | Comprehension monitoring |
-| `services/teacher_intelligence.py` | Teacher insights engine |
-| `services/teacher_recommendations.py` | Adaptive recommendation engine |
 | `services/stt_service.py` | Speech-to-Text assessment |
-| `services/word_difficulty_service.py` | Word difficulty scoring |
-| `ml_pipeline/tests/` | ML pipeline unit tests |
 
 ### RL Engine (`/rl-engine`)
 

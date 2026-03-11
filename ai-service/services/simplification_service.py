@@ -21,6 +21,9 @@ import re
 from typing import Any, Dict, List, Optional
 
 from services.gemini_service import GeminiService
+import os
+from services.hf_inference_service import HFInferenceService
+_hf_inference = HFInferenceService(os.getenv("HF_API_TOKEN"))
 
 
 # ── Literary device detection ─────────────────────────────────────────────────
@@ -194,6 +197,24 @@ class SimplificationService:
                     return result
             except Exception as e:
                 print(f"Gemini simplification failed: {e}")
+
+        # Tier 1.5: HF Inference (Serverless)
+        if os.getenv("USE_HF_INFERENCE") == "1" and _hf_inference.api_token:
+            try:
+                result = _hf_inference.simplify_text(
+                    highlighted_text, book_title, author, doc_type,
+                    chapter_context, speaker, reading_level, language
+                )
+                if result and result.get("simple_version"):
+                    result["tier"] = "hf_inference"
+                    # Add Kinyarwanda bridge if missing
+                    if not result.get("kinyarwanda_bridge"):
+                        result["kinyarwanda_bridge"] = _get_kinyarwanda_bridge(highlighted_text)
+                    # Merge with local literary device detection
+                    result["literary_devices"] = self._detect_devices(highlighted_text)
+                    return result
+            except Exception as e:
+                print(f"HF Inference simplification failed: {e}")
 
         # Fallback: Rule-based (always works)
         return self._simplify_rule_based(

@@ -38,63 +38,9 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-# ── Optional imports ───────────────────────────────────────────────────────────
-
-_TRANSFORMERS_OK = False
-try:
-    from transformers import pipeline as hf_pipeline
-    _TRANSFORMERS_OK = True
-except ImportError:
-    pass
-
-
-# ── Model identifiers ──────────────────────────────────────────────────────────
-
-_NER_MODEL  = "dbmdz/bert-large-cased-finetuned-conll03-english"
-_QA_MODEL   = "deepset/deberta-v3-base-squad2"
-
-# ── Singleton pipelines ────────────────────────────────────────────────────────
-
-_ner_pipeline: Optional[Any] = None
-_qa_pipeline:  Optional[Any] = None
-
-
-def _load_ner() -> bool:
-    global _ner_pipeline
-    if _ner_pipeline is not None:
-        return True
-    if not _TRANSFORMERS_OK:
-        return False
-    try:
-        print(f"🔬 Loading BERT NER ({_NER_MODEL}) …")
-        _ner_pipeline = hf_pipeline(
-            "ner",
-            model=_NER_MODEL,
-            aggregation_strategy="simple",   # merge B-/I- sub-tokens
-        )
-        print("✅ BERT NER ready")
-        return True
-    except Exception as exc:
-        print(f"⚠️  BERT NER load failed: {exc}")
-        _ner_pipeline = None
-        return False
-
-
-def _load_qa() -> bool:
-    global _qa_pipeline
-    if _qa_pipeline is not None:
-        return True
-    if not _TRANSFORMERS_OK:
-        return False
-    try:
-        print(f"🔬 Loading DeBERTa Q&A ({_QA_MODEL}) …")
-        _qa_pipeline = hf_pipeline("question-answering", model=_QA_MODEL)
-        print("✅ DeBERTa Q&A ready")
-        return True
-    except Exception as exc:
-        print(f"⚠️  DeBERTa Q&A load failed: {exc}")
-        _qa_pipeline = None
-        return False
+import os
+from services.hf_inference_service import HFInferenceService
+_hf_inference = HFInferenceService(os.getenv("HF_API_TOKEN"))
 
 
 # ── NER helpers ────────────────────────────────────────────────────────────────
@@ -140,49 +86,16 @@ class CharacterService:
 
     def extract_person_names(self, text: str) -> List[str]:
         """
-        Extract unique PERSON entity names from ``text`` using BERT NER.
-
-        Falls back to a simple regex heuristic (ALL-CAPS words / Title-Case
-        runs following dialogue verbs) if the model is unavailable.
-
-        Returns a deduplicated, title-cased list sorted by first occurrence.
+        Extract unique PERSON entity names from ``text`` using cloud-based BERT NER.
+        Falls back to regex heuristic if cloud is unavailable.
         """
-        if _load_ner() and _ner_pipeline is not None:
-            return self._ner_extract(text)
-        return self._regex_person_fallback(text)
-
-    def _ner_extract(self, text: str) -> List[str]:
-        seen: dict = {}   # name -> first char offset (for order)
-        offset = 0
-        for chunk in _chunk_text(text):
+        if os.getenv("USE_HF_INFERENCE") == "1" and _hf_inference.api_token:
             try:
-                entities = _ner_pipeline(chunk)
-                for ent in entities:
-                    if ent.get("entity_group") == "PER":
-                        name = ent["word"].strip().title()
-                        # Filter short / noisy tokens
-                        if len(name) >= 2 and name.upper() not in _NER_NOISE:
-                            if name not in seen:
-                                seen[name] = offset + ent.get("start", 0)
-            except Exception as exc:
-                print(f"⚠️  NER chunk error: {exc}")
-            offset += len(chunk)
-
-        # Sort by first occurrence, return names only
-        return [name for name, _ in sorted(seen.items(), key=lambda x: x[1])]
-
-    def _regex_person_fallback(self, text: str) -> List[str]:
-        """Heuristic fallback: pull Title-Case names after dialogue verbs."""
-        pattern = re.compile(
-            r'(?:said|replied|asked|whispered|shouted|cried|exclaimed|murmured|thought)\s+'
-            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)',
-        )
-        seen = {}
-        for m in pattern.finditer(text):
-            name = m.group(1).strip()
-            if name not in seen:
-                seen[name] = m.start()
-        return [n for n, _ in sorted(seen.items(), key=lambda x: x[1])]
+                return _hf_inference.extract_characters(text)
+            except Exception as e:
+                print(f"⚠️  Cloud NER failed: {e}")
+                pass
+        return self._regex_person_fallback(text)
 
     # ── Q&A ───────────────────────────────────────────────────────────────────
 
@@ -193,33 +106,26 @@ class CharacterService:
         max_context_chars: int = 4000,
     ) -> Dict[str, Any]:
         """
-        Answer "Who is {character} and what have they done so far?" using
-        the DeBERTa extractive Q&A model against the text already read.
-
-        Parameters
-        ----------
-        character:
-            Character name to describe (e.g. "Okonkwo", "Lady Macbeth").
-        context:
-            The full text the student has read so far (will be truncated to
-            ``max_context_chars`` to fit model limits).
-        max_context_chars:
-            Safety cap on context length (~4000 chars ≈ 600 tokens).
-
-        Returns
-        -------
-        {
-            "character": str,
-            "description": str,
-            "confidence": float,
-            "model": "deberta" | "fallback"
-        }
+        Analyze character using cloud-based Q&A.
         """
-        # Find the most relevant window of context that mentions the character
         relevant = self._find_relevant_window(character, context, max_context_chars)
 
-        if _load_qa() and _qa_pipeline is not None:
-            return self._qa_describe(character, relevant)
+        if os.getenv("USE_HF_INFERENCE") == "1" and _hf_inference.api_token:
+            try:
+                result = _hf_inference.answer_question(
+                    question=f"Who is {character} and what have they done so far?",
+                    context=relevant
+                )
+                if result.get("answer"):
+                    return {
+                        "character": character,
+                        "description": result["answer"],
+                        "confidence": round(result.get("score", 0), 3),
+                        "model": "cloud_inference",
+                    }
+            except Exception as e:
+                print(f"⚠️  Cloud Q&A failed: {e}")
+
         return self._fallback_describe(character, relevant)
 
     def _find_relevant_window(
@@ -247,21 +153,6 @@ class CharacterService:
             else:
                 break
         return result.strip() or context[:max_chars]
-
-    def _qa_describe(self, character: str, context: str) -> Dict[str, Any]:
-        """Use DeBERTa to answer questions about the character."""
-        question = f"Who is {character} and what have they done so far in the story?"
-        try:
-            result = _qa_pipeline(question=question, context=context)
-            return {
-                "character": character,
-                "description": result["answer"],
-                "confidence": round(result["score"], 3),
-                "model": "deberta",
-            }
-        except Exception as exc:
-            print(f"⚠️  DeBERTa Q&A error for '{character}': {exc}")
-            return self._fallback_describe(character, context)
 
     def _fallback_describe(self, character: str, context: str) -> Dict[str, Any]:
         """

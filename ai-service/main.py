@@ -42,6 +42,8 @@ from ml_pipeline.ner_extractor       import get_ner_extractor
 from ml_pipeline.vocab_analyzer      import get_vocab_analyzer
 from ml_pipeline.difficulty_adapter  import get_difficulty_adapter
 from services.tts_service            import get_tts_service
+from services.hf_inference_service   import HFInferenceService
+from services.pronunciation_service  import PronunciationService
 
 # ML pipeline singletons (reused across requests)
 _literature_analyzer = LiteratureAnalyzer()
@@ -74,6 +76,8 @@ ner_extractor         = get_ner_extractor()
 vocab_analyzer        = get_vocab_analyzer(gemini_service=None)   # gemini injected after init
 difficulty_adapter    = get_difficulty_adapter()
 tts_svc               = get_tts_service()
+hf_inference          = HFInferenceService(os.getenv("HF_API_TOKEN"))
+pronunciation_svc     = PronunciationService()
 
 # ── Request/Response Models ──────────────────────────────────────────────────
 
@@ -500,6 +504,30 @@ Respond in JSON with keys: "modern_meaning", "analogy", "category".
         "analogy": "Like a puzzle piece that fits in this sentence.",
         "category": "Vocabulary"
     }
+
+
+# ── Word Phonics & Pronunciation (Project Revamp) ───────────────────────────
+
+class PhonicsRequest(BaseModel):
+    word: str
+
+@app.post("/word/phonics", tags=["vocabulary"])
+async def get_word_phonics(req: PhonicsRequest):
+    """Get syllable breakdown and phonics for a word."""
+    return pronunciation_svc.get_phonics_breakdown(req.word)
+
+@app.post("/word/pronunciation-guide", tags=["vocabulary"])
+async def get_word_pronunciation_guide(req: PhonicsRequest):
+    """
+    Get a Google-style pronunciation guide.
+    Uses HF Inference (Mistral) if available for better phonetics.
+    """
+    if os.getenv("USE_HF_INFERENCE") == "1" and hf_inference.api_token:
+        # We could use Mistral here to get even better phonics, 
+        # but for now, use the dedicated service.
+        pass
+    
+    return pronunciation_svc.get_phonics_breakdown(req.word)
 
 
 @app.get("/comprehension/summary", tags=["comprehension"])

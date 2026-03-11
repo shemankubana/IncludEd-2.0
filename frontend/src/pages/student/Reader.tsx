@@ -34,6 +34,8 @@ import CharacterTooltip from "@/components/reader/CharacterTooltip";
 import PoemRenderer from "@/components/reader/PoemRenderer";
 import CharacterMapPanel from "@/components/reader/CharacterMapPanel";
 import { useTranslation } from "@/hooks/useTranslation";
+import ChapterNavigation from "@/components/reader/ChapterNavigation";
+import PronunciationHelper from "@/components/reader/PronunciationHelper";
 
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -143,6 +145,9 @@ const AdaptiveReader = () => {
 
     // Character Map panel state (Phase 5)
     const [showCharacterMap, setShowCharacterMap] = useState(false);
+
+    // Phonics Helper state
+    const [phonicsWord, setPhonicsWord] = useState<string | null>(null);
 
     // Translations
     const { t } = useTranslation(lesson?.language);
@@ -645,6 +650,21 @@ const AdaptiveReader = () => {
                 )}
             </AnimatePresence>
 
+            {/* ── Pronunciation Helper Popover ── */}
+            <AnimatePresence>
+                {phonicsWord && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 pointer-events-none">
+                        <div className="pointer-events-auto">
+                            <PronunciationHelper 
+                                word={phonicsWord} 
+                                onClose={() => setPhonicsWord(null)}
+                                language={lesson?.language?.startsWith("fr") ? "fr" : "en"}
+                            />
+                        </div>
+                    </div>
+                )}
+            </AnimatePresence>
+
             {/* ── Struggle Zone Pre-Teaching Card ── */}
             <AnimatePresence>
                 {showStrugglePrep && struggleVocab.length > 0 && (
@@ -919,62 +939,17 @@ const AdaptiveReader = () => {
                     )}
                 </AnimatePresence>
 
-                {/* ── Chapter Navigation Bar ── */}
+                {/* ── Sliding Chapter Navigation (Revamp) ── */}
                 {!focusMode && totalSections > 1 && (
-                    <div className="mb-6 p-4 bg-secondary/20 rounded-[24px] border border-border/50 overflow-x-auto scrollbar-none">
-                        {sectionGroups ? (
-                            /* Play: grouped Act → Scene navigation */
-                            <div className="flex flex-col gap-3">
-                                {sectionGroups.map((group) => (
-                                    <div key={group.actTitle} className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-primary/70 shrink-0 min-w-[48px]">
-                                            {group.actTitle}
-                                        </span>
-                                        <div className="w-px h-4 bg-border/60 shrink-0" />
-                                        {group.scenes.map(({ idx, sceneTitle: st }) => (
-                                            <button
-                                                key={idx}
-                                                onClick={() => {
-                                                    setCurrentSectionIndex(idx);
-                                                    saveProgress(idx);
-                                                    window.scrollTo({ top: 0, behavior: "smooth" });
-                                                }}
-                                                className={`shrink-0 rounded-xl px-3 py-1.5 font-bold text-xs transition-all whitespace-nowrap
-                                                    ${currentSectionIndex === idx
-                                                        ? "bg-primary text-primary-foreground shadow-lg"
-                                                        : "bg-background border border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
-                                                    }`}
-                                            >
-                                                {st}
-                                            </button>
-                                        ))}
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            /* Novel / Generic: flat chapter navigation */
-                            <div className="flex items-center gap-3 flex-wrap">
-                                <BookOpen className="w-4 h-4 text-primary shrink-0" />
-                                {sections.map((_, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={() => {
-                                            setCurrentSectionIndex(idx);
-                                            saveProgress(idx);
-                                            window.scrollTo({ top: 0, behavior: "smooth" });
-                                        }}
-                                        className={`shrink-0 rounded-xl px-4 py-2 font-bold text-xs transition-all whitespace-nowrap
-                                            ${currentSectionIndex === idx
-                                                ? "bg-primary text-primary-foreground shadow-lg"
-                                                : "bg-background border border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
-                                            }`}
-                                    >
-                                        {`Chapter ${idx + 1}`}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    <ChapterNavigation 
+                        sections={sections}
+                        currentIndex={currentSectionIndex}
+                        onSelect={(idx) => {
+                            setCurrentSectionIndex(idx);
+                            saveProgress(idx, "in_progress");
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                    />
                 )}
 
                 {/* ── Introduction Modal ── */}
@@ -1359,6 +1334,7 @@ const AdaptiveReader = () => {
                 onHighlightCategorized={(_text, _category) => {
                     // highlight feedback — no-op without AI service
                 }}
+                onPhonics={(word) => setPhonicsWord(word)}
             />
         </DashboardLayout>
     );

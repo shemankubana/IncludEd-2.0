@@ -71,6 +71,7 @@ interface HighlightToUnderstandProps {
     onVocabSave?: (word: string) => void;
     onTTSPlay?: (text: string) => void;
     onHighlightCategorized?: (text: string, category: HighlightCategory) => void; // Phase 4
+    onPhonics?: (word: string) => void; // Project Revamp
 }
 
 const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
@@ -87,6 +88,7 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
     onVocabSave,
     onTTSPlay,
     onHighlightCategorized,
+    onPhonics,
 }) => {
     const [visible, setVisible] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -390,6 +392,13 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
                             title="Listen to this text"
                         >
                             <Volume2 size={14} /> Listen
+                        </button>
+                        <button
+                            className="highlight-popup__action-btn border-primary/20 bg-primary/5"
+                            onClick={() => onPhonics?.(selectedText)}
+                            title="Break down pronunciation"
+                        >
+                            <Sparkles size={14} className="text-primary" /> Sound out
                         </button>
                         {result.vocabulary.length > 0 && (
                             <button
