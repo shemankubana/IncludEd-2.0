@@ -152,7 +152,6 @@ VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
 **AI Service** — create `ai-service/.env`:
 ```env
 # No API keys required — all models run locally via HuggingFace
-DISABLE_NOUGAT=1      # Set to 0 to enable Nougat PDF extraction (~1.6 GB download)
 DISABLE_MISTRAL=1     # Set to 0 to enable Mistral-7B heading detection (~14 GB, GPU only)
 ```
 
@@ -293,7 +292,6 @@ Navigate to **http://localhost:8080** in your browser. You should see the Includ
 | `services/rl_agent_service.py` | Reinforcement Learning agent |
 | `services/accessibility_adapter.py` | Content accessibility transforms |
 | `services/gemini_service.py` | Disabled stub (Gemini replaced by local models) |
-| `ml_pipeline/nougat_extractor.py` | Nougat PDF→markdown extractor (facebook/nougat-base) |
 | `services/character_service.py` | BERT NER character extraction + DeBERTa Q&A descriptions |
 | `services/simplification_service.py` | Text simplification |
 | `services/comprehension_tracker.py` | Comprehension monitoring |

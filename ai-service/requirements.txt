@@ -16,9 +16,9 @@ opencv-python-headless==4.8.1.78
 numpy==1.26.4                  # Fix for version 2.0 compatibility issues
 Pillow==11.3.0
 torch>=2.2.2                  # Downgraded for Python 3.9 compatibility
-transformers>=4.40.0          # HuggingFace Transformers (Nougat, Mistral, BERT, DeBERTa, FLAN-T5)
+transformers>=4.40.0          # HuggingFace Transformers (Mistral, BERT, DeBERTa, FLAN-T5)
 sentencepiece>=0.1.99         # Required for T5Tokenizer
-accelerate>=0.27.0            # Required for device_map="auto" (Mistral, Nougat)
+accelerate>=0.27.0            # Required for device_map="auto" (Mistral)
 bitsandbytes>=0.42.0          # Optional: 4-bit quantisation for Mistral-7B
 sentence-transformers==2.3.1
 spacy==3.7.2
