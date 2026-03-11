@@ -140,6 +140,38 @@ router.post('/:literatureId/complete', authenticateToken, async (req, res) => {
     }
 });
 
+// POST /api/progress/:literatureId/quiz — record score for a periodic quiz chunk
+router.post('/:literatureId/quiz', authenticateToken, async (req, res) => {
+    try {
+        const { chunkIndex, score, total } = req.body;
+        if (chunkIndex === undefined || score === undefined || total === undefined) {
+            return res.status(400).json({ error: 'Missing chunkIndex, score, or total.' });
+        }
+
+        const [progress] = await LessonProgress.findOrCreate({
+            where: { userId: req.user.userId, literatureId: req.params.literatureId },
+            defaults: { status: 'in_progress', currentSection: 0 }
+        });
+
+        const quizScores = { ...(progress.quizScores || {}) };
+        const passed = (score / total) >= 0.8;
+        quizScores[chunkIndex] = { score, total, passed, updatedAt: new Date() };
+
+        await progress.update({ quizScores });
+
+        // Also update XP for passing a quiz
+        if (passed) {
+            const stats = await getOrCreateStats(req.user.userId, req.body.schoolId);
+            const xpGain = 100; // Small bonus for each quiz passed
+            await stats.update({ xp: stats.xp + xpGain });
+        }
+
+        res.json({ success: true, quizScores });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // POST /api/progress/:literatureId/rate — rate a lesson 1-5
 router.post('/:literatureId/rate', authenticateToken, async (req, res) => {
     try {

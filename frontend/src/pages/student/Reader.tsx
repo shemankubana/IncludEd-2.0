@@ -36,6 +36,7 @@ import CharacterMapPanel from "@/components/reader/CharacterMapPanel";
 import { useTranslation } from "@/hooks/useTranslation";
 import ChapterNavigation from "@/components/reader/ChapterNavigation";
 import PronunciationHelper from "@/components/reader/PronunciationHelper";
+import { useToast } from "@/components/ui/use-toast";
 
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ const AdaptiveReader = () => {
     const navigate = useNavigate();
     const { id } = useParams();
     const { user, profile, dyslexicMode } = useAuth();
+    const { toast } = useToast();
 
     // Reader state
     const [isPlaying, setIsPlaying] = useState(false);
@@ -110,9 +112,13 @@ const AdaptiveReader = () => {
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
     const [allQuizzes, setAllQuizzes] = useState<any[]>([]);
     const [showQuizPrompt, setShowQuizPrompt] = useState(false);
+    const [timeInChapter, setTimeInChapter] = useState(0); // seconds
+    const [lastSyncTime, setLastSyncTime] = useState(Date.now());
+    const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
     const [contentType, setContentType] = useState<"play" | "novel" | "poem" | "generic">("generic");
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [idToken, setIdToken] = useState<string | null>(null);
+    const [progress, setProgress] = useState<any>(null);
 
     // Book Brain + Comprehension Graph state
     const [bookBrain, setBookBrain] = useState<any>(null);
@@ -137,6 +143,7 @@ const AdaptiveReader = () => {
 
     // ADHD breathing break + cliffhanger teaser state (Phase 3)
     const [completedSections, setCompletedSections] = useState<Set<number>>(new Set());
+    const [quizzes, setQuizzes] = useState<any[]>([]);
     const [breathingBreak, setBreathingBreak] = useState(false);
     const [breathPhase, setBreathPhase] = useState<"inhale" | "hold" | "exhale">("inhale");
     const [cliffhangerTeaser, setCliffhangerTeaser] = useState<string | null>(null);
@@ -161,6 +168,9 @@ const AdaptiveReader = () => {
     // TTS
     const [activeWordIndex, setActiveWordIndex] = useState(-1);
     const [, setCurrentTime] = useState(0);
+    const [audioUrl, setAudioUrl] = useState<string | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [isSynthesizing, setIsSynthesizing] = useState(false);
     const ttsRef = useRef<SpeechSynthesisUtterance | null>(null);
 
     const totalSections = sections.length;
@@ -296,12 +306,21 @@ const AdaptiveReader = () => {
                         );
                         if (progressRes.ok) {
                             const pd = await progressRes.json();
+                            setProgress(pd);
                             if (pd?.currentSection !== undefined) {
                                 setCurrentSectionIndex(pd.currentSection);
                             }
                             if (pd?.completedSections) {
                                 setCompletedSections(new Set(pd.completedSections));
                             }
+                        }
+                        
+                        // Fetch quizzes to check for gate
+                        const quizRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/quiz/${id}`, {
+                            headers: { Authorization: `Bearer ${idToken}` }
+                        });
+                        if (quizRes.ok) {
+                            setQuizzes(await quizRes.json());
                         }
                     } catch { /* offline */ }
                 }
@@ -314,20 +333,124 @@ const AdaptiveReader = () => {
         fetchLesson();
     }, [id, user]);
 
-    // ── TTS auto-play ──────────────────────────────────────────────────────────
+    // ── AI Powered TTS (Edge-TTS) ──────────────────────────────────────────
     useEffect(() => {
-        if (!isPlaying) return;
-        if (!window.speechSynthesis) return;
+        const fetchAudio = async () => {
+            if (!isPlaying || currentChunkIndex !== 0) return; // Only fetch at start of section
+            if (audioUrl) return; // Already fetched
+            
+            setIsSynthesizing(true);
+            try {
+                const response = await fetch(`${AI_URL}/tts/synthesize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: displayText,
+                        language: lesson?.language || "english",
+                        disability_type: user?.disabilityType || "none"
+                    })
+                });
+                
+                if (!response.ok) throw new Error("Synthesis failed");
+                const data = await response.json();
+                const blob = await (await fetch(`data:audio/mp3;base64,${data.audio_base64}`)).blob();
+                const url = URL.createObjectURL(blob);
+                setAudioUrl(url);
+            } catch (err) {
+                console.warn("AI TTS failed, falling back to local:", err);
+            } finally {
+                setIsSynthesizing(false);
+            }
+        };
 
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(displayText);
-        utter.rate = 0.9;
-        utter.onend = () => setIsPlaying(false);
+        if (isPlaying && !audioUrl && !isSynthesizing) {
+            fetchAudio();
+        }
+    }, [isPlaying, displayText, audioUrl]);
+
+    useEffect(() => {
+        if (!isPlaying) {
+            audioRef.current?.pause();
+            return;
+        }
+
+        if (audioUrl) {
+            if (!audioRef.current) {
+                audioRef.current = new Audio(audioUrl);
+                audioRef.current.onended = () => setIsPlaying(false);
+            } else if (audioRef.current.src !== audioUrl) {
+                audioRef.current.src = audioUrl;
+            }
+            audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+        }
+    }, [isPlaying, audioUrl]);
+
+    // Cleanup audio
+    useEffect(() => {
+        return () => {
+            if (audioUrl) URL.revokeObjectURL(audioUrl);
+            audioRef.current?.pause();
+        };
+    }, [audioUrl]);
+
+    const ttsChunks = useMemo(() => {
+        if (!displayText) return [];
+        // Split by sentences (dot, exclamation, question mark followed by space)
+        return displayText.match(/[^\.!\?]+[\.!\?]+/g) || [displayText];
+    }, [displayText]);
+
+    // Local TTS Fallback (Chunked)
+    useEffect(() => {
+        // Skip local TTS if AI audio is available
+        if (audioUrl) return;
+        
+        if (!isPlaying || !window.speechSynthesis || ttsChunks.length === 0) {
+            window.speechSynthesis?.cancel();
+            return;
+        }
+
+        if (currentChunkIndex >= ttsChunks.length) {
+            setIsPlaying(false);
+            setCurrentChunkIndex(0);
+            return;
+        }
+
+        const utter = new SpeechSynthesisUtterance(ttsChunks[currentChunkIndex]);
+        utter.rate = 0.95;
+        const interval = setInterval(() => {
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.pause();
+                window.speechSynthesis.resume();
+            }
+        }, 10000);
+
+        utter.onend = () => {
+            clearInterval(interval);
+            setCurrentChunkIndex(prev => prev + 1);
+        };
+
+        utter.onerror = (e) => {
+            console.error("Local TTS Error:", e);
+            clearInterval(interval);
+            setIsPlaying(false);
+        };
+
         ttsRef.current = utter;
         window.speechSynthesis.speak(utter);
 
-        return () => window.speechSynthesis.cancel();
-    }, [isPlaying, displayText]);
+        return () => clearInterval(interval);
+    }, [isPlaying, currentChunkIndex, ttsChunks, audioUrl]);
+
+    // Reset when changing section
+    useEffect(() => {
+        setCurrentChunkIndex(0);
+        setAudioUrl(null);
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+        }
+        window.speechSynthesis?.cancel();
+    }, [currentSectionIndex]);
 
     // ── Mock word highlight timer (for generic mode) ──────────────────────────
     useEffect(() => {
@@ -457,6 +580,34 @@ const AdaptiveReader = () => {
             }
         }, 4000);
     }, []);
+
+    // Time tracking effect
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (!focusMode) {
+                setTimeInChapter(prev => prev + 1);
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [focusMode]);
+
+    // Periodic sync with AI service for live progress
+    useEffect(() => {
+        if (timeInChapter > 0 && timeInChapter % 30 === 0 && user && id) {
+            fetch(`${import.meta.env.VITE_AI_URL || "http://localhost:8082"}/comprehension/record`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    student_id: user.uid,
+                    book_id: id,
+                    section_id: String(currentSectionIndex),
+                    section_title: sections[currentSectionIndex]?.title || `Chapter ${currentSectionIndex + 1}`,
+                    time_spent_s: 30,
+                    section_text: displayText.slice(0, 1000),
+                }),
+            }).catch(() => { });
+        }
+    }, [timeInChapter, user, id, currentSectionIndex, sections, displayText]);
 
     const handleNextSection = useCallback(() => {
         const sectionWords = currentSection.wordCount ?? words.length;
@@ -1213,6 +1364,22 @@ const AdaptiveReader = () => {
                                 variant={completedSections.has(currentSectionIndex) ? "secondary" : "outline"}
                                 className={`rounded-full px-6 font-black transition-all ${completedSections.has(currentSectionIndex) ? "text-emerald-500 border-emerald-500/30" : "hover:border-primary/50"}`}
                                 onClick={async () => {
+                                    // 1. Check Quiz-Gate: Must have passed any quiz belonging to this or past chapters
+                                    // A quiz for "Chapters 1-3" (chunk 1) must be passed before marking Ch 3 complete.
+                                    const currentChunk = Math.floor(currentSectionIndex / 3); // 0-based chunk for gate check
+                                    if (currentChunk > 0) {
+                                        // If we are in chunk 1 (Ch 4-6), we must have passed chunk 0 (Ch 1-3)
+                                        const prevChunkScore = progress?.quizScores?.[currentChunk];
+                                        if (!prevChunkScore || !prevChunkScore.passed) {
+                                            toast({
+                                                title: "Quiz Required",
+                                                description: `Please pass Quiz ${currentChunk} before completing this chapter.`,
+                                                variant: "destructive",
+                                            });
+                                            return;
+                                        }
+                                    }
+
                                     const newSet = new Set(completedSections);
                                     newSet.add(currentSectionIndex);
                                     setCompletedSections(newSet);
@@ -1229,6 +1396,20 @@ const AdaptiveReader = () => {
                                             body: JSON.stringify({
                                                 completionRate: rate,
                                                 status: rate === 1 ? "completed" : "active",
+                                            }),
+                                        }).catch(() => { });
+                                        
+                                        // Update AI service comprehension tracker correctly
+                                        fetch(`${import.meta.env.VITE_AI_URL || "http://localhost:8082"}/comprehension/record`, {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({
+                                                student_id: user?.uid,
+                                                book_id: id,
+                                                section_id: String(currentSectionIndex),
+                                                section_title: sections[currentSectionIndex]?.title || `Chapter ${currentSectionIndex + 1}`,
+                                                time_spent_s: 60, // estimate or actual tracked time
+                                                section_text: displayText.slice(0, 2000),
                                             }),
                                         }).catch(() => { });
                                     }
@@ -1266,7 +1447,10 @@ const AdaptiveReader = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <Button className="rounded-xl font-black h-12 bg-white text-accent hover:bg-white/90 shadow-lg" onClick={() => navigate(`/student/quiz/${id}`)}>Let's Go!</Button>
+                                <Button className="rounded-xl font-black h-12 bg-white text-accent hover:bg-white/90 shadow-lg" onClick={() => {
+                                    const chunk = Math.floor(currentSectionIndex / 3);
+                                    navigate(`/student/quiz/${id}?chunk=${chunk}`);
+                                }}>Let's Go!</Button>
                                 <Button variant="ghost" className="rounded-xl font-bold h-12 text-white hover:bg-white/10" onClick={() => setShowQuizPrompt(false)}>Later</Button>
                             </div>
                         </motion.div>

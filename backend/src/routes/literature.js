@@ -85,16 +85,34 @@ router.post('/upload', authenticateToken, upload.fields([
     // Background: generate quizzes via local question generator
     setImmediate(async () => {
       try {
-        console.log(`🧩 Background quiz generation for: ${literature.title}`);
-        const count = await generateQuestions(literature.id, originalContent, {
-          count: 10,
-          docType: finalContentType,
-          language: aiDetectedLanguage === 'french' ? 'fr' : 'en',
-        });
-        await literature.update({ questionsGenerated: count });
-        console.log(`✅ Quiz generation done: ${count} questions`);
+        console.log(`🧩 Background periodic quiz generation for: ${literature.title}`);
+        let totalCount = 0;
+        const chunkSize = 3;
+        
+        // Group sections into chunks of 3
+        for (let i = 0; i < finalSections.length; i += chunkSize) {
+          const chunk = finalSections.slice(i, i + chunkSize);
+          const chunkContent = chunk.map(s => s.content).join('\n\n');
+          const quizNumber = Math.floor(i / chunkSize) + 1;
+          const rangeLabel = `Chapters ${i + 1}-${Math.min(i + chunkSize, finalSections.length)}`;
+          const chapterTitle = `Quiz ${quizNumber}: ${rangeLabel}`;
+
+          console.log(`   - Generating ${chapterTitle}`);
+          
+          const count = await generateQuestions(literature.id, chunkContent, {
+            count: 5, // 5 questions per chunk
+            docType: finalContentType,
+            language: aiDetectedLanguage === 'french' ? 'fr' : 'en',
+            chunkIndex: quizNumber,
+            chapterTitle: chapterTitle
+          });
+          totalCount += count;
+        }
+
+        await literature.update({ questionsGenerated: totalCount });
+        console.log(`✅ Periodic quiz generation done: ${totalCount} questions across ${Math.ceil(finalSections.length / chunkSize)} chunks`);
       } catch (err) {
-        console.warn(`⚠️ Background quiz generation failed: ${err.message}`);
+        console.warn(`⚠️ Background periodic quiz generation failed: ${err.message}`);
       }
     });
 

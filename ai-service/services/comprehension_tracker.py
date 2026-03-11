@@ -118,7 +118,7 @@ class ComprehensionTracker:
         summary = tracker.get_summary("student_123", "book_456")
     """
 
-    def __init__(self, storage_dir: str = "/tmp/included_comprehension"):
+    def __init__(self, storage_dir: str = "data/comprehension"):
         self.storage_dir = storage_dir
         os.makedirs(storage_dir, exist_ok=True)
         self._cache: Dict[str, ComprehensionGraph] = {}

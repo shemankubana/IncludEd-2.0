@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Trophy, ArrowRight, CheckCircle2, XCircle, Star, Sparkles, Loader2, ArrowLeft } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE } from "@/lib/api";
 
@@ -27,6 +27,8 @@ const BADGE_THRESHOLDS = [
 const ComprehensionQuiz = () => {
     const navigate = useNavigate();
     const { id } = useParams();
+    const [searchParams] = useSearchParams();
+    const chunkParam = searchParams.get("chunk");
     const { user } = useAuth();
 
     const [currentStep,    setCurrentStep]    = useState(0);
@@ -49,10 +51,15 @@ const ComprehensionQuiz = () => {
                     headers: { Authorization: `Bearer ${idToken}` },
                 });
                 if (!response.ok) throw new Error("Failed to fetch questions");
-                const data = await response.json();
+                const allQuestions = await response.json();
+
+                // Filter by chunk if parameter provided
+                const filtered = chunkParam 
+                    ? allQuestions.filter((q: any) => q.chunkIndex === parseInt(chunkParam) + 1)
+                    : allQuestions;
 
                 // Map questions: store the correct text BEFORE shuffling
-                const prepared: QuizQuestion[] = data.map((q: any) => {
+                const prepared: QuizQuestion[] = filtered.map((q: any) => {
                     const parsedOptions: string[] =
                         typeof q.options === "string" ? JSON.parse(q.options) : [...q.options];
                     const correctText = parsedOptions[q.correctAnswer] ?? parsedOptions[0];
@@ -118,12 +125,26 @@ const ComprehensionQuiz = () => {
         if (user && id) {
             try {
                 const idToken = await user.getIdToken();
-                // Mark lesson complete + award XP
-                await fetch(`${API_BASE}/api/progress/${id}/complete`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-                    body: JSON.stringify({ score: finalScore, total: quizData.length, badge: badge?.badge }),
-                });
+                
+                if (chunkParam !== null) {
+                    // Record score for this specific periodic quiz chunk
+                    await fetch(`${API_BASE}/api/progress/${id}/quiz`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                        body: JSON.stringify({ 
+                            chunkIndex: parseInt(chunkParam), 
+                            score: finalScore, 
+                            total: quizData.length,
+                        }),
+                    });
+                } else {
+                    // Whole book completion (legacy or final)
+                    await fetch(`${API_BASE}/api/progress/${id}/complete`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                        body: JSON.stringify({ score: finalScore, total: quizData.length, badge: badge?.badge }),
+                    });
+                }
             } catch { /* non-critical */ }
         }
 

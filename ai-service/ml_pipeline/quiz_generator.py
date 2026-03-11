@@ -73,22 +73,30 @@ class PedagogicalQuestionGenerator:
         text_sample = content[:4000]
 
         # ── Tier 1: Gemini (Primary) ────────────────────────────────────────────
+        print(f"DEBUG: Tier 1 (Gemini) - Generating {count} {language} questions for {doc_type}")
         if self._gemini.is_available():
             questions = self._generate_gemini(text_sample, doc_type, count, language)
             if questions:
+                print(f"DEBUG: Tier 1 (Gemini) success - {len(questions)} questions")
                 return questions[:count]
+        print("DEBUG: Tier 1 (Gemini) unavailable or failed")
 
         # ── Tier 2: HF Inference (Serverless) ───────────────────────────────
+        print(f"DEBUG: Tier 2 (HF Inference) - Generating {count} questions")
         if os.getenv("USE_HF_INFERENCE") == "1" and _hf_inference.api_token:
             try:
                 # We can use the dedicated generate_quiz method
                 questions = _hf_inference.generate_quiz(text_sample, count)
                 if questions and isinstance(questions, list):
+                    print(f"DEBUG: Tier 2 (HF Inference) success - {len(questions)} questions")
                     return [self._normalise_question(q) for q in questions]
-            except Exception:
+            except Exception as e:
+                print(f"DEBUG: Tier 2 (HF Inference) error: {e}")
                 pass
+        print("DEBUG: Tier 2 (HF Inference) skipped or failed")
 
         # ── Tier 3: Content-aware templates ───────────────────────────────────
+        print(f"DEBUG: Tier 3 (Templates) - Generating {count} questions")
         return self._get_templates(text_sample, doc_type, count, language)
 
     def generate_for_unit(

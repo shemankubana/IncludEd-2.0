@@ -51,24 +51,25 @@ class HFInferenceService:
             print(f"❌ Heading detection failed: {e}")
             return False
 
-    def generate_quiz(self, context: str, num_questions: int = 3) -> List[Dict[str, Any]]:
-        """Use an LLM to generate comprehension questions."""
-        if not self.api_token: return []
-        
+        print(f"DEBUG: HFInference - Generating {num_questions} quiz questions")
         prompt = f"Based on this text, generate {num_questions} multiple-choice comprehension questions for children. Respond ONLY with a valid JSON list of objects, each containing 'question' (string), 'options' (list of 4 strings), 'correctAnswer' (index 0-3), and 'explanation' (string).\n\nTEXT: {context[:1500]}"
         try:
+            start_time = time.time()
             response = self.client.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 model=self.models["quiz_generation"],
                 max_tokens=1000,
             )
+            print(f"DEBUG: HFInference - Request took {time.time() - start_time:.2f}s")
             text = response.choices[0].message.content.strip()
             # Basic JSON extraction if there's markdown fluff
             if "```json" in text:
                 text = text.split("```json")[1].split("```")[0].strip()
             elif "[" in text and "]" in text:
                 text = text[text.find("["):text.rfind("]")+1]
-            return json.loads(text)
+            result = json.loads(text)
+            print(f"DEBUG: HFInference - Successfully parsed {len(result)} questions")
+            return result
         except Exception as e:
             print(f"❌ Quiz generation failed: {e}")
             return []

@@ -41,15 +41,18 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
         const totalSessions = await Session.count({ where: whereSession });
         const completedSessions = await Session.count({ where: { ...whereSession, status: 'completed' } });
 
-        // Avg stats across completed sessions
+        // Avg stats across active and completed sessions to show real-time progress
         const scoreResult = await Session.findOne({
             attributes: [
-                [sequelize.fn('AVG', sequelize.col('quizScore')), 'avgQuiz'],
+                [sequelize.fn('AVG', sequelize.fn('COALESCE', sequelize.col('quizScore'), 0)), 'avgQuiz'],
                 [sequelize.fn('AVG', sequelize.col('avgAttentionScore')), 'avgAttention'],
                 [sequelize.fn('AVG', sequelize.col('completionRate')), 'avgCompletion'],
-                [sequelize.fn('COUNT', sequelize.col('id')), 'totalLessons'],
+                [sequelize.fn('COUNT', sequelize.literal('DISTINCT "literatureId"')), 'lessonsUsed'],
             ],
-            where: { ...whereSession, status: 'completed' },
+            where: { 
+                ...whereSession, 
+                status: { [Op.in]: ['active', 'completed'] } 
+            },
             raw: true,
         });
 
@@ -58,10 +61,13 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
             attributes: [
                 'disabilityType',
                 [sequelize.fn('COUNT', sequelize.col('id')), 'sessionCount'],
-                [sequelize.fn('AVG', sequelize.col('quizScore')), 'avgQuiz'],
+                [sequelize.fn('AVG', sequelize.fn('COALESCE', sequelize.col('quizScore'), 0)), 'avgQuiz'],
                 [sequelize.fn('AVG', sequelize.col('avgAttentionScore')), 'avgAttention'],
             ],
-            where: { ...whereSession, status: 'completed' },
+            where: { 
+                ...whereSession, 
+                status: { [Op.in]: ['active', 'completed'] } 
+            },
             group: ['disabilityType'],
             raw: true,
         });
@@ -114,7 +120,7 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
                 avgQuizScore: parseFloat(scoreResult?.avgQuiz || 0).toFixed(3),
                 avgAttention: parseFloat(scoreResult?.avgAttention || 0).toFixed(3),
                 avgCompletion: parseFloat(scoreResult?.avgCompletion || 0).toFixed(3),
-                totalLessons: parseInt(scoreResult?.totalLessons || 0),
+                totalLessons: parseInt(scoreResult?.lessonsUsed || 0), // This maps to "Lessons Used" card
             },
             byDisabilityType: byDisability.map(d => ({
                 disabilityType: d.disabilityType,

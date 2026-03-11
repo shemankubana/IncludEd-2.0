@@ -47,6 +47,12 @@ export const LessonProgress = sequelize.define('LessonProgress', {
         type: DataTypes.INTEGER,
         allowNull: true,
         validate: { min: 1, max: 5 }
+    },
+    // Track scores for periodic quizzes (Quiz 1, Quiz 2, etc.)
+    quizScores: {
+        type: DataTypes.JSON,
+        defaultValue: {},
+        comment: 'Map of chunkIndex (as string) to quiz score {score, total, passed}'
     }
 }, {
     indexes: [
