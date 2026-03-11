@@ -81,15 +81,20 @@ router.put('/mine', authenticateToken, upload.single('logo'), async (req, res) =
 // POST /api/schools/invite — "Send" an invitation (returns the link for now)
 router.post('/invite', authenticateToken, async (req, res) => {
     try {
-        const { email } = req.body;
+        const { email, role = 'student' } = req.body;
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
         const user = await User.findByPk(req.user.userId);
         if (!user?.schoolId) return res.status(403).json({ error: 'No school associated with your account' });
 
+        // Only admins can invite teachers
+        if (role === 'teacher' && user.role !== 'admin') {
+            return res.status(403).json({ error: 'Only admins can invite teachers' });
+        }
+
         const school = await School.findByPk(user.schoolId);
 
-        const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:8080'}/auth?code=${school.code}&role=student`;
+        const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:8080'}/auth?code=${school.code}&role=${role}`;
 
         try {
             await sendStudentInvite({
@@ -97,17 +102,19 @@ router.post('/invite', authenticateToken, async (req, res) => {
                 teacherName: `${user.firstName} ${user.lastName}`,
                 schoolName: school.name,
                 schoolCode: school.code,
+                role: role // Pass role to email service if supported
             });
-            console.log(`✉️ Student invite sent to ${email}`);
+            console.log(`✉️ ${role} invite sent to ${email}`);
         } catch (emailErr) {
             console.warn(`⚠️ Email failed (link still valid): ${emailErr.message}`);
         }
 
         res.json({
-            message: `Invitation sent to ${email}`,
+            message: `Invitation for ${role} sent to ${email}`,
             link: inviteLink,
             schoolName: school.name,
-            code: school.code
+            code: school.code,
+            role
         });
     } catch (error) {
         res.status(500).json({ error: error.message });

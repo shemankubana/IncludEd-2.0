@@ -37,6 +37,13 @@ interface SimplificationResult {
     }>;
     cultural_context: string | null;
     kinyarwanda_bridge: string | null;
+    phonics?: {
+        word: string;
+        syllables: string[];
+        phonics: string[];
+        display: string;
+        pronunciation: string;
+    } | null;
     tier: "gemini" | "flan_t5" | "rule_based";
 }
 
@@ -283,33 +290,62 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
             ) : result ? (
                 <>
                     {/* Simple version — always first */}
-                    <div className="highlight-popup__simple p-4 bg-primary/10 rounded-xl border border-primary/20 mb-3 shadow-inner">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Sparkles size={16} className="text-primary animate-pulse" />
-                            <span className="text-[10px] font-bold text-primary tracking-widest uppercase">Simple Meaning</span>
+                    <div className="highlight-popup__content-main">
+                        <div className="highlight-popup__simple p-4 bg-primary/10 rounded-xl border border-primary/20 mb-3 shadow-inner">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Sparkles size={16} className="text-primary animate-pulse" />
+                                <span className="text-[10px] font-bold text-primary tracking-widest uppercase">Simple Meaning</span>
+                            </div>
+                            <p className="text-sm font-semibold leading-relaxed text-blue-900">
+                                {result.simple_version}
+                            </p>
                         </div>
-                        <p className="text-sm font-semibold leading-relaxed text-blue-900">
-                            {result.simple_version}
-                        </p>
 
                         {/* Vocabulary — pulled out for instant visibility */}
                         {result.vocabulary && result.vocabulary.length > 0 && (
-                            <div className="highlight-popup__vocab-inline mt-3 pt-3 border-t border-primary/10">
+                            <div className="highlight-popup__vocab-inline px-4 pb-2">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <BookOpen size={14} className="text-blue-600" />
+                                    <span className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">Key Words</span>
+                                </div>
                                 {result.vocabulary.slice(0, 2).map((v, i) => (
-                                    <div key={i} className="mb-2 last:mb-0">
-                                        <div className={`text-[10px] font-bold uppercase tracking-tighter mb-0.5 ${(v.category?.toLowerCase() === 'archaic' || v.type === 'archaic') ? 'text-purple-700' : 'text-blue-700'
+                                    <div key={i} className="mb-3 last:mb-0 p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                        <div className={`text-[10px] font-bold uppercase tracking-tighter mb-1 ${(v.category?.toLowerCase() === 'archaic' || v.type === 'archaic') ? 'text-purple-700' : 'text-blue-700'
                                             }`}>
-                                            {v.category || (v.type === 'archaic' ? 'Archaic' : 'Word help')}: {v.word}
+                                            {v.category || (v.type === 'archaic' ? 'Archaic' : 'Word help')}: <span className="text-sm">{v.word}</span>
                                         </div>
-                                        <div className="text-xs text-blue-800">
+                                        <div className="text-xs text-blue-800 leading-normal">
                                             <strong>{v.meaning}</strong>
-                                            {v.analogy && <span className="text-[10px] opacity-70 italic block mt-0.5">Tip: {v.analogy}</span>}
+                                            {v.analogy && (
+                                                <div className="mt-1.5 pt-1 border-t border-blue-200/50">
+                                                    <span className="text-[10px] opacity-80 italic block">
+                                                        <Lightbulb size={10} className="inline mr-1" />
+                                                        {v.analogy}
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
+
+                    {/* Phonics Breakdown (Project Revamp) */}
+                    {result.phonics && (
+                        <div className="highlight-popup__phonics px-4 py-3 bg-blue-50/50 border border-blue-100 rounded-xl mb-3">
+                            <div className="flex items-center justify-between mb-1">
+                                <div className="flex flex-col">
+                                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">How to say it</span>
+                                    <span className="text-sm font-black text-blue-900">{result.phonics.display}</span>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Sounds like</span>
+                                    <span className="text-sm font-black text-primary block">{result.phonics.pronunciation}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Toggle for more details (intent, devices, culture) */}
                     <button

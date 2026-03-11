@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8082';
 
 /**
  * Service to generate AI-driven insights for teachers using Gemini.

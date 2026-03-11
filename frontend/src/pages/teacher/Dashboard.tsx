@@ -50,7 +50,7 @@ const TeacherDashboard = () => {
     }>({ summaries: [], alerts: [], recommendations: {}, loading: false });
     const { toast } = useToast();
 
-    const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
+    const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
 
     useEffect(() => {
         const fetchAnalytics = async () => {
@@ -73,13 +73,14 @@ const TeacherDashboard = () => {
                     { label: "Lessons Used", value: data.overview?.totalLessons || "0", icon: <FileText className="w-5 h-5" />, trend: "Activity" },
                 ]);
 
-                // Fetching student roster from the backend response
-                if (data.recentSessions) {
-                    setStudents(data.recentSessions.map((s: any) => ({
-                        name: s.student ? `${s.student.firstName} ${s.student.lastName}` : "Unknown Student",
-                        lastActive: s.endedAt ? "Completed" : "Active",
-                        progress: Math.round(s.quizScore * 100 || 0),
-                        status: s.quizScore > 0.7 ? "Mastered" : "On Track",
+                // Fetching student roster from the backend response (unique students)
+                if (data.students) {
+                    setStudents(data.students.map((s: any) => ({
+                        id: s.id,
+                        name: s.name,
+                        lastActive: s.lastActive === 'Never' ? 'Never' : (s.lastActive === 'Active' ? 'Active' : s.lastActive),
+                        progress: s.progress,
+                        status: s.status,
                         color: "bg-primary"
                     })));
                 }

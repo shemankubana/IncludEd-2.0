@@ -73,7 +73,7 @@ teacher_intelligence  = TeacherIntelligence()
 stt_assessment        = STTAssessmentService()
 word_difficulty       = WordDifficultyService()
 ner_extractor         = get_ner_extractor()
-vocab_analyzer        = get_vocab_analyzer(gemini_service=None)   # gemini injected after init
+vocab_analyzer        = get_vocab_analyzer(gemini_service=gemini_service)
 difficulty_adapter    = get_difficulty_adapter()
 tts_svc               = get_tts_service()
 hf_inference          = HFInferenceService(os.getenv("HF_API_TOKEN"))
@@ -908,9 +908,7 @@ async def teacher_insights(req: Dict[str, Any]):
     if not analytics_data:
         return {"insights": "No data available to generate insights."}
         
-    from services.gemini_service import GeminiService
-    gemini = GeminiService()
-    if not gemini.is_available():
+    if not gemini_service.is_available():
         return {"insights": "Gemini AI service is not configured. Please check API keys."}
         
     prompt = f"""You are an expert special education teacher. Analyze the following student platform data and provide actionable teaching insights, specifically focusing on ADHD and Dyslexia.
@@ -924,10 +922,8 @@ Format your response as a professional, encouraging report. Include:
 Keep it strictly under 250 words."""
 
     try:
-        # Use synchronous generate wrapped in to_thread, or if it's async (depends on GeminiService)
-        # Assuming generate is synchronous as in other places
         import asyncio
-        insights = await asyncio.to_thread(gemini.generate, prompt)
+        insights = await asyncio.to_thread(gemini_service.generate, prompt)
         return {"insights": insights}
     except Exception as e:
         print(f"Error generating insights: {e}")
@@ -1067,6 +1063,12 @@ class VocabSectionRequest(BaseModel):
     max_display:     int = 20
 
 
+class VocabIdentifyRequest(BaseModel):
+    text:            str
+    language:        str = "en"
+    max_words:       int = 8
+
+
 @app.post("/vocab/batch-analyze", tags=["vocabulary"])
 async def vocab_batch_analyze(req: VocabBatchRequest):
     """
@@ -1074,8 +1076,7 @@ async def vocab_batch_analyze(req: VocabBatchRequest):
     Stored in Literature.bookBrain.vocabulary at upload time.
     Returns a flat list of word dicts (see vocab_analyzer.py schema).
     """
-    # Inject gemini into analyzer if available
-    vocab_analyzer._gemini = gemini_service if gemini_service.is_available() else None
+    # Analyzer already initialized with gemini_service in v4.0 main.py
     words = await asyncio.to_thread(
         vocab_analyzer.analyze_book,
         req.sections,
@@ -1098,6 +1099,42 @@ async def vocab_section_words(req: VocabSectionRequest):
         req.max_display,
     )
     return {"words": words, "count": len(words)}
+
+
+@app.post("/vocab/identify", tags=["vocabulary"])
+async def vocab_identify(req: VocabIdentifyRequest):
+    """
+    Identify hard words in a text snippet and provide child-friendly 
+    definitions + analogies (proactive mode).
+    """
+    from ml_pipeline.vocab_analyzer import get_vocab_analyzer
+    
+    # Use analyzer with Gemini if possible
+    analyzer = get_vocab_analyzer(gemini_service=gemini_service if gemini_service.is_available() else None)
+    
+    # 1. Identify hard words using WordDifficultyService (wrapped in analyzer)
+    # We use a slightly lower threshold for proactive suggestions to catch more "stretch" words
+    words = await asyncio.to_thread(
+        analyzer._difficulty_svc.analyze_passage,
+        req.text,
+        difficulty_threshold=0.45
+    )
+    
+    # 2. Slice to requested limit
+    words = words[:req.max_words]
+    
+    # 3. Enrich with Gemini analogies for each
+    results = []
+    for w in words:
+        enriched = await asyncio.to_thread(
+            analyzer.explain_word,
+            w["word"],
+            w["context"],
+            0 # chapter index placeholder
+        )
+        results.append(enriched)
+
+    return {"words": results, "count": len(results)}
 
 
 # ── TTS with word-level sync ──────────────────────────────────────────────────

@@ -658,14 +658,15 @@
    ══════════════════════════════════════════════════════════════════════════════ */
 
 .highlight-popup {
-  width: 360px;
+  width: 420px;
   max-width: calc(100vw - 32px);
   background: hsl(var(--card));
   border: 1.5px solid hsl(var(--border));
-  border-radius: 1rem;
-  box-shadow: 0 8px 32px hsl(var(--foreground) / 0.12);
+  border-radius: 1.25rem;
+  box-shadow: 0 12px 48px hsl(var(--foreground) / 0.15);
   padding: 1rem;
   animation: fadeSlideIn 0.2s ease;
+  overflow: hidden;
 }
 
 .highlight-popup__close {
@@ -695,10 +696,8 @@
 }
 
 .highlight-popup__simple {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-start;
-  padding: 0.5rem 0;
+  padding: 0;
+  margin-bottom: 0.75rem;
 }
 
 .highlight-popup__simple svg {
@@ -708,7 +707,7 @@
 }
 
 .highlight-popup__simple p {
-  font-size: 0.95rem;
+  font-size: 1rem;
   line-height: 1.6;
   color: hsl(var(--foreground));
   margin: 0;
@@ -768,9 +767,9 @@
 }
 
 .highlight-popup__vocab-inline {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid hsl(var(--primary) / 0.1);
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid hsl(var(--border));
 }
 
 .highlight-popup__vocab-inline strong {
@@ -2138,4 +2137,31 @@
   color: hsl(var(--muted-foreground));
   font-style: italic;
   padding: 2rem;
+}
+
+/* ── Vocab Helper Sidebar ─────────────────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+.vocab-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  background: hsl(var(--card));
+}
+
+.vocab-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }

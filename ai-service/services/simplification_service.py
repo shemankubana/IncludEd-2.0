@@ -23,7 +23,10 @@ from typing import Any, Dict, List, Optional
 from services.gemini_service import GeminiService
 import os
 from services.hf_inference_service import HFInferenceService
+from services.pronunciation_service import PronunciationService
+
 _hf_inference = HFInferenceService(os.getenv("HF_API_TOKEN"))
+_pronunciation = PronunciationService()
 
 
 # ── Literary device detection ─────────────────────────────────────────────────
@@ -167,9 +170,16 @@ class SimplificationService:
                 "vocabulary": [{word, meaning, analogy}],
                 "literary_devices": [{device, explanation}],
                 "cultural_context": str | None,
+                "phonics": Dict[str, Any] | None,
                 "tier": "gemini" | "rule_based",
             }
         """
+        # --- Phonics Enhancement (Project Revamp) ---
+        phonics_data = None
+        clean_text = highlighted_text.strip(".,!?;:\"' ").lower()
+        if " " not in clean_text and len(clean_text) > 1:
+            phonics_data = _pronunciation.get_phonics_breakdown(highlighted_text)
+
         # Primary: Gemini Cloud LLM
         if self.gemini.is_available():
             try:
@@ -194,6 +204,20 @@ class SimplificationService:
                     result["literary_devices"] = self._detect_devices(highlighted_text)
                     if not result.get("kinyarwanda_bridge"):
                         result["kinyarwanda_bridge"] = _get_kinyarwanda_bridge(highlighted_text)
+                    
+                    # Better Pronunciation (Gemini Upgrade)
+                    gem_phonics = result.get("phonics_guide")
+                    if gem_phonics and isinstance(gem_phonics, dict) and gem_phonics.get("syllables"):
+                        result["phonics"] = {
+                            "word": highlighted_text,
+                            "syllables": gem_phonics.get("syllables"),
+                            "phonics": gem_phonics.get("syllables"),
+                            "display": " · ".join(gem_phonics.get("syllables")),
+                            "pronunciation": gem_phonics.get("pronunciation")
+                        }
+                    else:
+                        result["phonics"] = phonics_data
+
                     return result
             except Exception as e:
                 print(f"Gemini simplification failed: {e}")
@@ -212,6 +236,7 @@ class SimplificationService:
                         result["kinyarwanda_bridge"] = _get_kinyarwanda_bridge(highlighted_text)
                     # Merge with local literary device detection
                     result["literary_devices"] = self._detect_devices(highlighted_text)
+                    result["phonics"] = phonics_data
                     return result
             except Exception as e:
                 print(f"HF Inference simplification failed: {e}")
@@ -219,7 +244,7 @@ class SimplificationService:
         # Fallback: Rule-based (always works)
         return self._simplify_rule_based(
             highlighted_text, book_title, author, doc_type,
-            speaker, reading_level, language,
+            speaker, reading_level, language, phonics_data,
         )
 
     def _simplify_gemini(
@@ -243,7 +268,7 @@ class SimplificationService:
         speaker_ctx = f' spoken by the character "{speaker}"' if speaker else ""
         book_ctx = f' from "{book_title}" by {author}' if book_title else ""
 
-        system_instruction = f"You are an expert pedagogical AI specializing in simplifying literature for {level_desc}. You focus on clarity, cultural relevance (Rwanda), and preserving the author's emotional resonance."
+        system_instruction = f"You are an expert pedagogical AI specializing in simplifying literature for {level_desc}. You focus on clarity, cultural relevance (Rwanda), and preserving the author's emotional resonance. You provide extremely simple, visual explanations for difficult words, often using metaphors a child can understand."
 
         if language == "fr":
             prompt = f"""Analyse ce passage{book_ctx}{speaker_ctx}:
@@ -260,8 +285,12 @@ Réponds en JSON avec exactement ces clés:
   "kinyarwanda_bridge": "Analogie culturelle rwandaise — compare avec un concept rwandais (imigabane, umuganda, icyubahiro, etc.)",
   "vocabulary": [
     {{"word": "string", "meaning": "définition simple pour un enfant", "analogy": "comparaison simple", "category": "ex: Archaïque, Vocabulaire, Métaphore"}}
-  ]
-}}"""
+  ],
+  "phonics_guide": {{
+    "syllables": ["syl", "la", "be"],
+    "pronunciation": "pro-non-cia-cion"
+  }}
+}} (phonics_guide uniquement pour un seul mot, sinon null)"""
         else:
             prompt = f"""Analyze this passage{book_ctx}{speaker_ctx}:
 
@@ -277,8 +306,12 @@ Respond in JSON with exactly these keys:
   "kinyarwanda_bridge": "Rwanda cultural connection — compare to umuganda, gacaca, icyubahiro, or another Rwandan concept",
   "vocabulary": [
     {{"word": "string", "meaning": "simple child-friendly definition", "analogy": "simple comparison for a 10-year-old", "category": "e.g. Archaic, Vocabulary, Idiom"}}
-  ]
-}}"""
+  ],
+  "phonics_guide": {{
+    "syllables": ["syl", "la", "bles"],
+    "pronunciation": "pro-nun-see-ay-shun"
+  }}
+}} (phonics_guide is only for single words, otherwise null)"""
 
         result = self.gemini.generate_json(prompt, system_instruction)
         return result if isinstance(result, dict) else {}
@@ -292,6 +325,7 @@ Respond in JSON with exactly these keys:
         speaker: str,
         reading_level: str,
         language: str,
+        phonics_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Rule-based fallback simplification."""
         # Replace archaic words
@@ -352,6 +386,7 @@ Respond in JSON with exactly these keys:
             "literary_devices": self._detect_devices(text),
             "cultural_context": None,
             "kinyarwanda_bridge": kinyarwanda_bridge,
+            "phonics": phonics_data,
             "tier": "rule_based",
         }
 

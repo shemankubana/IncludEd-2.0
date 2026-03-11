@@ -64,9 +64,20 @@ class GeminiService:
             # Clean possible markdown formatting
             text = re.sub(r'```json\s*|\s*```', '', text).strip()
             
-            # Find the first { and last } to handle any conversational noise
-            start = text.find('{')
-            end = text.rfind('}')
+            # Find the first { or [ and last } or ]
+            start_bracket = text.find('{')
+            start_array = text.find('[')
+            
+            start = -1
+            if start_bracket != -1 and start_array != -1:
+                start = min(start_bracket, start_array)
+            else:
+                start = max(start_bracket, start_array)
+                
+            end_bracket = text.rfind('}')
+            end_array = text.rfind(']')
+            end = max(end_bracket, end_array)
+
             if start != -1 and end != -1:
                 text = text[start:end+1]
                 

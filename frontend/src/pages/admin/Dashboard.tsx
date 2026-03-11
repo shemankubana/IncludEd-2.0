@@ -14,6 +14,9 @@ const AdminDashboard = () => {
     const [stats, setStats] = useState({ totalStudents: 0, totalTeachers: 0, pendingTeachers: 0 });
     const [loading, setLoading] = useState(true);
     const [school, setSchool] = useState<any>(null);
+    const [inviteEmail, setInviteEmail] = useState("");
+    const [isInviting, setIsInviting] = useState(false);
+    const { toast } = useToast();
 
     useEffect(() => {
         const fetchAdminData = async () => {
@@ -39,6 +42,36 @@ const AdminDashboard = () => {
         if (user) fetchAdminData();
     }, [user]);
 
+    const handleInviteTeacher = async () => {
+        if (!inviteEmail) return;
+        setIsInviting(true);
+        try {
+            const idToken = await user?.getIdToken();
+            const res = await fetch(`${API_BASE}/api/schools/invite`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${idToken}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ email: inviteEmail, role: 'teacher' })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast({
+                    title: "Invitation Sent!",
+                    description: `A teacher invite has been sent to ${inviteEmail}.`
+                });
+                setInviteEmail("");
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (err: any) {
+            toast({ title: "Invite Failed", description: err.message, variant: "destructive" });
+        } finally {
+            setIsInviting(false);
+        }
+    };
+
     const cards = [
         { title: "Total Students", value: stats.totalStudents, icon: GraduationCap, color: "bg-blue-500" },
         { title: "Active Teachers", value: stats.totalTeachers, icon: UserCheck, color: "bg-green-500" },
@@ -48,14 +81,32 @@ const AdminDashboard = () => {
     return (
         <DashboardLayout role="admin">
             <div className="space-y-8">
-                <div>
-                    <h1 className="text-3xl font-black mb-2">School Administration</h1>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <School className="w-4 h-4" />
-                        <span className="font-bold">{school?.name || "Loading School..."}</span>
-                        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-widest font-bold">
-                            Code: {school?.code}
-                        </span>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-3xl font-black mb-2">School Administration</h1>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                            <School className="w-4 h-4" />
+                            <span className="font-bold">{school?.name || "Loading School..."}</span>
+                            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-widest font-bold">
+                                Code: {school?.code}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 bg-secondary/30 p-2 rounded-2xl border border-border">
+                        <Input
+                            placeholder="Teacher Email"
+                            value={inviteEmail}
+                            onChange={(e) => setInviteEmail(e.target.value)}
+                            className="h-10 w-64 border-0 bg-transparent shadow-none focus-visible:ring-0 font-medium"
+                        />
+                        <Button
+                            className="rounded-xl font-bold h-10 px-4 gap-2"
+                            onClick={handleInviteTeacher}
+                            disabled={isInviting || !inviteEmail}
+                        >
+                            {isInviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                            Invite Teacher
+                        </Button>
                     </div>
                 </div>
 

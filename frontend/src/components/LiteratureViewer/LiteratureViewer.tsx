@@ -24,6 +24,7 @@ import VocabularySidebar from "./VocabularySidebar";
 import { DyslexiaControls, DEFAULT_DYSLEXIA_SETTINGS, type DyslexiaSettings } from "./DyslexiaRenderer";
 import ADHDChunkingEngine from "./ADHDChunkingEngine";
 import DifficultyMap from "./DifficultyMap";
+import VocabHelper from "./VocabHelper";
 import ComprehensionGraph, { type ComprehensionGraphData } from "./ComprehensionGraph";
 import GamificationSystem from "../play/GamificationSystem";
 import { useSignalTracker, type ReadingSignals } from "../../hooks/useSignalTracker";
@@ -507,6 +508,14 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
                     onMasterWord={handleVocabMastered}
                 />
             )}
+
+            {/* ── Proactive Vocab Helper (Gemini powered) ── */}
+            <VocabHelper
+                content={currentContent}
+                language={(analysisData.metadata?.language as string) || "en"}
+                onSaveWord={handleVocabSave}
+                onMasterWord={handleVocabMastered}
+            />
 
             {/* ── Questions ── */}
             {showQuestions && analysisData.questions.length > 0 && (

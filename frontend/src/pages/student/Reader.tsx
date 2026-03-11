@@ -136,6 +136,7 @@ const AdaptiveReader = () => {
     } | null>(null);
 
     // ADHD breathing break + cliffhanger teaser state (Phase 3)
+    const [completedSections, setCompletedSections] = useState<Set<number>>(new Set());
     const [breathingBreak, setBreathingBreak] = useState(false);
     const [breathPhase, setBreathPhase] = useState<"inhale" | "hold" | "exhale">("inhale");
     const [cliffhangerTeaser, setCliffhangerTeaser] = useState<string | null>(null);
@@ -297,6 +298,9 @@ const AdaptiveReader = () => {
                             const pd = await progressRes.json();
                             if (pd?.currentSection !== undefined) {
                                 setCurrentSectionIndex(pd.currentSection);
+                            }
+                            if (pd?.completedSections) {
+                                setCompletedSections(new Set(pd.completedSections));
                             }
                         }
                     } catch { /* offline */ }
@@ -1204,11 +1208,35 @@ const AdaptiveReader = () => {
                             >
                                 <ChevronLeft className="w-4 h-4" /> {t("reader.previous")}
                             </Button>
-                            <div className="text-center">
-                                <p className="text-sm font-black text-muted-foreground">
-                                    {`Chapter ${currentSectionIndex + 1} of ${totalSections}`}
-                                </p>
-                            </div>
+                            
+                            <Button
+                                variant={completedSections.has(currentSectionIndex) ? "secondary" : "outline"}
+                                className={`rounded-full px-6 font-black transition-all ${completedSections.has(currentSectionIndex) ? "text-emerald-500 border-emerald-500/30" : "hover:border-primary/50"}`}
+                                onClick={async () => {
+                                    const newSet = new Set(completedSections);
+                                    newSet.add(currentSectionIndex);
+                                    setCompletedSections(newSet);
+                                    
+                                    // Save to progress API
+                                    saveProgress(currentSectionIndex, newSet.size === totalSections ? "completed" : "in_progress");
+                                    
+                                    // Update session completion rate
+                                    if (sessionId && idToken) {
+                                        const rate = newSet.size / totalSections;
+                                        fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/sessions/${sessionId}`, {
+                                            method: "PATCH",
+                                            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                                            body: JSON.stringify({
+                                                completionRate: rate,
+                                                status: rate === 1 ? "completed" : "active",
+                                            }),
+                                        }).catch(() => { });
+                                    }
+                                }}
+                            >
+                                {completedSections.has(currentSectionIndex) ? "✓ Completed" : "Mark as Complete"}
+                            </Button>
+
                             <Button
                                 className="rounded-xl px-6 font-bold gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
                                 onClick={handleNextSection}

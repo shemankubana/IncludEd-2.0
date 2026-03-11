@@ -19,24 +19,37 @@ const requireTeacher = (req, res, next) => {
     next();
 };
 
-/**
- * GET /api/analytics/class
- * Aggregate stats across all students — for teacher dashboard.
- */
 router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
     try {
-        const totalStudents = await User.count({ where: { role: 'student' } });
-        const totalSessions = await Session.count();
-        const completedSessions = await Session.count({ where: { status: 'completed' } });
+        const schoolId = req.user.schoolId;
+        const whereUser = { role: 'student' };
+        if (schoolId) whereUser.schoolId = schoolId;
 
-        // Avg quiz score across completed sessions with a quiz
+        // 1. All unique students in the school
+        const studentsInSchool = await User.findAll({
+            where: whereUser,
+            attributes: ['id', 'firstName', 'lastName', 'email', 'status', 'classLevel'],
+            raw: true
+        });
+
+        const studentIds = studentsInSchool.map(s => s.id);
+
+        // 2. Aggregate stats only for these students
+        const whereSession = { studentId: { [Op.in]: studentIds } };
+
+        const totalStudents = studentsInSchool.length;
+        const totalSessions = await Session.count({ where: whereSession });
+        const completedSessions = await Session.count({ where: { ...whereSession, status: 'completed' } });
+
+        // Avg stats across completed sessions
         const scoreResult = await Session.findOne({
             attributes: [
                 [sequelize.fn('AVG', sequelize.col('quizScore')), 'avgQuiz'],
                 [sequelize.fn('AVG', sequelize.col('avgAttentionScore')), 'avgAttention'],
                 [sequelize.fn('AVG', sequelize.col('completionRate')), 'avgCompletion'],
+                [sequelize.fn('COUNT', sequelize.col('id')), 'totalLessons'],
             ],
-            where: { status: 'completed', quizScore: { [Op.ne]: null } },
+            where: { ...whereSession, status: 'completed' },
             raw: true,
         });
 
@@ -48,17 +61,50 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
                 [sequelize.fn('AVG', sequelize.col('quizScore')), 'avgQuiz'],
                 [sequelize.fn('AVG', sequelize.col('avgAttentionScore')), 'avgAttention'],
             ],
-            where: { status: 'completed' },
+            where: { ...whereSession, status: 'completed' },
             group: ['disabilityType'],
             raw: true,
         });
 
-        // Recent sessions (last 10)
-        const recentSessions = await Session.findAll({
-            order: [['startedAt', 'DESC']],
-            limit: 10,
-            include: [{ model: User, as: 'student', attributes: ['firstName', 'lastName', 'email'] }],
-        }).catch(() => Session.findAll({ order: [['startedAt', 'DESC']], limit: 10 }));
+        // 3. Get latest session for each student to show in roster
+        const latestSessions = await Session.findAll({
+            attributes: [
+                'studentId',
+                [sequelize.fn('MAX', sequelize.col('startedAt')), 'lastActive'],
+                [sequelize.fn('AVG', sequelize.col('quizScore')), 'avgQuizScore'],
+                [sequelize.fn('AVG', sequelize.col('completionRate')), 'avgCompletion'],
+                [sequelize.fn('COUNT', sequelize.col('id')), 'sessionCount'],
+            ],
+            where: whereSession,
+            group: ['studentId'],
+            raw: true
+        });
+
+        const sessionMap = latestSessions.reduce((acc, s) => {
+            acc[s.studentId] = s;
+            return acc;
+        }, {});
+
+        // Combine student info with session data for the roster
+        const roster = studentsInSchool.map(s => {
+            const sess = sessionMap[s.id];
+            const compRate = parseFloat(sess?.avgCompletion || 0);
+            const quizScore = parseFloat(sess?.avgQuizScore || 0);
+
+            // Progress is primarily completion rate, but quiz score contributes if available
+            // If no quiz yet, progress = completion rate
+            const progressVal = (quizScore > 0) ? (compRate * 0.7 + quizScore * 0.3) : compRate;
+
+            return {
+                id: s.id,
+                name: `${s.firstName} ${s.lastName}`,
+                email: s.email,
+                lastActive: sess ? (sess.lastActive ? new Date(sess.lastActive).toISOString() : 'Active') : 'Never',
+                progress: Math.round(progressVal * 100),
+                status: progressVal > 0.8 ? "Mastered" : progressVal > 0.4 ? "On Track" : "Starting",
+                sessionCount: parseInt(sess?.sessionCount || 0)
+            };
+        });
 
         res.json({
             overview: {
@@ -68,6 +114,7 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
                 avgQuizScore: parseFloat(scoreResult?.avgQuiz || 0).toFixed(3),
                 avgAttention: parseFloat(scoreResult?.avgAttention || 0).toFixed(3),
                 avgCompletion: parseFloat(scoreResult?.avgCompletion || 0).toFixed(3),
+                totalLessons: parseInt(scoreResult?.totalLessons || 0),
             },
             byDisabilityType: byDisability.map(d => ({
                 disabilityType: d.disabilityType,
@@ -75,7 +122,8 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
                 avgQuizScore: parseFloat(d.avgQuiz || 0).toFixed(3),
                 avgAttention: parseFloat(d.avgAttention || 0).toFixed(3),
             })),
-            recentSessions,
+            students: roster, // This replaces recentSessions for broader usage
+            recentSessions: roster.filter(r => r.sessionCount > 0).slice(0, 10), // Backwards compatibility
         });
     } catch (error) {
         console.error('❌ Class analytics error:', error.message);
