@@ -20,7 +20,7 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 
 > A 5-minute walkthrough of IncludEd 2.0's core features — PDF analysis, accessible reading modes, TTS, quiz generation, teacher tools, and the adaptive RL engine.
 
-[![IncludEd 2.0 Demo]([https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube](https://drive.google.com/file/d/12IU3FFzEQrm0FHPuDv1QC2dt-C-g2KKo/view?usp=sharing))](https://youtu.be/DEMO_VIDEO_LINK)
+[![IncludEd 2.0 Demo]([https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube](https://drive.google.com/file/d/12IU3FFzEQrm0FHPuDv1QC2dt-C-g2KKo/view?usp=sharing))]([https://youtu.be/DEMO_VIDEO_LINK](https://drive.google.com/file/d/12IU3FFzEQrm0FHPuDv1QC2dt-C-g2KKo/view?usp=sharing))
 
 <!-- TODO: Replace the link above with the actual 5-minute demo video URL.
      The demo should showcase:
