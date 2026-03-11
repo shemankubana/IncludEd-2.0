@@ -68,21 +68,24 @@ def _load_mistral() -> bool:
     try:
         print(f"🔬 Loading Mistral-7B heading classifier ({_MISTRAL_MODEL}) …")
         # Use device_map=auto for multi-GPU / CPU offload; load_in_4bit if available
-        kwargs: Dict[str, Any] = {
-            "model": _MISTRAL_MODEL,
-            "torch_dtype": _torch.float16 if _torch.cuda.is_available() else _torch.float32,
+        model_kwargs: Dict[str, Any] = {
             "device_map": "auto",
-            "max_new_tokens": 3,
-            "do_sample": False,
         }
         try:
             # Try 4-bit quantisation (requires bitsandbytes)
             from transformers import BitsAndBytesConfig
-            kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
         except ImportError:
             pass
 
-        _mistral_pipe = _hf_pipeline("text-generation", **kwargs)
+        _mistral_pipe = _hf_pipeline(
+            "text-generation",
+            model=_MISTRAL_MODEL,
+            dtype=_torch.float16 if _torch.cuda.is_available() else _torch.float32,
+            model_kwargs=model_kwargs,
+            max_new_tokens=3,
+            do_sample=False,
+        )
         print("✅ Mistral-7B heading classifier ready")
         return True
     except Exception as exc:
