@@ -1,7 +1,4 @@
 import express from 'express';
-import fs from 'fs';
-import FormData from 'form-data';
-import axios from 'axios';
 import { authenticateToken } from '../middleware/auth.js';
 import { upload } from '../config/multer.js';
 import { Literature } from '../models/Literature.js';
@@ -11,9 +8,7 @@ import { generateQuestions } from '../services/questionGenerator.js';
 import { sequelize } from '../config/database.js';
 
 const router = express.Router();
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'; // Corrected port based on lsof and .env knowledge
 
-// Upload PDF endpoint
 // Upload PDF and Image endpoint
 router.post('/upload', authenticateToken, upload.fields([
   { name: 'file', maxCount: 1 },
@@ -31,79 +26,22 @@ router.post('/upload', authenticateToken, upload.fields([
     let originalContent, adaptedContent, wordCount;
     let finalContentType = 'generic';
     let finalSections = [];
-    let aiDetectedLanguage = language || 'english';
-    let aiResp = null;
-
-    let skipBackground = false;
-    let bookBrainData = null;
+    const _rawLang = language || 'en';
+    let aiDetectedLanguage = (_rawLang === 'fr' || _rawLang === 'french') ? 'french' : 'english';
 
     if (pdfFile) {
       console.log(`📄 Processing PDF: ${pdfFile.originalname}`);
 
-      try {
-        // High-quality AI analysis (v3.1) — synchronous for immediate structure
-        const form = new FormData();
-        form.append('file', fs.createReadStream(pdfFile.path));
+      // Extract text locally
+      const processed = await processPDF(pdfFile.path, { simplifyText: isSimplifyEnabled });
+      originalContent = processed.originalContent;
+      adaptedContent = processed.adaptedContent;
+      wordCount = processed.wordCount;
 
-        console.log(`🧠 Sending to AI /analyze: ${AI_SERVICE_URL}`);
-        aiResp = await axios.post(`${AI_SERVICE_URL}/analyze`, form, {
-          headers: form.getHeaders(),
-          timeout: 90000 // 90s sync wait for OCR + Book Brain
-        });
-
-        if (aiResp.data && aiResp.data.flat_units?.length > 0) {
-          console.log(`✅ AI analyze success: ${aiResp.data.document_type}`);
-          originalContent = aiResp.data.flat_units.map(u => u.content).join('\n\n');
-          adaptedContent = originalContent;
-          wordCount = originalContent.split(/\s+/).filter(Boolean).length;
-          finalContentType = aiResp.data.document_type;
-
-          // Enriched metadata from AI + Book Brain
-          const difficultyLookup = {};
-          bookBrainData = aiResp.data.book_brain;
-          for (const d of (bookBrainData?.difficulty_map || [])) {
-            if (d.section_id) difficultyLookup[d.section_id] = d;
-            if (d.section_title) difficultyLookup[d.section_title] = d;
-          }
-
-          finalSections = aiResp.data.flat_units.map(unit => {
-            const enrichment = difficultyLookup[unit.id] || difficultyLookup[unit.title] || {};
-            return {
-              title: unit.title || 'Section',
-              content: unit.content || '',
-              dialogue: unit.dialogue || unit.blocks || [],
-              wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
-              emotion: enrichment.emotion || 'neutral',
-              setting: enrichment.setting || '',
-              characters_present: enrichment.characters_present || [],
-              archaic_phrases: enrichment.archaic_phrases || [],
-              literary_devices: enrichment.literary_devices || [],
-              faction: enrichment.faction || '',
-              difficulty: enrichment.overall_difficulty || 0,
-              estimated_read_minutes: enrichment.estimated_read_minutes || 1,
-            };
-          });
-
-          skipBackground = true;
-          // Clean up file
-          try { fs.unlinkSync(pdfFile.path); } catch (e) { }
-        } else {
-          throw new Error('AI service returned empty response');
-        }
-
-      } catch (err) {
-        console.warn(`⚠️ AI analyze failed/timed out, falling back to local extraction: ${err.message}`);
-        // Step 1: Extract text (fallback)
-        const processed = await processPDF(pdfFile.path, { simplifyText: isSimplifyEnabled });
-        originalContent = processed.originalContent;
-        adaptedContent = processed.adaptedContent;
-        wordCount = processed.wordCount;
-
-        // Step 2: Fast regex-based chapter detection
-        const basicSplit = await splitIntoChapters(originalContent);
-        finalContentType = basicSplit.contentType;
-        finalSections = basicSplit.sections;
-      }
+      // Regex-based chapter detection
+      const basicSplit = await splitIntoChapters(originalContent);
+      finalContentType = basicSplit.contentType;
+      finalSections = basicSplit.sections;
 
     } else if (content) {
       console.log(`✍️ Processing raw text input`);
@@ -111,7 +49,6 @@ router.post('/upload', authenticateToken, upload.fields([
       adaptedContent = content;
       wordCount = content.split(/\s+/).length;
 
-      // Basic split for raw text
       const split = await splitIntoChapters(originalContent);
       finalContentType = split.contentType;
       finalSections = split.sections;
@@ -131,18 +68,11 @@ router.post('/upload', authenticateToken, upload.fields([
       adaptedContent,
       wordCount,
       sections: finalSections,
-      bookBrain: bookBrainData ? {
-        vocabulary: (bookBrainData.vocabulary || []).slice(0, 80),
-        characters: bookBrainData.characters || [],
-        summary_stats: bookBrainData.summary_stats || {},
-        struggle_zones: bookBrainData.struggle_zones || [],
-        difficulty_map: (bookBrainData.difficulty_map || []).filter(d => d.overall_difficulty > 0.4),
-        cultural_context_bank: bookBrainData.cultural_context_bank || [],
-      } : null,
+      bookBrain: null,
       uploadedBy: req.user.userId,
       schoolId: user?.schoolId || null,
       status: 'ready',
-      questionsGenerated: aiResp?.data?.questions?.length || 0,
+      questionsGenerated: 0,
       generateAudio: isAudioEnabled,
       difficulty: difficulty || 'beginner',
       contentType: finalContentType,
@@ -152,148 +82,21 @@ router.post('/upload', authenticateToken, upload.fields([
 
     console.log(`💾 Saved to database: ${literature.id}`);
 
-    // Background: run full ML analysis (if synchronous AI wasn't used)
-    if (!skipBackground) {
-      setImmediate(async () => {
-        try {
-          console.log(`🧠 Background ML analysis for: ${literature.title}`);
-          aiResp = await axios.post(`${AI_SERVICE_URL}/reanalyze-text`, {
-            text: originalContent,
-            filename: `${literature.title}.txt`,
-            generate_questions: true,
-            question_count: 10,
-          }, { timeout: 180000 }); // 3 min — allows cold model start
-
-          if (aiResp.data && aiResp.data.flat_units?.length > 0) {
-            const aiContentType = aiResp.data.document_type;
-            const langCode = aiResp.data.language || 'en';
-            const detectedLang = langCode === 'fr' ? 'french' : 'english';
-
-            // Build a lookup from difficulty_map for per-section enriched metadata
-            const difficultyLookup = {};
-            for (const d of (aiResp.data.book_brain?.difficulty_map || [])) {
-              if (d.section_id) difficultyLookup[d.section_id] = d;
-              if (d.section_title) difficultyLookup[d.section_title] = d;
-            }
-
-            const aiSections = aiResp.data.flat_units.map(unit => {
-              const enrichment = difficultyLookup[unit.id] || difficultyLookup[unit.title] || {};
-              return {
-                title: unit.title || 'Section',
-                content: unit.content || '',
-                dialogue: unit.dialogue || unit.blocks || [],
-                wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
-                // Enriched per-section metadata (Phase 1)
-                emotion: enrichment.emotion || 'neutral',
-                setting: enrichment.setting || '',
-                characters_present: enrichment.characters_present || [],
-                archaic_phrases: enrichment.archaic_phrases || [],
-                literary_devices: enrichment.literary_devices || [],
-                faction: enrichment.faction || '',
-                difficulty: enrichment.overall_difficulty || 0,
-                estimated_read_minutes: enrichment.estimated_read_minutes || 1,
-              };
-            });
-
-            // Use AI-extracted author if current one is unknown
-            const aiAuthor = aiResp.data.author;
-            const updatePayload = {
-              contentType: aiContentType,
-              sections: aiSections,
-              language: detectedLang,
-              status: 'ready',
-            };
-            if (aiAuthor && (!literature.author || literature.author === 'Unknown')) {
-              updatePayload.author = aiAuthor;
-            }
-
-            // Store Book Brain pre-analysis (difficulty map, vocabulary, characters, struggle zones)
-            if (aiResp.data.book_brain) {
-              const bb = aiResp.data.book_brain;
-              updatePayload.bookBrain = {
-                vocabulary: (bb.vocabulary || []).slice(0, 80),
-                characters: bb.characters || [],
-                summary_stats: bb.summary_stats || {},
-                struggle_zones: bb.struggle_zones || [],
-                difficulty_map: (bb.difficulty_map || []).filter(d => d.overall_difficulty > 0.4),
-                cultural_context_bank: bb.cultural_context_bank || [],
-              };
-            }
-
-            // Per-section simplification — process in small batches to avoid overwhelming AI service
-            console.log(`🔤 Simplifying ${aiSections.length} sections for: ${literature.title}`);
-            let simplifiedCount = 0;
-            for (const section of aiSections) {
-              if (!section.content || section.content.trim().length === 0) continue;
-              try {
-                const sResp = await axios.post(`${AI_SERVICE_URL}/adapt-text`, {
-                  text: section.content.slice(0, 3000), // cap per-section to avoid slow LLM calls
-                  doc_type: aiContentType,
-                }, { timeout: 15000 });
-                if (sResp.data?.adaptedText && sResp.data.adaptedText !== section.content.slice(0, 3000)) {
-                  section.simplified_content = sResp.data.adaptedText;
-                  simplifiedCount++;
-                }
-              } catch (_) { /* non-critical — section still readable without simplified_content */ }
-            }
-            console.log(`✅ Simplified ${simplifiedCount}/${aiSections.length} sections`);
-            updatePayload.sections = aiSections; // re-assign with simplified_content added
-
-            await literature.update(updatePayload);
-            console.log(`✅ ML update: ${literature.title} → ${aiContentType} (${aiSections.length} sections)`);
-
-            // Save AI questions
-            const aiQuestions = aiResp.data.questions || [];
-            if (aiQuestions.length > 0) {
-              const { Quiz } = await import('../models/Quiz.js');
-              const diffMap = {
-                beginner: 'easy', intermediate: 'medium', advanced: 'hard',
-                easy: 'easy', medium: 'medium', hard: 'hard'
-              };
-              const quizRecords = aiQuestions.map(q => ({
-                literatureId: literature.id,
-                question: q.question || q.q || 'Question',
-                options: q.options || q.choices || [],
-                correctAnswer: q.correct_answer ?? q.answer ?? q.correct ?? 0,
-                explanation: q.explanation || '',
-                difficulty: diffMap[q.difficulty] || 'medium',
-              }));
-              await Quiz.bulkCreate(quizRecords, { ignoreDuplicates: true });
-              await literature.update({ questionsGenerated: quizRecords.length });
-              console.log(`✅ Saved ${quizRecords.length} AI questions for: ${literature.title}`);
-            }
-
-            // Generate AI introduction — use first body section content, not raw front matter
-            const firstBodyContent = aiSections.find(s => s.content?.trim().length > 50)?.content || '';
-            try {
-              const introResp = await axios.post(`${AI_SERVICE_URL}/introduction/generate`, {
-                title: literature.title,
-                author: updatePayload.author || literature.author,
-                content_summary: firstBodyContent.slice(0, 1000),
-                doc_type: aiContentType,
-                language: langCode === 'fr' ? 'fr' : 'en'
-              }, { timeout: 60000 });
-
-              if (introResp.data?.introduction) {
-                await literature.update({ introduction: introResp.data.introduction });
-                console.log(`✅ Generated introduction for: ${literature.title}`);
-              }
-            } catch (err) {
-              console.warn(`⚠️ Introduction generation failed: ${err.message}`);
-              // Not critical - literature still works without it
-            }
-          }
-        } catch (err) {
-          console.warn(`⚠️ Background ML analysis failed for ${literature.title}: ${err.message}`);
-          // Literature still usable with basic sections from splitIntoChapters
-          // Fallback: generate questions via quiz service
-          try {
-            const questionCount = await generateQuestions(literature.id, adaptedContent || originalContent);
-            await literature.update({ questionsGenerated: questionCount });
-          } catch (_) { /* questions optional */ }
-        }
-      });
-    }
+    // Background: generate quizzes via local question generator
+    setImmediate(async () => {
+      try {
+        console.log(`🧩 Background quiz generation for: ${literature.title}`);
+        const count = await generateQuestions(literature.id, originalContent, {
+          count: 10,
+          docType: finalContentType,
+          language: aiDetectedLanguage === 'french' ? 'fr' : 'en',
+        });
+        await literature.update({ questionsGenerated: count });
+        console.log(`✅ Quiz generation done: ${count} questions`);
+      } catch (err) {
+        console.warn(`⚠️ Background quiz generation failed: ${err.message}`);
+      }
+    });
 
     res.json({
       id: literature.id,
@@ -316,6 +119,7 @@ router.post('/upload', authenticateToken, upload.fields([
     res.status(500).json({ error: error.message });
   }
 });
+
 // Get current/latest literature for student
 router.get('/current', authenticateToken, async (req, res) => {
   try {
@@ -427,7 +231,7 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Re-process existing literature using ML analyzer (front matter removal + re-classification)
+// Re-process existing literature using local chapter splitter
 router.post('/:id/reprocess', authenticateToken, async (req, res) => {
   try {
     const literature = await Literature.findByPk(req.params.id);
@@ -436,60 +240,12 @@ router.post('/:id/reprocess', authenticateToken, async (req, res) => {
     const textToProcess = literature.originalContent || literature.adaptedContent;
     if (!textToProcess) return res.status(400).json({ error: 'No content to process' });
 
-    let contentType, sections, detectedLanguage;
+    const { splitIntoChapters } = await import('../services/chapterSplitter.js');
+    const result = await splitIntoChapters(textToProcess);
+    const contentType = result.contentType;
+    const sections = result.sections;
 
-    // Try ML analyzer first (applies front-matter filtering + French pattern support)
-    try {
-      const aiResp = await axios.post(`${AI_SERVICE_URL}/reanalyze-text`, {
-        text: textToProcess,
-        filename: `${literature.title}.txt`,
-        generate_questions: false,
-      }, { timeout: 15000 });
-
-      if (aiResp.data && aiResp.data.flat_units?.length > 0) {
-        contentType = aiResp.data.document_type;
-        const langCode = aiResp.data.language || 'en';
-        detectedLanguage = langCode === 'fr' ? 'french' : 'english';
-        // Build enrichment lookup from book_brain difficulty_map
-        const reprocessLookup = {};
-        for (const d of (aiResp.data.book_brain?.difficulty_map || [])) {
-          if (d.section_id) reprocessLookup[d.section_id] = d;
-          if (d.section_title) reprocessLookup[d.section_title] = d;
-        }
-        sections = aiResp.data.flat_units.map(unit => {
-          const enrichment = reprocessLookup[unit.id] || reprocessLookup[unit.title] || {};
-          return {
-            title: unit.title || 'Section',
-            content: unit.content || '',
-            dialogue: unit.dialogue || unit.blocks || [],
-            wordCount: Math.ceil((unit.content || '').split(/\s+/).filter(Boolean).length),
-            emotion: enrichment.emotion || 'neutral',
-            setting: enrichment.setting || '',
-            characters_present: enrichment.characters_present || [],
-            archaic_phrases: enrichment.archaic_phrases || [],
-            literary_devices: enrichment.literary_devices || [],
-            faction: enrichment.faction || '',
-            difficulty: enrichment.overall_difficulty || 0,
-            estimated_read_minutes: enrichment.estimated_read_minutes || 1,
-          };
-        });
-        console.log(`🧠 ML re-process: ${literature.title} → ${contentType} (${sections.length} sections, lang=${detectedLanguage})`);
-      }
-    } catch (err) {
-      console.warn('⚠️ ML analyzer unavailable, falling back to basic splitter:', err.message);
-    }
-
-    // Fallback to basic splitter if AI service unavailable
-    if (!sections) {
-      const { splitIntoChapters } = await import('../services/chapterSplitter.js');
-      const result = await splitIntoChapters(textToProcess);
-      contentType = result.contentType;
-      sections = result.sections;
-    }
-
-    const updatePayload = { contentType, sections };
-    if (detectedLanguage) updatePayload.language = detectedLanguage;
-    await literature.update(updatePayload);
+    await literature.update({ contentType, sections });
     console.log(`♻️  Re-processed: ${literature.title} → ${contentType} (${sections.length} sections)`);
 
     res.json({
@@ -500,45 +256,6 @@ router.post('/:id/reprocess', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Reprocess error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Backfill per-section simplified_content for already-uploaded literature
-router.post('/:id/simplify-sections', authenticateToken, async (req, res) => {
-  try {
-    const literature = await Literature.findByPk(req.params.id);
-    if (!literature) return res.status(404).json({ error: 'Not found' });
-
-    const sections = literature.sections;
-    if (!sections || sections.length === 0) {
-      return res.status(400).json({ error: 'No sections to simplify' });
-    }
-
-    const contentType = literature.contentType || 'generic';
-    let simplifiedCount = 0;
-    const updatedSections = [...sections];
-
-    for (const section of updatedSections) {
-      if (!section.content || section.content.trim().length === 0) continue;
-      try {
-        const sResp = await axios.post(`${AI_SERVICE_URL}/adapt-text`, {
-          text: section.content.slice(0, 3000),
-          doc_type: contentType,
-        }, { timeout: 15000 });
-        if (sResp.data?.adaptedText) {
-          section.simplified_content = sResp.data.adaptedText;
-          simplifiedCount++;
-        }
-      } catch (_) { /* skip failed section */ }
-    }
-
-    await literature.update({ sections: updatedSections });
-    console.log(`✅ Backfilled ${simplifiedCount}/${updatedSections.length} sections for: ${literature.title}`);
-
-    res.json({ success: true, simplifiedCount, totalSections: updatedSections.length });
-  } catch (error) {
-    console.error('❌ Simplify sections error:', error);
     res.status(500).json({ error: error.message });
   }
 });

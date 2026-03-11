@@ -63,7 +63,7 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 │ • Focus Mode            │     │                         │     │ Services:               │
 │                         │     │                         │     │  • TTS (edge-tts)       │
 │                         │     │                         │     │  • RL Agent             │
-│                         │     │                         │     │  • Gemini LLM           │
+│                         │     │                         │     │  • FLAN-T5-large        │
 └─────────────────────────┘     └──────────┬──────────────┘     └─────────────────────────┘
                                            │
                                 ┌──────────▼──────────────┐
@@ -83,7 +83,7 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 - **Front Matter Filter** — Automatically detects and removes TOC, forewords, prefaces, prologues, dedications, epigraphs, and copyright pages
 - **Content Classifier** — Heuristic + ML classification distinguishing plays from novels from generic text
 - **Structural Segmenter** — Font-size analysis + regex heading detection to build Act/Scene or Chapter/Section hierarchy
-- **Question Generator** — Pedagogy-aware comprehension questions via Gemini LLM
+- **Question Generator** — Pedagogy-aware comprehension questions via FLAN-T5-large (offline)
 - **Emotion Analyzer** — Dialogue emotion detection for enriched play rendering
 
 ### Student Reading Experience
@@ -119,7 +119,7 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 | [Python](https://www.python.org/) | 3.11+ | AI Service runtime |
 | [Docker & Docker Compose](https://www.docker.com/) | Latest | Database infrastructure |
 | [Git](https://git-scm.com/) | Latest | Version control |
-| [Gemini API Key](https://aistudio.google.com/apikey) | — | LLM for question generation, simplification, and insights |
+| ~8 GB free RAM | — | Required for local HuggingFace models (FLAN-T5-large, BERT NER, DeBERTa) |
 
 ### Step 1 — Clone the Repository
 
@@ -151,10 +151,12 @@ VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
 
 **AI Service** — create `ai-service/.env`:
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
+# No API keys required — all models run locally via HuggingFace
+DISABLE_NOUGAT=1      # Set to 0 to enable Nougat PDF extraction (~1.6 GB download)
+DISABLE_MISTRAL=1     # Set to 0 to enable Mistral-7B heading detection (~14 GB, GPU only)
 ```
 
-> Get a free Gemini API key at [Google AI Studio](https://aistudio.google.com/apikey).
+> All AI features run fully offline using HuggingFace models downloaded on first use (~3–5 GB total for FLAN-T5-large, BERT NER, DeBERTa).
 
 > **Tip**: Copy from `.env.example` at the project root if available, and fill in your own values.
 
@@ -290,7 +292,9 @@ Navigate to **http://localhost:8080** in your browser. You should see the Includ
 | `services/tts_service.py` | Text-to-Speech (edge-tts) |
 | `services/rl_agent_service.py` | Reinforcement Learning agent |
 | `services/accessibility_adapter.py` | Content accessibility transforms |
-| `services/gemini_service.py` | Gemini API integration (primary LLM provider) |
+| `services/gemini_service.py` | Disabled stub (Gemini replaced by local models) |
+| `ml_pipeline/nougat_extractor.py` | Nougat PDF→markdown extractor (facebook/nougat-base) |
+| `services/character_service.py` | BERT NER character extraction + DeBERTa Q&A descriptions |
 | `services/simplification_service.py` | Text simplification |
 | `services/comprehension_tracker.py` | Comprehension monitoring |
 | `services/teacher_intelligence.py` | Teacher insights engine |

@@ -1,57 +1,15 @@
-[
-  {
-    "version": "v1.0",
-    "model_version": "v2",
-    "trained_at": "2026-03-04T09:57:50.689540",
-    "total_timesteps": 300000,
-    "n_envs": 8,
-    "seed": 42,
-    "duration_s": 314.3,
-    "eval_mean_reward": 80.26884999999996,
-    "eval_std_reward": 20.626471232132804,
-    "eval_mean_attention": 0.9974941900260085,
-    "attention_gain_pct": 3.1,
-    "cohens_d": 0.559,
-    "observation_dims": 9,
-    "action_dims": 6,
-    "model_file": "/Users/ivanshema/Documents/IncludEd-2.0/rl-engine/ppo_included_agent.zip",
-    "action_distribution": {
-      "Keep Original": 37.0,
-      "TTS + Highlights": 0.0,
-      "Syllable Break": 31.0,
-      "Attention Break": 32.0
-    },
-    "content_rewards": {
-      "mean_reward_generic": 75.09958333333331,
-      "mean_reward_novel": 83.20742647058823,
-      "mean_reward_play": 81.80124999999992
+{
+  "versions": [
+    {
+      "version": "v2.1",
+      "trained_at": "2026-03-10T22:41:43.490938",
+      "timesteps": 500000,
+      "state_dim": 9,
+      "actions": 6,
+      "algorithm": "PPO",
+      "path": "/Users/ivanshema/Documents/IncludEd-2.0/rl-engine/models/ppo_included_v2.zip",
+      "notes": "Simulated pre-training"
     }
-  },
-  {
-    "version": "v2.0",
-    "model_version": "v2",
-    "trained_at": "2026-03-04T14:05:04.805423",
-    "total_timesteps": 500000,
-    "n_envs": 8,
-    "seed": 42,
-    "duration_s": 549.3,
-    "eval_mean_reward": 79.06042499999995,
-    "eval_std_reward": 21.526970264226176,
-    "eval_mean_attention": 0.9973607010454714,
-    "attention_gain_pct": 3.27,
-    "cohens_d": 0.5522,
-    "observation_dims": 9,
-    "action_dims": 6,
-    "model_file": "/Users/ivanshema/Documents/IncludEd-2.0/rl-engine/ppo_included_agent.zip",
-    "action_distribution": {
-      "Keep Original": 41.0,
-      "Syllable Break": 34.0,
-      "Attention Break": 25.0
-    },
-    "content_rewards": {
-      "mean_reward_generic": 80.24719594594593,
-      "mean_reward_novel": 80.19091216216214,
-      "mean_reward_play": 75.76278846153835
-    }
-  }
-]
+  ],
+  "latest": "v2.1"
+}

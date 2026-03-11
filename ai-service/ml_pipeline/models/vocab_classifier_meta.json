@@ -1,0 +1,17 @@
+{
+  "features": [
+    "word_length",
+    "syllable_count",
+    "freq_log",
+    "is_common",
+    "consonant_clusters",
+    "silent_letter_patterns",
+    "suffix_complexity"
+  ],
+  "labels": {
+    "0": "easy",
+    "1": "hard"
+  },
+  "training_samples": 368,
+  "model": "LogisticRegression(C=1.0)"
+}

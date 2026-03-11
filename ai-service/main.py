@@ -1,23 +1,15 @@
 """
-IncludEd AI Service – FastAPI Application v3.0
+IncludEd AI Service – FastAPI Application v4.0
 ===============================================
-New in v3.0 (World-Class ML Features):
-  • POST /simplify                  — Context-aware highlight-to-understand
-  • POST /analyze (enhanced)        — Now includes Book Brain pre-analysis
-  • POST /book-brain/analyze        — Standalone Book Brain analysis
-  • POST /comprehension/record      — Record section read for comprehension graph
-  • POST /comprehension/highlight   — Record text highlight
-  • POST /comprehension/vocab       — Record vocabulary lookup
-  • GET  /comprehension/summary     — Get comprehension summary
-  • GET  /comprehension/recap       — "Story So Far" recap
-  • POST /learner/update            — Update learner embedding from session
-  • GET  /learner/profile           — Get learner profile summary
-  • POST /teacher/student-summary   — Generate NL student summary
-  • POST /teacher/class-alerts      — Generate class-wide alerts
-  • POST /teacher/recap             — Generate story recap text
-  • POST /detect-language           — detect EN/FR of text
-  • POST /analyze/emotions          — batch emotion analysis on dialogue list
-  • POST /quiz/generate             — on-demand quiz for specific content
+v3.0 features retained +
+New in v4.0 (ML Components for Dyslexia Support):
+  • POST /ner/extract               — Full NER character + location graph for a book
+  • GET  /ner/section-view          — Spoiler-safe graph up to current section
+  • POST /vocab/batch-analyze       — Pre-compute vocabulary for a full book at upload
+  • POST /tts/synthesize            — TTS with word-level timestamps (disability-aware)
+  • POST /quiz/record-attempt       — Record quiz result → update IRT difficulty model
+  • GET  /quiz/recommend-difficulty — Get recommended difficulty for next quiz
+  • GET  /quiz/student-state        — Full adaptive state for teacher dashboard
 """
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
@@ -45,7 +37,11 @@ from services.teacher_recommendations    import get_recommendation_engine, Stude
 from services.stt_service                import STTAssessmentService
 from services.word_difficulty_service    import WordDifficultyService
 from ml_pipeline import LiteratureAnalyzer, BookBrain
-from ml_pipeline.quiz_generator import PedagogicalQuestionGenerator
+from ml_pipeline.quiz_generator      import PedagogicalQuestionGenerator
+from ml_pipeline.ner_extractor       import get_ner_extractor
+from ml_pipeline.vocab_analyzer      import get_vocab_analyzer
+from ml_pipeline.difficulty_adapter  import get_difficulty_adapter
+from services.tts_service            import get_tts_service
 
 # ML pipeline singletons (reused across requests)
 _literature_analyzer = LiteratureAnalyzer()
@@ -74,6 +70,10 @@ comprehension_tracker = ComprehensionTracker()
 teacher_intelligence  = TeacherIntelligence()
 stt_assessment        = STTAssessmentService()
 word_difficulty       = WordDifficultyService()
+ner_extractor         = get_ner_extractor()
+vocab_analyzer        = get_vocab_analyzer(gemini_service=None)   # gemini injected after init
+difficulty_adapter    = get_difficulty_adapter()
+tts_svc               = get_tts_service()
 
 # ── Request/Response Models ──────────────────────────────────────────────────
 
@@ -978,6 +978,197 @@ async def get_pronunciation(req: PronunciationRequest):
     }
 
 
+# ── NER / Character Graph ─────────────────────────────────────────────────────
+
+class NERExtractRequest(BaseModel):
+    sections:              List[str]           # list of chapter/section texts
+    title:                 Optional[str] = ""
+    existing_characters:   Optional[List[str]] = None
+
+
+class NERSectionViewRequest(BaseModel):
+    characters:    List[Any]
+    relationships: List[Any]
+    locations:     List[Any]
+    up_to_section: int
+
+
+@app.post("/ner/extract", tags=["characters"])
+async def ner_extract(req: NERExtractRequest):
+    """
+    Extract a full character + location graph from all book sections.
+    Called once at upload time; result stored in Literature.bookBrain.
+
+    Returns full graph: characters (with importance, first_seen_index,
+    relationships), relationships (flat list), locations.
+    """
+    graph = await asyncio.to_thread(
+        ner_extractor.extract,
+        req.sections,
+        req.title or "",
+        req.existing_characters,
+    )
+    return graph
+
+
+@app.post("/ner/section-view", tags=["characters"])
+async def ner_section_view(req: NERSectionViewRequest):
+    """
+    Return a spoiler-safe graph filtered to characters seen up to
+    the current section index. Called by CharacterMapPanel.tsx.
+    """
+    full_graph = {
+        "characters":    req.characters,
+        "relationships": req.relationships,
+        "locations":     req.locations,
+    }
+    return ner_extractor.extract_for_section(full_graph, req.up_to_section)
+
+
+# ── Vocabulary Batch Analysis ─────────────────────────────────────────────────
+
+class VocabBatchRequest(BaseModel):
+    sections:        List[str]           # chapter texts
+    section_titles:  Optional[List[str]] = None
+
+
+class VocabSectionRequest(BaseModel):
+    section_text:    str
+    all_words:       List[Any]           # previously computed word list
+    chapter_index:   int = 0
+    max_display:     int = 20
+
+
+@app.post("/vocab/batch-analyze", tags=["vocabulary"])
+async def vocab_batch_analyze(req: VocabBatchRequest):
+    """
+    Pre-compute vocabulary difficulty + explanations for a whole book.
+    Stored in Literature.bookBrain.vocabulary at upload time.
+    Returns a flat list of word dicts (see vocab_analyzer.py schema).
+    """
+    # Inject gemini into analyzer if available
+    vocab_analyzer._gemini = gemini_service if gemini_service.is_available() else None
+    words = await asyncio.to_thread(
+        vocab_analyzer.analyze_book,
+        req.sections,
+        req.section_titles,
+    )
+    return {"vocabulary": words, "count": len(words)}
+
+
+@app.post("/vocab/section-words", tags=["vocabulary"])
+async def vocab_section_words(req: VocabSectionRequest):
+    """
+    Filter the book vocabulary to words present in the current section.
+    Used by VocabSidebar.tsx on chapter navigation.
+    """
+    from ml_pipeline.vocab_analyzer import VocabAnalyzer
+    words = VocabAnalyzer.words_for_section(
+        req.all_words,
+        req.section_text,
+        req.chapter_index,
+        req.max_display,
+    )
+    return {"words": words, "count": len(words)}
+
+
+# ── TTS with word-level sync ──────────────────────────────────────────────────
+
+class TTSSynthesizeRequest(BaseModel):
+    text:            str
+    disability_type: Optional[str] = "none"   # none | dyslexia | adhd | both
+    language:        Optional[str] = "english"
+    voice_override:  Optional[str] = None
+    rate_override:   Optional[str] = None
+
+
+@app.post("/tts/synthesize", tags=["tts"])
+async def tts_synthesize(req: TTSSynthesizeRequest):
+    """
+    Synthesize text to speech with word-level timestamps.
+
+    Automatically selects disability-appropriate voice and speaking rate.
+    Long texts are chunked at sentence boundaries; timestamps are
+    offset-adjusted across chunks so they represent absolute positions.
+
+    Returns: audio_base64 (MP3), timestamps [{word, start_ms, end_ms}],
+             duration_ms, voice, rate, word_count.
+    """
+    result = await tts_svc.synthesize(
+        text            = req.text,
+        disability_type = req.disability_type or "none",
+        language        = req.language or "english",
+        voice_override  = req.voice_override,
+        rate_override   = req.rate_override,
+    )
+    return result
+
+
+# ── Adaptive Quiz Difficulty ──────────────────────────────────────────────────
+
+class QuizAttemptRequest(BaseModel):
+    student_id:      str
+    literature_id:   str
+    chapter_index:   int = 0
+    score:           float                    # fraction correct 0.0–1.0
+    difficulty:      Optional[str] = "medium" # easy | medium | hard
+    disability_type: Optional[str] = "none"
+
+
+class QuizDifficultyQuery(BaseModel):
+    student_id:      str
+    literature_id:   str
+    disability_type: Optional[str] = "none"
+
+
+@app.post("/quiz/record-attempt", tags=["quiz"])
+async def quiz_record_attempt(req: QuizAttemptRequest):
+    """
+    Record a completed quiz attempt and update the student's IRT ability model.
+
+    Returns:
+      - next_difficulty: recommended difficulty for the next quiz
+      - theta: updated ability estimate (–2.5 to +2.5)
+      - performance_message: encouraging feedback for the student
+      - recommendation: teaching insight for the teacher
+    """
+    result = difficulty_adapter.record_attempt(
+        student_id      = req.student_id,
+        literature_id   = req.literature_id,
+        chapter_index   = req.chapter_index,
+        score           = max(0.0, min(1.0, req.score)),
+        difficulty      = req.difficulty or "medium",
+        disability_type = req.disability_type or "none",
+    )
+    return result
+
+
+@app.post("/quiz/recommend-difficulty", tags=["quiz"])
+async def quiz_recommend_difficulty(req: QuizDifficultyQuery):
+    """
+    Get the recommended quiz difficulty for a student's next quiz.
+    Call this before generating questions to get the right difficulty level.
+    Returns: { "difficulty": "easy" | "medium" | "hard" }
+    """
+    diff = difficulty_adapter.recommend_difficulty(
+        student_id      = req.student_id,
+        literature_id   = req.literature_id,
+        disability_type = req.disability_type or "none",
+    )
+    return {"difficulty": diff}
+
+
+@app.get("/quiz/student-state", tags=["quiz"])
+async def quiz_student_state(student_id: str, literature_id: str):
+    """
+    Get the full adaptive difficulty state for a student + book.
+    Used by the teacher dashboard to see progress history and ability level.
+    Returns null if no attempts recorded yet.
+    """
+    state = difficulty_adapter.get_state(student_id, literature_id)
+    return state or {"message": "No quiz attempts recorded yet."}
+
+
 # ── System ───────────────────────────────────────────────────────────────────
 
 @app.get("/health", tags=["system"])
@@ -1003,6 +1194,11 @@ async def health():
             "word_difficulty_analysis",
             "pronunciation_guides",
             "vocabulary_mastery_tracking",
+            # v4.0
+            "ner_character_graph",
+            "vocab_batch_analysis",
+            "tts_word_sync",
+            "adaptive_quiz_difficulty_irt",
         ],
         "timestamp":      time.time(),
     }

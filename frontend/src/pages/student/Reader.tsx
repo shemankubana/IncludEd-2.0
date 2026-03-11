@@ -1,12 +1,12 @@
 /**
- * Reader.tsx — Adaptive RL-powered reading interface.
+ * Reader.tsx — Adaptive reading interface.
  *
- * Integrates:
- *  - useTelemetry: scroll/mouse/idle event collection
- *  - useRLAdaptation: PPO-based content adaptation
+ * Features:
  *  - PlayDialogueUI: animated avatar dialogue for plays
  *  - Chapter navigation with lazy loading + IndexedDB progress
- *  - Content simplification based on RL action
+ *  - BookBrain vocabulary, character map, struggle zones
+ *  - ADHD micro-checks and breathing breaks
+ *  - Scene summary cards for plays
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -19,15 +19,13 @@ import { Badge } from "@/components/ui/badge";
 import {
     Play, Pause, RotateCcw, Type, Eye, EyeOff,
     ArrowLeft, BrainCircuit, Loader2,
-    BookOpen, ChevronLeft, ChevronRight, Volume2, Zap,
+    BookOpen, ChevronLeft, ChevronRight, Volume2,
     AlertCircle, Users,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
 import PlayDialogueUI, { type DialogueLine } from "@/components/play/PlayDialogueUI";
-import { useTelemetry } from "@/hooks/useTelemetry";
-import { useRLAdaptation, RL_ACTIONS } from "@/hooks/useRLAdaptation";
 import HighlightToUnderstand from "@/components/LiteratureViewer/HighlightToUnderstand";
 import { DyslexiaText, type DyslexiaSettings, DEFAULT_DYSLEXIA_SETTINGS } from "@/components/LiteratureViewer/DyslexiaRenderer";
 import ComprehensionMiniPanel from "@/components/reader/ComprehensionMiniPanel";
@@ -43,7 +41,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 interface Section {
     title: string;
     content: string;
-    simplified_content?: string; // pre-computed simplified version (stored by background ML)
+    simplified_content?: string;
     dialogue?: DialogueLine[];
     wordCount?: number;
     // Phase 1 enriched metadata
@@ -113,7 +111,6 @@ const AdaptiveReader = () => {
     const [contentType, setContentType] = useState<"play" | "novel" | "poem" | "generic">("generic");
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [idToken, setIdToken] = useState<string | null>(null);
-    const [showRLBadge, setShowRLBadge] = useState(false);
 
     // Book Brain + Comprehension Graph state
     const [bookBrain, setBookBrain] = useState<any>(null);
@@ -150,10 +147,8 @@ const AdaptiveReader = () => {
     // Translations
     const { t } = useTranslation(lesson?.language);
 
-    // Session tracking for learner embedding
+    // Session tracking
     const sessionStartRef = useRef<number>(Date.now());
-    const wordsReadRef = useRef<number>(0);
-    const adaptationsRef = useRef<number[]>([]);
 
     const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
 
@@ -165,91 +160,16 @@ const AdaptiveReader = () => {
     const totalSections = sections.length;
     const currentSection = sections[currentSectionIndex] || { title: "", content: "" };
 
-    // ── Disability encoding ────────────────────────────────────────────────────
-    const disabilityEncoded: number = (() => {
-        const dt = profile?.disabilityType || "none";
-        if (dt === "adhd") return 1.0;
-        if (dt === "dyslexia") return 0.5;
-        if (dt === "both") return 1.5;
-        return 0.0;
-    })();
-
-    const contentTypeEncoded: number = (() => {
-        if (contentType === "play") return 1.0;
-        if (contentType === "novel") return 0.5;
-        if (contentType === "poem") return 0.5;
-        return 0.0;
-    })();
-
-    // ── Telemetry ──────────────────────────────────────────────────────────────
-    const { attentionState, markSectionRead, flushNow } = useTelemetry({
-        sessionId,
-        literatureId: id ?? null,
-        idToken,
-    });
-
-    // ── RL Adaptation ──────────────────────────────────────────────────────────
-    const { adaptation, isLoading: rlLoading } = useRLAdaptation({
-        sessionId,
-        idToken,
-        disabilityType: disabilityEncoded,
-        contentType: contentTypeEncoded,
-        textDifficulty: 0.5,
-        attentionState,
-        pollIntervalMs: 5_000,
-    });
-
-    // Use pre-computed simplified content for RL simplification actions (1=Light, 2=Heavy)
-    const useSimplified = (adaptation.actionId === 1 || adaptation.actionId === 2) && !!currentSection.simplified_content;
-    const safeContent = (useSimplified ? currentSection.simplified_content : currentSection.content) || "";
-    const words = safeContent.split(/\s+/).filter(Boolean);
-
-    // ── RL → DyslexiaRenderer settings bridge ─────────────────────────────────
-    // Each RL action maps to a specific DyslexiaSettings configuration.
-    // This makes the abstract RL output concrete and visible in the UI.
+    // ── DyslexiaRenderer settings (user profile only) ──────────────────────────
     const dyslexiaSettings: DyslexiaSettings = useMemo(() => {
         const base = { ...DEFAULT_DYSLEXIA_SETTINGS };
-        // OpenDyslexic font from user profile always wins
         if (dyslexicMode) base.openDyslexicFont = true;
-        switch (adaptation.actionId) {
-            case 1: // Light Simplification → widen spacing to reduce crowding
-                return { ...base, letterSpacing: 2, wordSpacing: 5, lineHeight: 2.0 };
-            case 2: // Heavy Simplification → max spacing + larger font
-                return { ...base, letterSpacing: 2, wordSpacing: 6, lineHeight: 2.2, fontSize: 1.15 };
-            case 3: // TTS + Highlights → reading ruler to track the line being spoken
-                return { ...base, readingRuler: true, lineHeight: 2.2 };
-            case 4: // Syllable Break → color-coded syllables
-                return { ...base, syllableColors: true, lineHeight: 2.0, fontSize: 1.05 };
-            case 5: // Attention Break → bionic reading to anchor eyes + alternating lines
-                return { ...base, bionicReading: true, alternatingLines: true, lineHeight: 2.1 };
-            default: // Keep Original (0) → user prefs only
-                return base;
-        }
-    }, [adaptation.actionId, dyslexicMode]);
+        return base;
+    }, [dyslexicMode]);
 
-    // Show RL badge when action changes
-    const prevActionId = useRef(adaptation.actionId);
-    useEffect(() => {
-        if (adaptation.actionId !== prevActionId.current) {
-            prevActionId.current = adaptation.actionId;
-            setShowRLBadge(true);
-            const t = setTimeout(() => setShowRLBadge(false), 4000);
-            return () => clearTimeout(t);
-        }
-    }, [adaptation.actionId]);
-
-    // ── Apply RL text transformations ──────────────────────────────────────────
-    // DyslexiaRenderer now handles syllable colors and bionic reading visually.
-    // We still need the plain-text version for TTS and word-highlight counting.
-    const displayText = (() => {
-        if (adaptation.isChunked) {
-            // Attention break: trim to ~3 sentences to reduce overload
-            const sentences = safeContent.split(/(?<=[.!?])\s+/).filter(Boolean);
-            return sentences.slice(0, 3).join(" ") || safeContent;
-        }
-        return safeContent;
-    })();
-
+    const safeContent = currentSection.content || "";
+    const words = safeContent.split(/\s+/).filter(Boolean);
+    const displayText = safeContent;
     const displayWords = displayText.split(/\s+/).filter(Boolean);
 
     // ── Session creation ───────────────────────────────────────────────────────
@@ -331,7 +251,6 @@ const AdaptiveReader = () => {
                 const cachedSection = await idbGetProgress(id);
                 if (cachedSection !== null) {
                     setCurrentSectionIndex(cachedSection);
-                    // Show "Story So Far" recap if returning to a book already in progress
                     if (cachedSection > 0 && user) {
                         try {
                             const aiUrl = import.meta.env.VITE_AI_URL || "http://localhost:8000";
@@ -341,7 +260,6 @@ const AdaptiveReader = () => {
                             if (recapRes.ok) {
                                 const rd = await recapRes.json();
                                 if (rd.chapters_completed && rd.chapters_completed.length > 0) {
-                                    // Generate text recap
                                     const textRes = await fetch(`${aiUrl}/teacher/recap`, {
                                         method: "POST",
                                         headers: { "Content-Type": "application/json" },
@@ -389,7 +307,7 @@ const AdaptiveReader = () => {
 
     // ── TTS auto-play ──────────────────────────────────────────────────────────
     useEffect(() => {
-        if (!isPlaying || !adaptation.isTTSEnabled) return;
+        if (!isPlaying) return;
         if (!window.speechSynthesis) return;
 
         window.speechSynthesis.cancel();
@@ -400,11 +318,11 @@ const AdaptiveReader = () => {
         window.speechSynthesis.speak(utter);
 
         return () => window.speechSynthesis.cancel();
-    }, [isPlaying, adaptation.isTTSEnabled, displayText]);
+    }, [isPlaying, displayText]);
 
     // ── Mock word highlight timer (for generic mode) ──────────────────────────
     useEffect(() => {
-        if (!isPlaying || adaptation.isTTSEnabled) return;
+        if (!isPlaying) return;
         let interval: ReturnType<typeof setInterval>;
         interval = setInterval(() => {
             setCurrentTime((prev) => {
@@ -417,7 +335,7 @@ const AdaptiveReader = () => {
             });
         }, 100);
         return () => clearInterval(interval);
-    }, [isPlaying, adaptation.isTTSEnabled, displayWords.length, showQuizPrompt]);
+    }, [isPlaying, displayWords.length, showQuizPrompt]);
 
     // ── Navigation ─────────────────────────────────────────────────────────────
     const saveProgress = useCallback(
@@ -443,78 +361,12 @@ const AdaptiveReader = () => {
         [id, user, profile]
     );
 
-    // ── Record comprehension for current section ──────────────────────────────
-    const recordComprehension = useCallback(async (sectionIdx: number) => {
-        if (!user || !id) return;
-        const sec = sections[sectionIdx];
-        if (!sec) return;
-        const timeSpent = (Date.now() - sessionStartRef.current) / 1000;
-        wordsReadRef.current += sec.wordCount ?? sec.content?.split(/\s+/).length ?? 0;
-        try {
-            await fetch(`${AI_URL}/comprehension/record`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    student_id: user.uid,
-                    book_id: id,
-                    section_id: `section_${sectionIdx}`,
-                    section_title: sec.title || `Section ${sectionIdx + 1}`,
-                    chapter_title: lesson?.title || "",
-                    time_spent_s: Math.min(timeSpent, 3600),
-                    section_text: (sec.content || "").slice(0, 1000),
-                }),
-            });
-        } catch { /* optional */ }
-        sessionStartRef.current = Date.now(); // reset timer for next section
-    }, [user, id, sections, AI_URL, lesson]);
-
-    // ── Update learner embedding at session end ────────────────────────────────
-    const updateLearnerEmbedding = useCallback(async () => {
-        if (!user) return;
-        const sessionDurationS = (Date.now() - sessionStartRef.current) / 1000;
-        const wpm = sessionDurationS > 0
-            ? (wordsReadRef.current / sessionDurationS) * 60
-            : 0;
-        try {
-            await fetch(`${AI_URL}/learner/update`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    student_id: user.uid,
-                    session_duration_s: Math.min(sessionDurationS, 7200),
-                    words_read: wordsReadRef.current,
-                    reading_speed_wpm: Math.round(wpm),
-                    backtrack_count: Math.round(attentionState.backtrackFreq * 20),
-                    scroll_events: 30,
-                    attention_lapses: attentionState.attentionScore < 0.4 ? 3 : 1,
-                    highlights_made: 0,
-                    vocab_lookups: 0,
-                    time_of_day_hour: new Date().getHours(),
-                    disability_type: disabilityEncoded,
-                    doc_type: contentType,
-                    adaptations_applied: adaptationsRef.current,
-                    adaptation_accepted: adaptationsRef.current.map(() => true),
-                    session_fatigue: attentionState.sessionFatigue,
-                    avg_dwell_time_ms: attentionState.mouseDwellNorm * 10000,
-                }),
-            });
-        } catch { /* optional */ }
-    }, [user, attentionState, disabilityEncoded, contentType, AI_URL]);
-
-    // Track adaptation changes for embedding
-    useEffect(() => {
-        if (adaptation.actionId !== 0) {
-            adaptationsRef.current.push(adaptation.actionId);
-        }
-    }, [adaptation.actionId]);
-
     // ── Check if next section is a struggle zone ──────────────────────────────
     const checkStruggleZone = useCallback((nextIdx: number) => {
         if (!bookBrain) return;
         const nextSection = sections[nextIdx];
         if (!nextSection) return;
 
-        // Check difficulty_map for this section
         const diffEntry = bookBrain.difficulty_map?.find(
             (d: any) => d.section_title === nextSection.title || d.section_id === `section_${nextIdx}`
         );
@@ -524,7 +376,6 @@ const AdaptiveReader = () => {
             );
 
         if (isStruggle && bookBrain.vocabulary?.length > 0) {
-            // Find vocab words that appear in the next section content
             const nextContent = (nextSection.content || "").toLowerCase();
             const relevantVocab = bookBrain.vocabulary
                 .filter((v: any) => nextContent.includes(v.word?.toLowerCase()))
@@ -538,9 +389,8 @@ const AdaptiveReader = () => {
 
     // ── ADHD micro-check: show a simple comprehension pulse every ~250 words ──
     const maybeTriggerMicroCheck = useCallback(() => {
-        // Only trigger for ADHD users, not during TTS, not more than once per section
         const isAdhd = (profile?.disabilityType === "adhd" || profile?.disabilityType === "both");
-        if (!isAdhd || adaptation.isTTSEnabled) return false;
+        if (!isAdhd) return false;
 
         // Try to find a quiz associated with this chunkIndex
         const chunkQuiz = allQuizzes.find(q => q.chunkIndex === currentSectionIndex);
@@ -553,14 +403,13 @@ const AdaptiveReader = () => {
                 answer: chunkQuiz.correctAnswer,
             });
             setMicroCheckAnswer(null);
-            return true; // Triggered real quiz
+            return true;
         }
 
         // Fallback: build a lightweight comprehension pulse from the just-read section
         const sec = sections[currentSectionIndex];
         if (!sec?.content) return false;
 
-        // Only trigger fallback if words exceeded
         if (microCheckWordsRef.current < MICRO_CHECK_INTERVAL) return false;
         microCheckWordsRef.current = 0;
 
@@ -574,19 +423,17 @@ const AdaptiveReader = () => {
                 "A description of a different character",
                 "A flashback to an earlier event",
             ],
-            answer: 0, // Assume first option is "correct" for fallback
+            answer: 0,
         });
         setMicroCheckAnswer(null);
         return true;
-    }, [profile, adaptation.isTTSEnabled, allQuizzes, currentSectionIndex, sections]);
+    }, [profile, allQuizzes, currentSectionIndex, sections]);
 
     const startBreathingBreak = useCallback(() => {
         setBreathingBreak(true);
         setBreathPhase("inhale");
-        let phase: "inhale" | "hold" | "exhale" = "inhale";
         const phases: ("inhale" | "hold" | "exhale")[] = ["inhale", "hold", "exhale"];
         let phaseIdx = 0;
-        // 4s inhale, 2s hold, 4s exhale — 3 cycles then auto-dismiss
         let cycles = 0;
         breathIntervalRef.current = setInterval(() => {
             phaseIdx = (phaseIdx + 1) % 3;
@@ -599,7 +446,7 @@ const AdaptiveReader = () => {
                     setBreathingBreak(false);
                 }
             }
-        }, 4000); // Standardize to 4s for simplicity and to avoid lint error on stale 'phase' comparison
+        }, 4000);
     }, []);
 
     const handleNextSection = useCallback(() => {
@@ -609,16 +456,12 @@ const AdaptiveReader = () => {
         if (!microCheck) {
             const triggered = maybeTriggerMicroCheck();
             if (triggered) {
-                // Return early so navigation doesn't happen yet
                 return;
             }
         }
 
         if (currentSectionIndex < totalSections - 1) {
             const next = currentSectionIndex + 1;
-            // Record comprehension for current section before moving
-            recordComprehension(currentSectionIndex);
-            // Check if next section is a struggle zone
             checkStruggleZone(next);
 
             // ADHD breathing break every N sections (Phase 3)
@@ -627,7 +470,6 @@ const AdaptiveReader = () => {
                 adhdSectionCountRef.current += 1;
                 if (adhdSectionCountRef.current >= ADHD_SECTION_BREAK_EVERY) {
                     adhdSectionCountRef.current = 0;
-                    // Pre-fetch cliffhanger teaser from next section
                     const nextSection = sections[next];
                     if (nextSection?.content) {
                         const firstSentence = nextSection.content.split(/[.!?]/)[0]?.trim();
@@ -641,25 +483,20 @@ const AdaptiveReader = () => {
 
             setCurrentSectionIndex(next);
             saveProgress(next, "in_progress");
-            markSectionRead(sectionWords);
+            microCheckWordsRef.current += sectionWords;
             setActiveWordIndex(-1);
             setCurrentTime(0);
             setIsPlaying(false);
-            setMicroCheck(null); // Reset for next section
+            setMicroCheck(null);
             window.scrollTo({ top: 0, behavior: "smooth" });
         } else {
-            recordComprehension(currentSectionIndex);
-            updateLearnerEmbedding();
             saveProgress(currentSectionIndex, "completed");
-            flushNow();
-            // Save RL session summary before quiz
+            // Save session summary before quiz
             if (sessionId && idToken) {
                 fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/sessions/${sessionId}`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
                     body: JSON.stringify({
-                        avgAttentionScore: attentionState.attentionScore,
-                        avgSessionFatigue: attentionState.sessionFatigue,
                         completionRate: 1.0,
                         status: "completed",
                     }),
@@ -668,10 +505,10 @@ const AdaptiveReader = () => {
             navigate(`/student/quiz/${id}`);
         }
     }, [
-        currentSectionIndex, totalSections, saveProgress, markSectionRead,
-        currentSection.wordCount, words.length, flushNow, sessionId, idToken,
-        attentionState, navigate, id, recordComprehension, updateLearnerEmbedding,
-        checkStruggleZone, maybeTriggerMicroCheck,
+        currentSectionIndex, totalSections, saveProgress,
+        currentSection.wordCount, words.length, sessionId, idToken,
+        navigate, id, checkStruggleZone, maybeTriggerMicroCheck, microCheck,
+        profile, sections, startBreathingBreak,
     ]);
 
     const handlePrevSection = useCallback(() => {
@@ -690,22 +527,17 @@ const AdaptiveReader = () => {
     const dialogueLines: DialogueLine[] = (() => {
         if (contentType !== "play") return [];
         if (currentSection.dialogue && currentSection.dialogue.length > 0) {
-            // Filter page-number artifacts and running-header lines baked into stored dialogue
-            // (e.g. bare "5", or "15 Macbeth ACT 1. SC. 3 SECOND WITCH FIRST WITCH...")
             return currentSection.dialogue.filter((d: DialogueLine) => {
                 const c = d.content?.trim() || "";
                 if (c.length <= 5) return false;
-                if (/^\d+$/.test(c)) return false;           // bare page number
-                if (/^\d{1,4}\s+\S/.test(c)) return false;  // running header
+                if (/^\d+$/.test(c)) return false;
+                if (/^\d{1,4}\s+\S/.test(c)) return false;
                 return true;
             });
         }
-        // Parse from raw content (fallback for legacy data)
         return (currentSection.content || "").split("\n").reduce<DialogueLine[]>((acc, line) => {
             const trimmed = line.trim();
-            // Skip empty lines and bare page numbers
             if (!trimmed || /^\d+$/.test(trimmed)) return acc;
-            // Match "CHARACTER: dialogue" or "CHARACTER. dialogue"
             const charMatch = trimmed.match(/^([A-Z][A-Z\s'\.]{1,28}[A-Z])[:.]\s+(.*)/);
             if (charMatch && charMatch[2].trim().length > 5) {
                 acc.push({ type: "dialogue", character: charMatch[1].trim(), content: charMatch[2] });
@@ -719,7 +551,6 @@ const AdaptiveReader = () => {
     })();
 
     // ── Helper: extract clean Act / Scene from messy ML titles ───────────────
-    // e.g. "9 MACBETH ACT 1. SC. 2 DUNCAN MALCOLM..." → { act: "Act 1", scene: "Scene 2" }
     function parseActScene(title: string): { act: string; scene: string } {
         const actM = title.match(/ACT\s+(\d+|[IVX]+)/i);
         const sceneM = title.match(/SC(?:ENE)?\.?\s*(\d+|[IVX]+)/i);
@@ -738,7 +569,6 @@ const AdaptiveReader = () => {
             const sceneLabel = scene || `Part ${idx + 1}`;
             const existing = groups.find(g => g.actTitle === act);
             if (existing) {
-                // Only add the first occurrence of each scene to the nav
                 if (!existing.scenes.some(s => s.sceneTitle === sceneLabel)) {
                     existing.scenes.push({ idx, sceneTitle: sceneLabel });
                 }
@@ -746,7 +576,6 @@ const AdaptiveReader = () => {
                 groups.push({ actTitle: act, scenes: [{ idx, sceneTitle: sceneLabel }] });
             }
         });
-        // Sort scenes within each act by numeric value
         groups.forEach(g => {
             g.scenes.sort((a, b) => {
                 const na = parseInt(a.sceneTitle.replace(/\D/g, ""), 10) || 0;
@@ -774,15 +603,12 @@ const AdaptiveReader = () => {
                 <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
                     <Loader2 className="w-12 h-12 text-primary animate-spin" />
                     <p className="font-bold text-muted-foreground uppercase tracking-widest text-xs">
-                        Preparing your adaptive lesson...
+                        Preparing your lesson...
                     </p>
                 </div>
             </DashboardLayout>
         );
     }
-
-    // ── RL action badge colour ─────────────────────────────────────────────────
-    const actionInfo = RL_ACTIONS[adaptation.actionId];
 
     return (
         <DashboardLayout role="student">
@@ -1079,10 +905,7 @@ const AdaptiveReader = () => {
                 )}
             </AnimatePresence>
 
-            <div
-                className={`max-w-4xl mx-auto transition-all duration-500 pb-24 ${focusMode ? "pt-0" : "pt-4"}`}
-                style={{ lineHeight: adaptation.lineSpacing, fontSize: `${adaptation.fontSize}em`, fontFamily: dyslexicMode ? "OpenDyslexic, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" : "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
-            >
+            <div className={`max-w-4xl mx-auto transition-all duration-500 pb-24 ${focusMode ? "pt-0" : "pt-4"}`}>
                 <AnimatePresence>
                     {!focusMode && (
                         <motion.div
@@ -1092,41 +915,6 @@ const AdaptiveReader = () => {
                             <Button variant="ghost" size="sm" className="gap-2 font-bold" onClick={() => navigate("/student/lessons")}>
                                 <ArrowLeft className="w-4 h-4" /> {t("reader.exitReader")}
                             </Button>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                {/* RL Engine badge */}
-                                <div className="px-3 py-1.5 rounded-xl bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest border border-primary/20 flex items-center gap-2">
-                                    <BrainCircuit className="w-3 h-3" />
-                                    {rlLoading ? t("reader.analysing") : t("reader.adaptiveEngineActive")}
-                                </div>
-                                {/* Attention score */}
-                                <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 flex items-center gap-2">
-                                    <Zap className="w-3 h-3" />
-                                    Attention {Math.round(attentionState.attentionScore * 100)}%
-                                </div>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* ── RL Action Toast notification ── */}
-                <AnimatePresence>
-                    {showRLBadge && adaptation.actionId !== 0 && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="mb-4 flex items-center gap-3 px-4 py-3 rounded-2xl border border-primary/20 bg-primary/5"
-                        >
-                            <span className="text-xl">{actionInfo.icon}</span>
-                            <div>
-                                <p className="text-xs font-black text-primary uppercase tracking-widest">
-                                    RL Adaptation Applied
-                                </p>
-                                <p className="text-sm font-bold">{actionInfo.label}</p>
-                            </div>
-                            <Badge variant="secondary" className="ml-auto text-[10px] font-bold">
-                                {adaptation.model === "ppo" ? "PPO Model" : "Rule-Based"}
-                            </Badge>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -1232,45 +1020,6 @@ const AdaptiveReader = () => {
                     </div>
                 )}
 
-                {/* ── ADHD micro-break prompt + gamification counter ── */}
-                <AnimatePresence>
-                    {adaptation.isChunked && !focusMode && (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="mb-4 flex items-center gap-3 p-4 rounded-2xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-700"
-                        >
-                            <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-                            <div className="flex-1">
-                                <p className="text-xs font-black text-rose-600 uppercase tracking-widest">
-                                    {t("reader.attentionSupportActive")}
-                                </p>
-                                <p className="text-sm font-bold text-rose-700 dark:text-rose-300">
-                                    {t("reader.contentChunked")}
-                                </p>
-                            </div>
-                            {/* Gamification: show how many sections to next quiz checkpoint */}
-                            {totalSections > 1 && (() => {
-                                const CHECKPOINT_EVERY = 3; // quiz every 3 sections
-                                const nextCheckpoint = (Math.floor(currentSectionIndex / CHECKPOINT_EVERY) + 1) * CHECKPOINT_EVERY;
-                                const remaining = Math.max(1, nextCheckpoint - currentSectionIndex);
-                                return (
-                                    <div className="shrink-0 text-right">
-                                        <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">
-                                            {t("reader.toCheckpoint")}
-                                        </p>
-                                        <p className="text-xl font-black text-rose-600">{remaining}</p>
-                                        <p className="text-[10px] text-rose-400 font-bold">
-                                            {remaining === 1 ? t("reader.section") : t("reader.sections")}
-                                        </p>
-                                    </div>
-                                );
-                            })()}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
                 {/* ── Reader Card ── */}
                 <Card className={`rounded-[40px] border-2 border-border shadow-2xl transition-all duration-500 overflow-hidden ${focusMode ? "bg-secondary/20 border-primary/20" : "bg-card"}`}>
 
@@ -1317,7 +1066,7 @@ const AdaptiveReader = () => {
                     {/* Reading Content */}
                     <CardContent className="p-8 md:p-12 select-text">
                         {contentType === "poem" ? (
-                            /* Poem mode — centered verse with emotion gradients + rhyme scheme (Phase 2) */
+                            /* Poem mode */
                             <PoemRenderer
                                 text={currentSection.content || ""}
                                 title={lesson?.title || sceneTitle || ""}
@@ -1325,8 +1074,7 @@ const AdaptiveReader = () => {
                                 language={lesson?.language?.startsWith("fr") ? "fr" : "en"}
                                 dyslexicFont={dyslexiaSettings.openDyslexicFont}
                                 aiUrl={AI_URL}
-                                onLineHighlight={(line) => {
-                                    // Let student use Highlight-to-Understand on any line
+                                onLineHighlight={() => {
                                     if (window.getSelection) window.getSelection()?.removeAllRanges();
                                 }}
                             />
@@ -1337,7 +1085,7 @@ const AdaptiveReader = () => {
                                 actTitle={actTitle}
                                 sceneTitle={sceneTitle}
                                 dyslexicFont={dyslexiaSettings.openDyslexicFont}
-                                autoAdvance={adaptation.isTTSEnabled}
+                                autoAdvance={false}
                                 charactersOnStage={currentSection.characters_present}
                                 characterFactions={
                                     currentSection.faction
@@ -1347,7 +1095,6 @@ const AdaptiveReader = () => {
                                         : undefined
                                 }
                                 onComplete={() => {
-                                    // Show "What just happened?" summary before advancing (Phase 2)
                                     if (currentSection.characters_present?.length || currentSection.emotion) {
                                         setSceneSummary({
                                             emotion: currentSection.emotion || "neutral",
@@ -1361,10 +1108,7 @@ const AdaptiveReader = () => {
                                 }}
                             />
                         ) : displayText.trim().length > 0 ? (
-                            /* All prose (generic/novel/play-without-dialogue) → DyslexiaText renderer.
-                               DyslexiaText handles bionic reading, syllable colors, reading ruler,
-                               spacing and font — all driven by the RL-derived dyslexiaSettings.
-                               Word-highlight overlay is applied on top for TTS sync. */
+                            /* All prose (generic/novel/play-without-dialogue) → DyslexiaText renderer */
                             <div className="relative">
                                 {/* Novel mode: characters in this section chip strip (Phase 2) */}
                                 {contentType === "novel" && (currentSection.characters_present?.length ?? 0) > 0 && (
@@ -1383,7 +1127,7 @@ const AdaptiveReader = () => {
                                 )}
 
                                 {/* TTS word-highlight overlay (generic mode) */}
-                                {contentType === "generic" && isPlaying && !adaptation.isTTSEnabled && (
+                                {contentType === "generic" && isPlaying && (
                                     <div
                                         className="reading-area absolute inset-0 pointer-events-none"
                                         style={{
@@ -1420,7 +1164,7 @@ const AdaptiveReader = () => {
                                 />
                             </div>
                         ) : (
-                            /* Empty section — use Next to continue */
+                            /* Empty section */
                             <div className="flex flex-col items-center justify-center py-16 gap-4 text-muted-foreground">
                                 <BookOpen className="w-12 h-12 opacity-30" />
                                 <p className="text-sm font-bold uppercase tracking-widest opacity-50">
@@ -1442,9 +1186,7 @@ const AdaptiveReader = () => {
                                 >
                                     {isPlaying
                                         ? <Pause className="w-6 h-6" />
-                                        : adaptation.isTTSEnabled
-                                            ? <Volume2 className="w-6 h-6" />
-                                            : <Play className="w-6 h-6 ml-1" />
+                                        : <Volume2 className="w-6 h-6" />
                                     }
                                 </Button>
                                 <Button
@@ -1456,12 +1198,9 @@ const AdaptiveReader = () => {
                             </div>
                             <div className="flex-1 w-full space-y-2">
                                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">
-                                    <span>
-                                        {adaptation.isTTSEnabled ? "🔊 TTS Active" : "Voice Activity"}
-                                    </span>
-                                    <span>Attention {Math.round(attentionState.attentionScore * 100)}%</span>
+                                    <span>{isPlaying ? "🔊 TTS Active" : "Voice Activity"}</span>
                                 </div>
-                                <Progress value={attentionState.attentionScore * 100} className="h-2 rounded-full bg-background" />
+                                <Progress value={0} className="h-2 rounded-full bg-background" />
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-3 text-muted-foreground group">
@@ -1533,9 +1272,7 @@ const AdaptiveReader = () => {
 
             </div>
 
-            {/* ── Comprehension Mini-Panel ─────────────────────────────────────
-                Shows the student their live comprehension graph for this book:
-                characters recognised, vocabulary progress, chapter scores. */}
+            {/* ── Comprehension Mini-Panel ── */}
             {!focusMode && user && id && (
                 <ComprehensionMiniPanel
                     studentId={user.uid}
@@ -1544,16 +1281,13 @@ const AdaptiveReader = () => {
                 />
             )}
 
-            {/* ── Vocabulary Sidebar (Phase 2 — Novel/Generic mode) ─────────────
-                Fixed slide-in panel showing difficult words for this section.
-                Only shown for non-play content types. */}
+            {/* ── Vocabulary Sidebar (Phase 2 — Novel/Generic mode) ── */}
             {contentType !== "play" && !focusMode && bookBrain?.vocabulary && (
                 <VocabSidebar
                     sectionContent={currentSection.content || ""}
                     bookVocabulary={bookBrain.vocabulary}
                     archiPhrases={currentSection.archaic_phrases}
                     onWordLookup={(word) => {
-                        // Record vocab lookup in comprehension graph
                         if (user && id) {
                             fetch(`${AI_URL}/comprehension/vocab`, {
                                 method: "POST",
@@ -1566,10 +1300,7 @@ const AdaptiveReader = () => {
                 />
             )}
 
-            {/* ── Character Map Panel (Phase 5) ────────────────────────────────
-                Fixed right-side drawer showing character relationship graph.
-                Toggled by the "Characters" button in the reader header.
-                Only shown when bookBrain has character data. */}
+            {/* ── Character Map Panel (Phase 5) ── */}
             <AnimatePresence>
                 {showCharacterMap && bookBrain?.characters?.length > 0 && (
                     <motion.div
@@ -1597,10 +1328,7 @@ const AdaptiveReader = () => {
                 />
             )}
 
-            {/* ── Highlight-to-Understand popup (Deliverable 2) ─────────────────
-                Listens globally for text selection anywhere on the page.
-                Sends highlighted text to /simplify and shows a floating card
-                with: simplified version, author intent, vocabulary, Kinyarwanda bridge. */}
+            {/* ── Highlight-to-Understand popup (Deliverable 2) ── */}
             <HighlightToUnderstand
                 bookTitle={lesson?.title || ""}
                 author={lesson?.author || ""}
@@ -1612,7 +1340,6 @@ const AdaptiveReader = () => {
                 archiPhrases={currentSection.archaic_phrases}
                 bookVocabulary={bookBrain?.vocabulary}
                 onVocabSave={(word) => {
-                    // Record the vocab lookup in the comprehension graph
                     if (user && id) {
                         fetch(`${AI_URL}/comprehension/vocab`, {
                             method: "POST",
@@ -1629,20 +1356,8 @@ const AdaptiveReader = () => {
                         window.speechSynthesis.speak(u);
                     }
                 }}
-                onHighlightCategorized={(text, category) => {
-                    // Phase 4: apply targeted EMA update to learner embedding
-                    if (user) {
-                        fetch(`${AI_URL}/learner/highlight-feedback`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                student_id: user.uid,
-                                category,
-                                highlighted_text: text.slice(0, 200),
-                                difficulty_estimate: attentionState.scrollHesitation,
-                            }),
-                        }).catch(() => { });
-                    }
+                onHighlightCategorized={(_text, _category) => {
+                    // highlight feedback — no-op without AI service
                 }}
             />
         </DashboardLayout>
