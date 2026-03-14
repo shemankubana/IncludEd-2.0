@@ -17,13 +17,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
+# Install CPU-only PyTorch first (avoids downloading 2GB GPU build)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
 # Install requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir gunicorn uvicorn
 
-# Download spaCy model
-RUN python -m spacy download en_core_web_sm
+# Download spaCy model (pinned to match spacy==3.7.2)
+RUN pip install --no-cache-dir https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.2/en_core_web_sm-3.7.2-py3-none-any.whl
 
 # Copy project files
 COPY . .

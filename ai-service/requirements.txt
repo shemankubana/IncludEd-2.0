@@ -15,11 +15,10 @@ opencv-python-headless==4.8.1.78
 # ── ML / NLP ───────────────────────────────────────────────────────────────────
 numpy==1.26.4                  # Fix for version 2.0 compatibility issues
 Pillow==11.3.0
-torch>=2.2.2                  # Downgraded for Python 3.9 compatibility
-transformers>=4.40.0          # HuggingFace Transformers (Mistral, BERT, DeBERTa, FLAN-T5)
+torch>=2.2.2
+transformers>=4.40.0          # HuggingFace Transformers (BERT, DeBERTa, FLAN-T5)
 sentencepiece>=0.1.99         # Required for T5Tokenizer
-accelerate>=0.27.0            # Required for device_map="auto" (Mistral)
-bitsandbytes>=0.42.0          # Optional: 4-bit quantisation for Mistral-7B
+accelerate>=0.27.0
 sentence-transformers==2.3.1
 spacy==3.7.2
 nltk==3.8.1
@@ -34,6 +33,7 @@ langdetect==1.0.9             # Fast EN/FR/multi-language detection
 stable-baselines3==2.2.1
 gymnasium==0.29.1
 shimmy>=0.2.1
+huggingface_hub>=0.20.0
 
 # ── TTS ────────────────────────────────────────────────────────────────────────
 edge-tts==6.1.9

@@ -61,6 +61,9 @@ class RLAgentService:
 
     # ── Model lifecycle ───────────────────────────────────────────────────────
 
+    HF_REPO_ID  = "nkubana0/included-rl-model"
+    HF_FILENAME = "ppo_included_v2.zip"
+
     def _load_model(self):
         services_dir = os.path.dirname(__file__)
         app_dir = os.path.dirname(services_dir)  # ai-service root
@@ -73,33 +76,59 @@ class RLAgentService:
             for name in self.EXTRA_MODEL_NAMES
         ]
 
+        # Try local paths first
         for path in search_paths:
             if os.path.exists(path):
-                try:
-                    from stable_baselines3 import PPO
-                    model = PPO.load(path)
-
-                    # Accept 8-dim (v1) or 9-dim (v2) observation spaces
-                    obs_dim = model.observation_space.shape[0]
-                    if obs_dim not in (8, 9):
-                        print(
-                            f"⚠️  RL Agent: skipping {path} — observation space is "
-                            f"{obs_dim}-dim (expected 8 or 9). Retrain with "
-                            f"rl-engine/train_model.py."
-                        )
-                        continue
-
-                    self.model       = model
-                    self.model_path  = path
-                    self.model_ready = True
-                    self._obs_dim    = obs_dim
-                    print(f"✅ RL Agent: loaded {obs_dim}-dim model from {path}")
+                if self._try_load(path):
                     return
-                except Exception as e:
-                    print(f"⚠️  RL Agent: failed to load {path}: {e}")
+
+        # Fallback: download from HuggingFace Hub
+        hf_path = self._download_from_hub(app_dir)
+        if hf_path and self._try_load(hf_path):
+            return
 
         print("⚠️  RL Agent: no compatible model found — using rule-based fallback.")
         self._obs_dim = 8
+
+    def _try_load(self, path: str) -> bool:
+        """Attempt to load a PPO model. Returns True on success."""
+        try:
+            from stable_baselines3 import PPO
+            model = PPO.load(path)
+            obs_dim = model.observation_space.shape[0]
+            if obs_dim not in (8, 9):
+                print(
+                    f"⚠️  RL Agent: skipping {path} — observation space is "
+                    f"{obs_dim}-dim (expected 8 or 9)."
+                )
+                return False
+            self.model       = model
+            self.model_path  = path
+            self.model_ready = True
+            self._obs_dim    = obs_dim
+            print(f"✅ RL Agent: loaded {obs_dim}-dim model from {path}")
+            return True
+        except Exception as e:
+            print(f"⚠️  RL Agent: failed to load {path}: {e}")
+            return False
+
+    def _download_from_hub(self, app_dir: str) -> Optional[str]:
+        """Download model from HuggingFace Hub if not found locally."""
+        try:
+            from huggingface_hub import hf_hub_download
+            print(f"⬇️  RL Agent: downloading model from HuggingFace Hub ({self.HF_REPO_ID})...")
+            model_dir = os.path.join(app_dir, "rl-engine", "models")
+            os.makedirs(model_dir, exist_ok=True)
+            path = hf_hub_download(
+                repo_id=self.HF_REPO_ID,
+                filename=self.HF_FILENAME,
+                local_dir=model_dir,
+            )
+            print(f"✅ RL Agent: model downloaded to {path}")
+            return path
+        except Exception as e:
+            print(f"⚠️  RL Agent: HuggingFace Hub download failed: {e}")
+            return None
 
     def reload_model(self):
         """Hot-reload the model (e.g., after a new training run)."""
