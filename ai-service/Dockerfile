@@ -1,10 +1,10 @@
 # Use an official Python runtime as a parent image
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PORT=8080
+    PORT=7860
 
 # Set work directory
 WORKDIR /app
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     libffi-dev \
     gcc \
-    && rm -rf /var/lib/apt/lib/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Install requirements
 COPY requirements.txt .
@@ -32,8 +32,8 @@ COPY . .
 RUN mkdir -p temp_audio && chmod 777 temp_audio
 
 # Expose the port
-EXPOSE 8080
+EXPOSE 7860
 
 # Command to run the application
 # We use gunicorn with uvicorn workers for production
-CMD gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:$PORT
+CMD gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:$PORT --timeout 120

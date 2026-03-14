@@ -45,11 +45,6 @@ from services.tts_service            import get_tts_service
 from services.hf_inference_service   import HFInferenceService
 from services.pronunciation_service  import PronunciationService
 
-# ML pipeline singletons (reused across requests)
-_literature_analyzer = LiteratureAnalyzer()
-_book_brain          = BookBrain()
-_quiz_generator      = PedagogicalQuestionGenerator()
-
 app = FastAPI(title="IncludEd AI Service", version="3.0.0")
 
 app.add_middleware(
@@ -60,24 +55,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Service singletons
-question_gen          = SmartQuestionGenerator()
-accessibility_adapter = FreeAccessibilityAdapter()
-rl_agent              = RLAgentService()
-tts_service           = TTSService()
-gemini_service        = GeminiService(os.getenv("GEMINI_API_KEY"))
-simplification_svc    = SimplificationService()
-learner_embedding     = LearnerEmbedding()
-comprehension_tracker = ComprehensionTracker()
-teacher_intelligence  = TeacherIntelligence()
-stt_assessment        = STTAssessmentService()
-word_difficulty       = WordDifficultyService()
-ner_extractor         = get_ner_extractor()
-vocab_analyzer        = get_vocab_analyzer(gemini_service=gemini_service)
-difficulty_adapter    = get_difficulty_adapter()
-tts_svc               = get_tts_service()
-hf_inference          = HFInferenceService(os.getenv("HF_API_TOKEN"))
-pronunciation_svc     = PronunciationService()
+# ── Lazy proxy — instantiates service on first attribute access ───────────────
+class _Lazy:
+    def __init__(self, factory):
+        object.__setattr__(self, '_factory', factory)
+        object.__setattr__(self, '_instance', None)
+
+    def _load(self):
+        if object.__getattribute__(self, '_instance') is None:
+            factory = object.__getattribute__(self, '_factory')
+            object.__setattr__(self, '_instance', factory())
+        return object.__getattribute__(self, '_instance')
+
+    def __getattr__(self, name):
+        return getattr(self._load(), name)
+
+    def __call__(self, *args, **kwargs):
+        return self._load()(*args, **kwargs)
+
+# ML pipeline singletons — loaded on first use, not at startup
+_literature_analyzer = _Lazy(LiteratureAnalyzer)
+_book_brain          = _Lazy(BookBrain)
+_quiz_generator      = _Lazy(PedagogicalQuestionGenerator)
+question_gen         = _Lazy(SmartQuestionGenerator)
+accessibility_adapter= _Lazy(FreeAccessibilityAdapter)
+rl_agent             = _Lazy(RLAgentService)
+tts_service          = _Lazy(TTSService)
+gemini_service       = _Lazy(lambda: GeminiService(os.getenv("GEMINI_API_KEY")))
+simplification_svc   = _Lazy(SimplificationService)
+learner_embedding    = _Lazy(LearnerEmbedding)
+comprehension_tracker= _Lazy(ComprehensionTracker)
+teacher_intelligence = _Lazy(TeacherIntelligence)
+stt_assessment       = _Lazy(STTAssessmentService)
+word_difficulty      = _Lazy(WordDifficultyService)
+ner_extractor        = _Lazy(get_ner_extractor)
+vocab_analyzer       = _Lazy(lambda: get_vocab_analyzer(gemini_service=gemini_service))
+difficulty_adapter   = _Lazy(get_difficulty_adapter)
+tts_svc              = _Lazy(get_tts_service)
+hf_inference         = _Lazy(lambda: HFInferenceService(os.getenv("HF_API_TOKEN")))
+pronunciation_svc    = _Lazy(PronunciationService)
 
 # ── Request/Response Models ──────────────────────────────────────────────────
 
