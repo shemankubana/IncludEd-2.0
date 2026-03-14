@@ -3,6 +3,9 @@ backend/node_modules
 frontend/.env
 backend/serviceAccountKey.json
 venv/
+**/venv/
+**/__pycache__/
+**/node_modules/
 text.txt
 .env
 ai-service/.env
