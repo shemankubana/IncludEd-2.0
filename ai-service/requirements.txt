@@ -10,16 +10,13 @@ google-generativeai==0.5.4
 # ── PDF Processing ─────────────────────────────────────────────────────────────
 pymupdf==1.23.8
 easyocr==1.7.2
-opencv-python-headless==4.8.1.78
 
 # ── ML / NLP ───────────────────────────────────────────────────────────────────
 numpy==1.26.4                  # Fix for version 2.0 compatibility issues
 Pillow==11.3.0
 torch>=2.2.2
-transformers>=4.40.0          # HuggingFace Transformers (BERT, DeBERTa, FLAN-T5)
-sentencepiece>=0.1.99         # Required for T5Tokenizer
-accelerate>=0.27.0
-sentence-transformers==2.3.1
+transformers>=4.40.0
+sentencepiece>=0.1.99
 spacy==3.7.2
 nltk==3.8.1
 scikit-learn==1.4.0

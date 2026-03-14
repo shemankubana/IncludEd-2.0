@@ -22,8 +22,11 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 
 # Install requirements
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir gunicorn uvicorn
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn uvicorn && \
+    pip cache purge && \
+    find /usr/local/lib/python3.12 -name "*.pyc" -delete && \
+    find /usr/local/lib/python3.12 -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # Download spaCy model (pinned to match spacy==3.7.2)
 RUN pip install --no-cache-dir https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.2/en_core_web_sm-3.7.2-py3-none-any.whl
