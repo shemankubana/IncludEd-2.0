@@ -9,6 +9,8 @@ ai-service/.env
 
 # ML Models & Large Binary Files (use cloud storage instead)
 *.zip
+!ai-service/rl-engine/models/ppo_included_v2.zip
+!ai-service/rl-engine/models/best_model.zip
 *.joblib
 rl-engine/logs/
 ai-service/models/

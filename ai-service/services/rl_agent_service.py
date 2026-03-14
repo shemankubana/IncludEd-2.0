@@ -42,6 +42,16 @@ class RLAgentService:
         "ppo_literature_agent.zip",
     ]
 
+    # Additional search dirs relative to ai-service root
+    EXTRA_MODEL_DIRS = [
+        "rl-engine/models",
+    ]
+
+    EXTRA_MODEL_NAMES = [
+        "ppo_included_v2.zip",
+        "best_model.zip",
+    ]
+
     def __init__(self):
         self.model       = None
         self.model_path  = None
@@ -52,9 +62,18 @@ class RLAgentService:
     # ── Model lifecycle ───────────────────────────────────────────────────────
 
     def _load_model(self):
-        base_dir = os.path.dirname(__file__)
-        for candidate in self.MODEL_CANDIDATES:
-            path = os.path.join(base_dir, candidate)
+        services_dir = os.path.dirname(__file__)
+        app_dir = os.path.dirname(services_dir)  # ai-service root
+
+        search_paths = [
+            os.path.join(services_dir, name) for name in self.MODEL_CANDIDATES
+        ] + [
+            os.path.join(app_dir, extra_dir, name)
+            for extra_dir in self.EXTRA_MODEL_DIRS
+            for name in self.EXTRA_MODEL_NAMES
+        ]
+
+        for path in search_paths:
             if os.path.exists(path):
                 try:
                     from stable_baselines3 import PPO
