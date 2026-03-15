@@ -3,23 +3,24 @@ import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
-// Construct path to serviceAccountKey.json in the backend root
 const __filename = fileURLToPath(import.meta.url);
 const serviceAccountPath = path.resolve(path.dirname(__filename), '../../serviceAccountKey.json');
 
 try {
-    if (existsSync(serviceAccountPath)) {
-        const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
-
-        // Check if Firebase is already initialized
-        if (!admin.apps.length) {
-            admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount),
-            });
-            console.log('Firebase Admin initialized successfully.');
+    if (!admin.apps.length) {
+        if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+            // Production: load from environment variable
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+            admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+            console.log('Firebase Admin initialized from environment variable.');
+        } else if (existsSync(serviceAccountPath)) {
+            // Local development: load from file
+            const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
+            admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+            console.log('Firebase Admin initialized from serviceAccountKey.json.');
+        } else {
+            console.warn('[WARN] Firebase Admin initialization skipped: no credentials found.');
         }
-    } else {
-        console.warn(`[WARN] Firebase Admin initialization skipped: ${serviceAccountPath} not found.`);
     }
 } catch (error) {
     console.error('[ERROR] Failed to initialize Firebase Admin:', error.message);
