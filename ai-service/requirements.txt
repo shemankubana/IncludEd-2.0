@@ -9,7 +9,6 @@ google-generativeai==0.5.4
 
 # ── PDF Processing ─────────────────────────────────────────────────────────────
 pymupdf==1.23.8
-easyocr==1.7.2
 
 # ── ML / NLP ───────────────────────────────────────────────────────────────────
 numpy==1.26.4                  # Fix for version 2.0 compatibility issues
