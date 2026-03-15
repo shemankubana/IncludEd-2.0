@@ -38,7 +38,7 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 
 | Platform | Link |
 |----------|------|
-| Web App  | [https://included-app.example.com](https://included-app.example.com) |
+| Web App  | [https://includ-ed-2-0.vercel.app/](https://includ-ed-2-0.vercel.app/) |
 
 <!-- TODO: Replace the link above with the actual deployed URL, or provide a downloadable package (.exe / .apk / .deb) link below:
      | Desktop Installer | [Download .exe](https://link-to-installer) |
