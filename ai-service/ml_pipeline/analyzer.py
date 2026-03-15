@@ -466,7 +466,8 @@ Keep it strictly under 100 words.
         Signs of junk text:
         - Ratio of symbols/whitespace to letters is extremely high.
         - Common English characters (e.g. 'e', 't', 'a') are missing.
-        - Excessive noise characters: }, {, [, @, _, \, |, ^, ~
+        - Excessive noise characters: }, {, [, @, _, \\, |, ^, ~
+
         """
         if not text or len(text) < 20:
             return False
