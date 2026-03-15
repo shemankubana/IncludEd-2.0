@@ -29,7 +29,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     find /usr/local/lib/python3.12 -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # Download spaCy model (pinned to match spacy==3.7.2)
-RUN python -m spacy download en_core_web_sm
+RUN pip install --no-cache-dir https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
 # Copy project files
 COPY . .
