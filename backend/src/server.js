@@ -69,6 +69,8 @@ app.use(cors({
     const allowedOrigins = [
       process.env.FRONTEND_URL,
       'http://localhost:8080',
+      'https://nkubana0-included-ai.hf.space',
+      'https://included-20-production.up.railway.app',
       'http://localhost:5173'
     ];
     
