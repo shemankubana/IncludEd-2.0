@@ -5,10 +5,15 @@ backend/serviceAccountKey.json
 venv/
 **/venv/
 **/__pycache__/
+**/*.pyc
+**/*.pyo
+**/events.out.tfevents.*
 **/node_modules/
 text.txt
 .env
 ai-service/.env
+ai-service/venv/
+ai-service/__pycache__/
 
 # ML Models & Large Binary Files (use cloud storage instead)
 *.zip
