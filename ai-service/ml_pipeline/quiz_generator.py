@@ -155,10 +155,20 @@ class PedagogicalQuestionGenerator:
 
     @staticmethod
     def _normalise_question(q: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure question dict matches the required schema."""
+        """Ensure question dict matches the required schema and strip option labels."""
         options = q.get("options", [])
         if not isinstance(options, list) or len(options) < 2:
             options = ["Option A", "Option B", "Option C", "Option D"]
+        
+        # Strip prefixes like "A) ", "B. ", "1. ", etc.
+        cleaned_options = []
+        for opt in options:
+            opt_str = str(opt).strip()
+            # Match "A) ", "a) ", "A. ", "1) ", "1. " at the start
+            cleaned = re.sub(r'^[a-dA-D1-4][\.\)]\s*', '', opt_str)
+            cleaned_options.append(cleaned)
+        
+        options = cleaned_options
         while len(options) < 4:
             options.append("Not enough information")
 
@@ -218,3 +228,59 @@ class PedagogicalQuestionGenerator:
                 content = "\n\n".join(paras)
             return content[:3000]
 
+# ── Fallback Templates ────────────────────────────────────────────────────────
+
+def _extract_sentences(content: str, min_words: int = 5) -> List[str]:
+    sentences = re.split(r'(?<=[.!?])\s+', content)
+    return [s.strip() for s in sentences if len(s.split()) >= min_words]
+
+def _generic_templates(content: str, count: int) -> List[Dict[str, Any]]:
+    sentences = _extract_sentences(content)
+    qs = []
+    for i in range(min(count, len(sentences))):
+        sentence = sentences[i]
+        qs.append({
+            "question": f"According to the text, which statement is true?",
+            "options": [sentence, "None of the above", "Cannot be determined", "The opposite is true"],
+            "correctAnswer": 0,
+            "explanation": "This detail is explicitly mentioned in the text.",
+            "difficulty": "easy"
+        })
+    return qs
+
+def _novel_templates(content: str, count: int) -> List[Dict[str, Any]]:
+    qs = _generic_templates(content, count)
+    for q in qs:
+        q["question"] = "Based on the story, what happens?"
+    return qs
+
+def _play_templates(content: str, count: int) -> List[Dict[str, Any]]:
+    qs = _generic_templates(content, count)
+    for q in qs:
+        q["question"] = "Which character's dialogue or action is described?"
+    return qs
+
+def _generic_templates_fr(content: str, count: int) -> List[Dict[str, Any]]:
+    sentences = _extract_sentences(content)
+    qs = []
+    for i in range(min(count, len(sentences))):
+        qs.append({
+            "question": f"Selon le texte, quelle affirmation est vraie ?",
+            "options": [sentences[i], "Aucune de ces réponses", "Impossible à déterminer", "Le contraire est vrai"],
+            "correctAnswer": 0,
+            "explanation": "Ce détail est mentionné explicitement dans le texte.",
+            "difficulty": "easy"
+        })
+    return qs
+
+def _novel_templates_fr(content: str, count: int) -> List[Dict[str, Any]]:
+    qs = _generic_templates_fr(content, count)
+    for q in qs:
+        q["question"] = "Que se passe-t-il dans l'histoire ?"
+    return qs
+
+def _play_templates_fr(content: str, count: int) -> List[Dict[str, Any]]:
+    qs = _generic_templates_fr(content, count)
+    for q in qs:
+        q["question"] = "Quel dialogue ou action de personnage est décrit ?"
+    return qs

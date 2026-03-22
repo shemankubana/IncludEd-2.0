@@ -6,22 +6,72 @@ import { processPDF } from '../services/pdfProcessor.js';
 import { splitIntoChapters } from '../services/chapterSplitter.js';
 import { generateQuestions } from '../services/questionGenerator.js';
 import { sequelize } from '../config/database.js';
+import axios from 'axios';
 
 const router = express.Router();
+
+/**
+ * Helper to trigger AI analysis (NER & Vocab) from AI-Service.
+ * Updates literature.bookBrain with the results.
+ */
+async function analyzeLiterature(literature) {
+  const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8082';
+  const sections = literature.sections.map(s => s.content);
+  const titles = literature.sections.map(s => s.title);
+
+  try {
+    console.log(`🤖 Triggering AI analysis for: ${literature.title}`);
+    
+    // 1. NER Extract (Characters)
+    const nerResp = await axios.post(`${AI_SERVICE_URL}/ner/extract`, {
+      sections,
+      title: literature.title
+    }, { timeout: 120000 });
+    
+    // 2. Vocab Batch Analyze
+    const vocabResp = await axios.post(`${AI_SERVICE_URL}/vocab/batch-analyze`, {
+      sections,
+      section_titles: titles
+    }, { timeout: 120000 });
+
+    const bookBrain = {
+      ...(literature.bookBrain || {}),
+      characters: nerResp.data.characters || [],
+      relationships: nerResp.data.relationships || [],
+      locations: nerResp.data.locations || [],
+      vocabulary: vocabResp.data.vocabulary || []
+    };
+
+    await literature.update({ bookBrain });
+    console.log(`✅ AI analysis complete for: ${literature.title} (${bookBrain.characters.length} characters found)`);
+    return bookBrain;
+  } catch (err) {
+    console.warn(`⚠️ AI analysis failed for ${literature.title}: ${err.message}`);
+    // We don't throw here to avoid crashing the background flow
+    return null;
+  }
+}
 
 // Upload PDF and Image endpoint
 router.post('/upload', authenticateToken, upload.fields([
   { name: 'file', maxCount: 1 },
   { name: 'image', maxCount: 1 }
 ]), async (req, res) => {
+  console.log('🚀 POST /api/literature/upload — Request received');
   try {
     const { title, author, language, subject, content, simplifyText, generateAudio, difficulty, curriculumOutcomeCode, gradeLevel } = req.body;
+    console.log(`   - Data: title=${title}, author=${author}, lang=${language}`);
     const files = req.files;
     const pdfFile = files?.file?.[0];
     const imageFile = files?.image?.[0];
+    
+    if (pdfFile) console.log(`   - PDF File: ${pdfFile.originalname} (${pdfFile.size} bytes)`);
 
     const isSimplifyEnabled = simplifyText === 'true';
     const isAudioEnabled = generateAudio === 'true';
+
+    // Sanitize title (remove markdown artifacts like **)
+    const cleanTitle = (title || (pdfFile ? pdfFile.originalname.replace('.pdf', '') : 'New Lesson')).replace(/\*\*/g, '').trim();
 
     let originalContent, adaptedContent, wordCount;
     let finalContentType = 'generic';
@@ -59,7 +109,7 @@ router.post('/upload', authenticateToken, upload.fields([
     const user = await import('../models/User.js').then(m => m.User.findByPk(req.user.userId));
 
     const literature = await Literature.create({
-      title: title || (pdfFile ? pdfFile.originalname.replace('.pdf', '') : 'New Lesson'),
+      title: cleanTitle,
       author: author || 'Unknown',
       language: aiDetectedLanguage,
       subject: subject || 'General',
@@ -71,7 +121,7 @@ router.post('/upload', authenticateToken, upload.fields([
       bookBrain: null,
       uploadedBy: req.user.userId,
       schoolId: user?.schoolId || null,
-      status: 'ready',
+      status: 'processing',
       questionsGenerated: 0,
       generateAudio: isAudioEnabled,
       difficulty: difficulty || 'beginner',
@@ -111,8 +161,16 @@ router.post('/upload', authenticateToken, upload.fields([
 
         await literature.update({ questionsGenerated: totalCount });
         console.log(`✅ Periodic quiz generation done: ${totalCount} questions across ${Math.ceil(finalSections.length / chunkSize)} chunks`);
+
+        // Phase 6: Automatic AI Analysis (Characters & Vocab)
+        await analyzeLiterature(literature);
+
+        // After all analysis is done, set to draft for teacher review
+        await literature.update({ status: 'draft' });
+        console.log(`📝 Literature ${literature.id} marked as DRAFT (ready for review)`);
       } catch (err) {
-        console.warn(`⚠️ Background periodic quiz generation failed: ${err.message}`);
+        console.warn(`⚠️ Background periodic quiz/analysis generation failed: ${err.message}`);
+        await literature.update({ status: 'error' });
       }
     });
 
@@ -122,7 +180,7 @@ router.post('/upload', authenticateToken, upload.fields([
       author: literature.author,
       language: literature.language,
       contentType: finalContentType,
-      status: 'ready',
+      status: 'processing',
       wordCount: literature.wordCount,
       estimatedMinutes: Math.ceil(literature.wordCount / 200),
       difficulty: literature.difficulty,
@@ -235,7 +293,10 @@ router.get('/', authenticateToken, async (req, res) => {
     const schoolId = user?.schoolId;
 
     const literature = await Literature.findAll({
-      where: schoolId ? { schoolId } : {},
+      where: {
+        ...(schoolId ? { schoolId } : {}),
+        status: 'ready'
+      },
       order: [['createdAt', 'DESC']],
       limit: 50
     });
@@ -274,6 +335,30 @@ router.post('/:id/reprocess', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Reprocess error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Trigger full AI Analysis (NER + Vocab) for existing literature
+router.post('/:id/analyze', authenticateToken, async (req, res) => {
+  try {
+    const literature = await Literature.findByPk(req.params.id);
+    if (!literature) return res.status(404).json({ error: 'Literature not found' });
+
+    console.log(`🧠 Manual analysis request for: ${literature.title}`);
+    const bookBrain = await analyzeLiterature(literature);
+
+    if (bookBrain) {
+      res.json({
+        success: true,
+        message: "Analysis complete",
+        characterCount: bookBrain.characters.length,
+        vocabCount: bookBrain.vocabulary.length
+      });
+    } else {
+      res.status(500).json({ error: "Analysis failed or timed out" });
+    }
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -351,6 +436,24 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     if (transaction) await transaction.rollback();
     console.error('❌ Delete error:', error);
     res.status(500).json({ error: `Delete failed: ${error.message}` });
+  }
+});
+
+// Publish literature (Teacher only)
+router.patch('/:id/publish', authenticateToken, async (req, res) => {
+  try {
+    const literature = await Literature.findByPk(req.params.id);
+    if (!literature) return res.status(404).json({ error: 'Not found' });
+    
+    // Ensure only the uploader can publish
+    if (literature.uploadedBy !== req.user.userId) {
+      return res.status(403).json({ error: 'Unauthorized to publish this content' });
+    }
+
+    await literature.update({ status: 'ready' });
+    res.json({ success: true, status: 'ready' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

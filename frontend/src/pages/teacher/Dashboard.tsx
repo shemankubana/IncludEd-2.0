@@ -21,10 +21,18 @@ import {
     ShieldAlert,
     CheckCircle2,
     Info,
+    Mic,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE } from "@/lib/api";
@@ -47,6 +55,7 @@ const TeacherDashboard = () => {
         recommendations: Record<string, any[]>;
         loading: boolean;
         classInsights?: string;
+        classStats?: any;
     }>({ summaries: [], alerts: [], recommendations: {}, loading: false });
     const { toast } = useToast();
 
@@ -68,9 +77,26 @@ const TeacherDashboard = () => {
 
                 setStats([
                     { label: "Active Students", value: data.overview?.totalStudents || "0", icon: <Users className="w-5 h-5" />, trend: "Total enrolled" },
-                    { label: "Average Progress", value: `${Math.round(data.overview?.avgQuizScore * 100 || 0)}%`, icon: <TrendingUp className="w-5 h-5" />, trend: "Quiz mastery" },
-                    { label: "Attention Level", value: `${Math.round(data.overview?.avgAttention * 100 || 0)}%`, icon: <AlertCircle className="w-5 h-5" />, trend: "Engagement" },
-                    { label: "Lessons Used", value: data.overview?.totalLessons || "0", icon: <FileText className="w-5 h-5" />, trend: "Activity" },
+                    { 
+                        label: "Average Progress", 
+                        // avgQuizScore comes as a decimal string like "0.750", so multiply by 100
+                        value: `${Math.round(parseFloat(data.overview?.avgCompletion || 0) * 100)}%`, 
+                        icon: <TrendingUp className="w-5 h-5" />, 
+                        trend: "Completion rate" 
+                    },
+                    { 
+                        label: "Reading Mastery", 
+                        // avgReadingAccuracy is already a percentage (0-100)
+                        value: `${Math.round(parseFloat(data.overview?.avgReadingAccuracy || 0))}%`, 
+                        icon: <CheckCircle2 className="w-5 h-5" />, 
+                        trend: "STT Accuracy" 
+                    },
+                    { 
+                        label: "Attention Level", 
+                        value: `${Math.round(parseFloat(data.overview?.avgAttention || 0) * 100)}%`, 
+                        icon: <AlertCircle className="w-5 h-5" />, 
+                        trend: "Engagement" 
+                    },
                 ]);
 
                 // Fetching student roster from the backend response (unique students)
@@ -80,6 +106,7 @@ const TeacherDashboard = () => {
                         name: s.name,
                         lastActive: s.lastActive === 'Never' ? 'Never' : (s.lastActive === 'Active' ? 'Active' : s.lastActive),
                         progress: s.progress,
+                        readingAccuracy: s.readingAccuracy,
                         status: s.status,
                         color: "bg-primary"
                     })));
@@ -116,24 +143,11 @@ const TeacherDashboard = () => {
             const bookId = latestBook?.id || "";
 
             // Generate summaries for each student using AI service
+            const classAvgCompletion = students.reduce((a: number, s: any) => a + s.progress, 0) / Math.max(students.length, 1);
             const summaryPromises = students.slice(0, 10).map(async (student: any) => {
-                // Build a minimal comprehension data from what we have
-                const compData = {
-                    chapters_read: Math.max(1, Math.floor(student.progress / 10)),
-                    average_comprehension: student.progress / 100,
-                    vocabulary_progress: student.progress / 100,
-                    characters_understood: {},
-                    literary_devices_seen: {},
-                    chapters_needing_revisit: student.progress < 50 ? [{ title: "Recent chapter", score: student.progress / 100 }] : [],
-                    total_highlights: 0,
-                    total_time_minutes: 0,
-                };
-                const profileData = {
-                    persistence: student.progress > 60 ? 0.7 : 0.4,
-                    frustration_level: student.progress < 40 ? 0.6 : 0.3,
-                    preferred_adaptations: [],
-                    best_time_of_day: "9am-noon",
-                };
+                // Use real student data: progress = completion rate, readingAccuracy = STT score
+                const completionRate = student.progress / 100;
+                const readingAccuracy = (student.readingAccuracy || 0) / 100;
 
                 try {
                     const res = await fetch(`${AI_URL}/teacher/student-summary`, {
@@ -141,11 +155,12 @@ const TeacherDashboard = () => {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                             student_name: student.name,
-                            student_id: student.name.replace(/\s+/g, "_").toLowerCase(),
+                            student_id: student.id || student.name.replace(/\s+/g, "_").toLowerCase(),
                             book_id: bookId,
-                            class_average_chapter: Math.floor(
-                                students.reduce((a: number, s: any) => a + Math.floor(s.progress / 10), 0) / Math.max(students.length, 1)
-                            ),
+                            completion_rate: completionRate,
+                            reading_accuracy: readingAccuracy,
+                            status: student.status,
+                            class_average_chapter: Math.floor(classAvgCompletion / 10),
                         }),
                     });
                     if (res.ok) return await res.json();
@@ -154,11 +169,11 @@ const TeacherDashboard = () => {
                 // Fallback: construct summary locally
                 return {
                     student_name: student.name,
-                    summary: `${student.name} has completed ${student.progress}% of the assigned reading.`,
-                    strengths: student.progress > 70 ? ["strong comprehension"] : [],
-                    areas_for_growth: student.progress < 50 ? ["pacing", "comprehension"] : [],
+                    summary: `${student.name} has completed ${student.progress}% of the assigned reading${student.readingAccuracy > 0 ? ` with ${student.readingAccuracy}% reading accuracy` : ''}.`,
+                    strengths: student.progress > 70 ? ["solid progress", ...(student.readingAccuracy > 75 ? ["strong reading fluency"] : [])] : [],
+                    areas_for_growth: [...(student.progress < 50 ? ["pacing", "comprehension"] : []), ...(student.readingAccuracy > 0 && student.readingAccuracy < 60 ? ["reading fluency"] : [])],
                     recommendation: student.progress < 50
-                        ? `Recommended: Check in with ${student.name} and offer additional support.`
+                        ? `Recommended: Provide ${student.name} with a vocabulary pre-teaching session before the next chapter. Consider pairing with a stronger reader for shared reading activities.`
                         : `${student.name} is on track. Continue current approach.`,
                     risk_level: student.progress < 40 ? "high" : student.progress < 65 ? "medium" : "low",
                     chapters_behind: 0,
@@ -227,7 +242,16 @@ const TeacherDashboard = () => {
                 }
             } catch { /* insights optional */ }
 
-            setIntelligenceData(prev => ({ ...prev, summaries, alerts, loading: false, classInsights }));
+            // Fetch class-wide stats (D3)
+            let classStats = null;
+            try {
+                const statsRes = await fetch(`${AI_URL}/teacher/class-wide-stats/${bookId}`);
+                if (statsRes.ok) {
+                    classStats = await statsRes.json();
+                }
+            } catch { /* optional */ }
+
+            setIntelligenceData(prev => ({ ...prev, summaries, alerts, loading: false, classInsights, classStats }));
 
             // ── Fetch per-student recommendations (D6 actionable intelligence) ──
             const recMap: Record<string, any[]> = {};
@@ -243,6 +267,7 @@ const TeacherDashboard = () => {
                             body: JSON.stringify({
                                 student_id: studentId,
                                 student_name: s.student_name,
+                                book_id: bookId, // Added bookId here
                                 student_profile: {
                                     attention_score: student.progress / 100,
                                     frustration_level: s.risk_level === "high" ? 0.7 : 0.3,
@@ -428,15 +453,54 @@ const TeacherDashboard = () => {
                                                     Last active: <span className="font-bold">{student.lastActive}</span>
                                                 </p>
                                             </div>
-                                            <div className="text-right space-y-1.5">
+                                            <div className="text-right space-y-1.5 min-w-[100px]">
                                                 <Badge variant={student.status === "Needs Support" ? "destructive" : "secondary"} className="rounded-lg font-black text-[10px] uppercase">
                                                     {student.status}
                                                 </Badge>
-                                                <p className="text-xl font-black">{student.progress}%</p>
+                                                <div className="flex flex-col items-end">
+                                                    <p className="text-xl font-black">{student.progress}%</p>
+                                                    {student.readingAccuracy > 0 && (
+                                                        <p className="text-[10px] font-bold text-muted-foreground flex items-center gap-1">
+                                                            <Mic className="w-2.5 h-2.5" /> {student.readingAccuracy}% Acc.
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl">
-                                                <MoreVertical className="w-5 h-5" />
-                                            </Button>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl">
+                                                        <MoreVertical className="w-5 h-5" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="rounded-2xl border border-border shadow-xl">
+                                                    <DropdownMenuItem
+                                                        className="font-semibold rounded-xl cursor-pointer"
+                                                        onClick={() => {
+                                                            toast({ title: `Viewing ${student.name}'s profile`, description: "Student analytics coming soon." });
+                                                        }}
+                                                    >
+                                                        <ArrowUpRight className="w-4 h-4 mr-2" /> View Analytics
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        className="font-semibold rounded-xl cursor-pointer"
+                                                        onClick={() => {
+                                                            setInviteEmail(student.email || "");
+                                                            toast({ title: "Email copied", description: `Ready to message ${student.name}` });
+                                                        }}
+                                                    >
+                                                        <Mail className="w-4 h-4 mr-2" /> Message Student
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        className="font-semibold rounded-xl cursor-pointer text-destructive focus:text-destructive"
+                                                        onClick={() => {
+                                                            toast({ title: "Remove student", description: "This feature is coming soon.", variant: "destructive" });
+                                                        }}
+                                                    >
+                                                        <Trash2 className="w-4 h-4 mr-2" /> Remove from Class
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </CardContent>
                                     </Card>
                                 </motion.div>
@@ -547,6 +611,57 @@ const TeacherDashboard = () => {
                                     </section>
                                 )}
 
+                                {/* Class-Wide Stats (Phase 3) */}
+                                {intelligenceData.classStats && (
+                                    <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <Card className="rounded-[28px] border border-border overflow-hidden">
+                                            <CardHeader className="bg-secondary/30 pb-4">
+                                                <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                                                    <AlertCircle className="w-4 h-4 text-primary" />
+                                                    Tricky Chapters
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="p-6">
+                                                <div className="space-y-4">
+                                                    {intelligenceData.classStats.chapter_stats?.slice(0, 3).map((chapter: any, i: number) => (
+                                                        <div key={i} className="flex items-center justify-between border-b border-border/50 pb-3 last:border-0 last:pb-0">
+                                                            <div>
+                                                                <p className="font-bold text-sm">{chapter.chapter_title}</p>
+                                                                <p className="text-[10px] text-muted-foreground font-medium">Avg Difficulty: {chapter.avg_difficulty.toFixed(1)}/5</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="font-black text-primary text-sm">{Math.round(chapter.avg_score * 100)}%</p>
+                                                                <p className="text-[9px] text-muted-foreground uppercase font-black">Comprehension</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        <Card className="rounded-[28px] border border-border overflow-hidden">
+                                            <CardHeader className="bg-secondary/30 pb-4">
+                                                <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                                                    <TrendingUp className="w-4 h-4 text-primary" />
+                                                    Top Vocabulary Struggles
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="p-6">
+                                                <div className="flex flex-wrap gap-2">
+                                                    {intelligenceData.classStats.top_tricky_words?.slice(0, 8).map((word: string, i: number) => (
+                                                        <Badge key={i} variant="outline" className="rounded-xl px-4 py-2 font-black text-primary border-primary/20 bg-primary/5">
+                                                            {word}
+                                                        </Badge>
+                                                    ))}
+                                                    {(!intelligenceData.classStats.top_tricky_words || intelligenceData.classStats.top_tricky_words.length === 0) && (
+                                                        <p className="text-xs text-muted-foreground italic">No common vocabulary struggles detected yet.</p>
+                                                    )}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </section>
+                                )}
+
                                 {/* Per-student NL summaries */}
                                 <section>
                                     <h3 className="text-lg font-black mb-4 flex items-center gap-2">
@@ -591,6 +706,28 @@ const TeacherDashboard = () => {
                                                         </div>
 
                                                         <p className="text-sm text-muted-foreground leading-relaxed">{s.summary}</p>
+
+                                                        {/* Fluency Metrics (Added in Phase 2) */}
+                                                        {s.stt_fluency && (s.stt_fluency.avg_accuracy > 0 || s.stt_fluency.avg_wpm > 0) && (
+                                                            <div className="flex items-center gap-4 py-2 border-y border-border/50">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Accuracy</span>
+                                                                    <span className="text-sm font-black text-primary">{s.stt_fluency.avg_accuracy}%</span>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Fluency</span>
+                                                                    <span className="text-sm font-black text-primary">{s.stt_fluency.avg_wpm} WPM</span>
+                                                                </div>
+                                                                {s.stt_fluency.tricky_words?.length > 0 && (
+                                                                    <div className="flex flex-col flex-1">
+                                                                        <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Tricky Words</span>
+                                                                        <span className="text-[11px] font-bold truncate text-amber-600">
+                                                                            {s.stt_fluency.tricky_words.slice(0, 3).join(", ")}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
 
                                                         {/* Actionable Recommendations (D6) */}
                                                         {(intelligenceData.recommendations[s.student_name]?.length ?? 0) > 0 && (

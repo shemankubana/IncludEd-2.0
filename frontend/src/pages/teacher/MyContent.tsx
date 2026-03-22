@@ -33,23 +33,30 @@ const subjectColors: Record<string, string> = {
 };
 
 const StatusBadge = ({ status, questionsGenerated }: { status: string; questionsGenerated: number }) => {
-    if (status !== "ready") {
+    if (status === "processing") {
         return (
             <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-amber-500">
-                <Clock className="w-3 h-3" /> Processing
+                <Clock className="w-3 h-3" /> Analyzing...
             </span>
         );
     }
-    if (questionsGenerated > 0) {
+    if (status === "draft") {
+        return (
+            <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-indigo-500">
+                <FileText className="w-3 h-3" /> Draft · Ready for Review
+            </span>
+        );
+    }
+    if (status === "ready") {
         return (
             <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-emerald-500">
-                <CheckCircle2 className="w-3 h-3" /> Ready · {questionsGenerated} Questions
+                <CheckCircle2 className="w-3 h-3" /> Published · {questionsGenerated} Questions
             </span>
         );
     }
     return (
-        <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-            <BrainCircuit className="w-3 h-3" /> Generating Questions...
+        <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-rose-500">
+            <AlertCircle className="w-3 h-3" /> Error
         </span>
     );
 };
@@ -64,6 +71,7 @@ const MyContent = () => {
     const [search, setSearch] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+    const [analyzingId, setAnalyzingId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
     const handleReprocess = async (id: string) => {
@@ -98,6 +106,37 @@ const MyContent = () => {
             });
         } finally {
             setReprocessingId(null);
+        }
+    };
+
+    const handleAIAnalyze = async (id: string, title: string) => {
+        if (!user) return;
+        setAnalyzingId(id);
+        try {
+            const idToken = await user.getIdToken();
+            const res = await fetch(`${API_BASE}/api/literature/${id}/analyze`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${idToken}` }
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                toast({
+                    title: "AI Analysis Complete",
+                    description: `Extracted ${data.characterCount} characters and ${data.vocabCount} key terms from "${title}".`,
+                });
+                fetchContent();
+            } else {
+                throw new Error("Analysis failed");
+            }
+        } catch (err) {
+            toast({
+                title: "AI Analysis Failed",
+                description: "The AI service is unavailable or the book is too short for analysis.",
+                variant: "destructive"
+            });
+        } finally {
+            setAnalyzingId(null);
         }
     };
 
@@ -237,6 +276,39 @@ const MyContent = () => {
                                                     </span>
                                                 )}
                                             </div>
+
+                                            {/* Secondary Actions Overlay */}
+                                            <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button
+                                                    size="icon"
+                                                    variant="secondary"
+                                                    className="rounded-xl h-8 w-8 bg-background/80 backdrop-blur-md hover:bg-background text-indigo-500 shadow-lg"
+                                                    disabled={analyzingId === item.id}
+                                                    onClick={(e) => { e.stopPropagation(); handleAIAnalyze(item.id, item.title); }}
+                                                    title="Deep AI Analysis"
+                                                >
+                                                    <BrainCircuit className={`w-3.5 h-3.5 ${analyzingId === item.id ? "animate-spin" : ""}`} />
+                                                </Button>
+                                                <Button
+                                                    size="icon"
+                                                    variant="secondary"
+                                                    className="rounded-xl h-8 w-8 bg-background/80 backdrop-blur-md hover:bg-background text-muted-foreground shadow-lg"
+                                                    disabled={reprocessingId === item.id}
+                                                    onClick={(e) => { e.stopPropagation(); handleReprocess(item.id); }}
+                                                    title="System Reprocess"
+                                                >
+                                                    <RefreshCcw className={`w-3.5 h-3.5 ${reprocessingId === item.id ? "animate-spin" : ""}`} />
+                                                </Button>
+                                                <Button
+                                                    size="icon"
+                                                    variant="secondary"
+                                                    className="rounded-xl h-8 w-8 bg-background/80 backdrop-blur-md hover:bg-rose-500 hover:text-white text-rose-500 shadow-lg"
+                                                    onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(item.id); }}
+                                                    title="Delete Content"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </Button>
+                                            </div>
                                         </div>
 
                                         <CardContent className="p-5 space-y-3">
@@ -259,59 +331,56 @@ const MyContent = () => {
                                             <StatusBadge status={item.status} questionsGenerated={item.questionsGenerated} />
 
                                             {/* Actions */}
-                                            <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                                            <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
                                                 {confirmDeleteId === item.id ? (
                                                     // Confirm delete state
-                                                    <div className="flex items-center gap-2 w-full">
-                                                        <p className="text-xs font-bold text-destructive flex-1">Delete this lesson?</p>
+                                                    <div className="flex items-center gap-2 w-full bg-destructive/10 p-2 rounded-2xl border border-destructive/20 mt-1">
+                                                        <p className="text-[10px] font-black uppercase tracking-tighter text-destructive flex-1 ml-2">Delete permanently?</p>
                                                         <Button
                                                             size="sm"
                                                             variant="destructive"
-                                                            className="rounded-xl h-8 px-3 text-xs font-black"
+                                                            className="rounded-xl h-8 px-3 text-xs font-black shadow-lg shadow-destructive/20"
                                                             disabled={deletingId === item.id}
                                                             onClick={() => handleDelete(item.id)}
                                                         >
-                                                            {deletingId === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes, Delete"}
+                                                            {deletingId === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Delete"}
                                                         </Button>
                                                         <Button
                                                             size="sm"
-                                                            variant="outline"
+                                                            variant="ghost"
                                                             className="rounded-xl h-8 px-3 text-xs font-bold"
                                                             onClick={() => setConfirmDeleteId(null)}
                                                         >
-                                                            Cancel
+                                                            No
                                                         </Button>
                                                     </div>
                                                 ) : (
-                                                    // Normal state
-                                                    <>
+                                                    // Normal state - Grid layout for primary buttons
+                                                    <div className="flex gap-2 w-full">
                                                         <Button
                                                             size="sm"
                                                             variant="secondary"
-                                                            className="rounded-xl h-9 px-4 font-bold text-xs flex-1"
+                                                            className="rounded-2xl h-10 px-4 font-bold text-xs flex-1 border border-border/50 hover:border-primary/30 transition-all"
                                                             onClick={() => navigate(`/student/reader/${item.id}`)}
+                                                            disabled={item.status === 'processing'}
                                                         >
                                                             <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Preview
                                                         </Button>
-                                                        <Button
-                                                            size="icon"
-                                                            variant="ghost"
-                                                            className="rounded-xl h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                                                            disabled={reprocessingId === item.id}
-                                                            onClick={() => handleReprocess(item.id)}
-                                                            title="Re-analyze content type"
-                                                        >
-                                                            <RefreshCcw className={`w-4 h-4 ${reprocessingId === item.id ? "animate-spin" : ""}`} />
-                                                        </Button>
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            className="rounded-xl h-9 w-9 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                                            onClick={() => setConfirmDeleteId(item.id)}
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </Button>
-                                                    </>
+                                                        {(item.status === 'draft' || item.status === 'ready') && (
+                                                            <Button
+                                                                size="sm"
+                                                                className={`rounded-2xl h-10 px-4 font-black text-xs flex-1 shadow-sm transition-all ${
+                                                                    item.status === 'draft' 
+                                                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white' 
+                                                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                                                }`}
+                                                                onClick={() => navigate(`/teacher/review/${item.id}`)}
+                                                            >
+                                                                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> 
+                                                                {item.status === 'draft' ? 'Review' : 'Questions'}
+                                                            </Button>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         </CardContent>

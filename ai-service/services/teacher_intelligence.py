@@ -56,16 +56,23 @@ class TeacherIntelligence:
                 "recommendation": str,  # Specific action
                 "risk_level": "low" | "medium" | "high",
                 "chapters_behind": int,
+                "stt_fluency": Dict[str, Any], # {avg_accuracy, avg_wpm, tricky_words}
             }
         """
         chapters_read = comprehension_data.get("chapters_read", 0)
         avg_comp = comprehension_data.get("average_comprehension", 0)
         vocab_progress = comprehension_data.get("vocabulary_progress", 0)
+        vocab_by_source = comprehension_data.get("vocab_by_source", {})
         characters = comprehension_data.get("characters_understood", {})
         devices = comprehension_data.get("literary_devices_seen", {})
         chapters_needing_revisit = comprehension_data.get("chapters_needing_revisit", [])
         highlights = comprehension_data.get("total_highlights", 0)
         total_time = comprehension_data.get("total_time_minutes", 0)
+        stt_history = comprehension_data.get("stt_history", [])
+        
+        # New Telemetry (Phase 3)
+        reading_speed_wpm = comprehension_data.get("average_wpm", 0)
+        subjective_difficulty = comprehension_data.get("average_subjective_difficulty", 0)
 
         profile_persistence = learner_profile.get("persistence", 0.5)
         profile_frustration = learner_profile.get("frustration_level", 0.3)
@@ -74,40 +81,68 @@ class TeacherIntelligence:
 
         chapters_behind = max(0, class_average_chapter - chapters_read)
 
+        # Fluency Aggregation (prefers live chapter WPM over STT history if available)
+        avg_accuracy = 0
+        avg_wpm = reading_speed_wpm if reading_speed_wpm > 0 else 0
+        tricky_words = Counter()
+        
+        if stt_history:
+            avg_accuracy = sum(h.get("accuracy", 0) for h in stt_history) / len(stt_history)
+            if avg_wpm == 0:
+                avg_wpm = sum(h.get("wpm", 0) for h in stt_history) / len(stt_history)
+            for h in stt_history:
+                for w in h.get("mispronounced", []):
+                    tricky_words[w] += 1
+
         # Determine strengths
         strengths = []
         if avg_comp >= 0.7:
             strengths.append("strong comprehension overall")
-        if len(characters) >= 3 and all(v > 0.5 for v in characters.values()):
-            strengths.append("good character understanding")
+        if avg_accuracy > 85 or (not stt_history and avg_comp > 0.8):
+            strengths.append("excellent reading accuracy")
+        if avg_wpm > 100:
+            strengths.append("fluent reading speed")
+        if subjective_difficulty < 2.5 and subjective_difficulty > 0:
+            strengths.append("finding the content accessible")
         if vocab_progress > 0.5:
             strengths.append("building vocabulary effectively")
         if profile_persistence > 0.6:
             strengths.append("persistent reader who doesn't give up easily")
-        if highlights > 5:
-            strengths.append("actively engages with difficult text")
 
         # Areas for growth
         areas = []
         if avg_comp < 0.5:
             areas.append("overall comprehension needs support")
-        if len(devices) < 2:
-            areas.append("recognizing literary devices")
+        if subjective_difficulty >= 4.0:
+            areas.append("finding the text very difficult (subjective rating)")
+        if avg_wpm > 0 and avg_wpm < 50:
+            areas.append("reading fluency and speed")
         if vocab_progress < 0.3:
-            areas.append("vocabulary acquisition")
+            # Check if struggle is proactive (clicking) or passive (highlighting)
+            clicks = len(vocab_by_source.get("click", []))
+            if clicks > 5:
+                areas.append("proactively identifying many difficult words")
+            else:
+                areas.append("vocabulary acquisition")
+        
         if profile_frustration > 0.6:
             areas.append("managing frustration with difficult text")
         if chapters_behind > 2:
             areas.append(f"pacing — {chapters_behind} chapters behind class average")
+        
+        tricky_list = [w for w, count in tricky_words.most_common(3)]
+        if tricky_list:
+            areas.append(f"decoding tricky words: {', '.join(tricky_list)}")
+
         if chapters_needing_revisit:
             revisit_titles = [c["title"] for c in chapters_needing_revisit[:3]]
             areas.append(f'needs to revisit: {", ".join(revisit_titles)}')
 
         # Risk level
         risk = "low"
-        if avg_comp < 0.4 or chapters_behind > 3 or profile_frustration > 0.7:
+        if avg_comp < 0.4 or chapters_behind > 3 or profile_frustration > 0.7 or (stt_history and avg_accuracy < 60):
             risk = "high"
-        elif avg_comp < 0.6 or chapters_behind > 1:
+        elif avg_comp < 0.6 or chapters_behind > 1 or (stt_history and avg_accuracy < 75):
             risk = "medium"
 
         # Generate recommendation
@@ -133,6 +168,11 @@ class TeacherIntelligence:
             "chapters_read": chapters_read,
             "average_comprehension": round(avg_comp, 2),
             "total_time_minutes": round(total_time, 1),
+            "stt_fluency": {
+                "avg_accuracy": round(avg_accuracy, 1),
+                "avg_wpm": round(avg_wpm, 1),
+                "tricky_words": [w for w, _ in tricky_words.most_common(5)]
+            }
         }
 
     def _build_summary(

@@ -58,7 +58,7 @@ const Onboarding = () => {
     const [currentStep, setCurrentStep] = useState(0);
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(false);
-    const { user } = useAuth();
+    const { user, refreshProfile } = useAuth();
     const navigate = useNavigate();
     const { toast } = useToast();
 
@@ -125,6 +125,7 @@ const Onboarding = () => {
             });
 
             if (response.ok) {
+                await refreshProfile();
                 toast({ title: "Profile Created!", description: "Your learning experience has been personalized." });
                 navigate("/student/dashboard");
             } else {

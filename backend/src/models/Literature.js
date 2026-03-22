@@ -44,7 +44,7 @@ export const Literature = sequelize.define('Literature', {
     allowNull: true
   },
   status: {
-    type: DataTypes.ENUM('processing', 'ready', 'error'),
+    type: DataTypes.ENUM('processing', 'draft', 'ready', 'error'),
     defaultValue: 'processing'
   },
   questionsGenerated: {

@@ -20,14 +20,15 @@ import {
     Play, Pause, RotateCcw, Type, Eye, EyeOff,
     ArrowLeft, BrainCircuit, Loader2,
     BookOpen, ChevronLeft, ChevronRight, Volume2,
-    AlertCircle, Users,
+    AlertCircle, Users, Mic, CheckCircle2,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
 import PlayDialogueUI, { type DialogueLine } from "@/components/play/PlayDialogueUI";
 import HighlightToUnderstand from "@/components/LiteratureViewer/HighlightToUnderstand";
-import { DyslexiaText, type DyslexiaSettings, DEFAULT_DYSLEXIA_SETTINGS } from "@/components/LiteratureViewer/DyslexiaRenderer";
+import ReadingAssessment from "@/components/LiteratureViewer/ReadingAssessment";
+import { DyslexiaText, DyslexiaControls, type DyslexiaSettings, DEFAULT_DYSLEXIA_SETTINGS } from "@/components/LiteratureViewer/DyslexiaRenderer";
 import ComprehensionMiniPanel from "@/components/reader/ComprehensionMiniPanel";
 import VocabSidebar from "@/components/reader/VocabSidebar";
 import CharacterTooltip from "@/components/reader/CharacterTooltip";
@@ -103,7 +104,9 @@ const AdaptiveReader = () => {
 
     // Reader state
     const [isPlaying, setIsPlaying] = useState(false);
+    const [ttsProgress, setTtsProgress] = useState(0);
     const [focusMode, setFocusMode] = useState(false);
+    const [isSynthesizing, setIsSynthesizing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [lesson, setLesson] = useState<any>(null);
     const [intro, setIntro] = useState<string | null>(null);
@@ -157,35 +160,246 @@ const AdaptiveReader = () => {
     // Phonics Helper state
     const [phonicsWord, setPhonicsWord] = useState<string | null>(null);
 
-    // Translations
+    // STT Reading Assessment state
+    const [showSTT, setShowSTT] = useState(false);
+
+    // Phase 3: Teacher Insights Telemetry
+    const [showDifficultyModal, setShowDifficultyModal] = useState(false);
+    const [pendingDifficulty, setPendingDifficulty] = useState<number | null>(null);
+    const [isSubmittingProgress, setIsSubmittingProgress] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+
+    // Initial settings from profile, then user can override
+    // Load persisted settings from localStorage
+    const [dyslexiaSettings, setDyslexiaSettings] = useState<DyslexiaSettings>(() => {
+        try {
+            const saved = localStorage.getItem('included_reading_settings');
+            if (saved) return { ...DEFAULT_DYSLEXIA_SETTINGS, ...JSON.parse(saved) };
+        } catch { /* ignore parse errors */ }
+        return DEFAULT_DYSLEXIA_SETTINGS;
+    });
+
     const { t } = useTranslation(lesson?.language);
-
-    // Session tracking
     const sessionStartRef = useRef<number>(Date.now());
+    const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
 
-    const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000";
-
-    // TTS
     const [activeWordIndex, setActiveWordIndex] = useState(-1);
     const [, setCurrentTime] = useState(0);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-    const [isSynthesizing, setIsSynthesizing] = useState(false);
-    const ttsRef = useRef<SpeechSynthesisUtterance | null>(null);
+    // Track if we are currently fetching AI audio to prevent local TTS from starting simultaneously
+    const isFetchingAudioRef = useRef(false);
+    const lastHeartbeatRef = useRef<number>(Date.now());
+
+    // Sequential Progression Logic
+    const highestUnlockedIndex = useMemo(() => {
+        if (completedSections.size === 0) return 0;
+        const maxCompleted = Math.max(...Array.from(completedSections));
+        return Math.min(maxCompleted + 1, totalSections - 1);
+    }, [completedSections, totalSections]);
 
     const totalSections = sections.length;
     const currentSection = sections[currentSectionIndex] || { title: "", content: "" };
 
-    // ── DyslexiaRenderer settings (user profile only) ──────────────────────────
-    const dyslexiaSettings: DyslexiaSettings = useMemo(() => {
-        const base = { ...DEFAULT_DYSLEXIA_SETTINGS };
-        if (dyslexicMode) base.openDyslexicFont = true;
-        return base;
+    // Persist reading settings to localStorage whenever they change
+    useEffect(() => {
+        try {
+            localStorage.setItem('included_reading_settings', JSON.stringify(dyslexiaSettings));
+        } catch { /* storage might be full */ }
+    }, [dyslexiaSettings]);
+
+    useEffect(() => {
+        setDyslexiaSettings(prev => ({
+            ...prev,
+            openDyslexicFont: dyslexicMode || false,
+            bionicReading: dyslexicMode ? true : prev.bionicReading
+        }));
     }, [dyslexicMode]);
 
     const safeContent = currentSection.content || "";
     const words = safeContent.split(/\s+/).filter(Boolean);
     const displayText = safeContent;
+
+    // ── Navigation & Utils (Moved up for hoisting) ──────────────────────────────
+    const saveProgress = useCallback(
+        async (index: number, status: "in_progress" | "completed" = "in_progress") => {
+            await idbSaveProgress(id!, index);
+            if (!user || !id) return;
+            try {
+                const token = await user.getIdToken();
+                await fetch(
+                    `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${id}`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({
+                            currentSection: index,
+                            status,
+                            schoolId: profile?.schoolId,
+                        }),
+                    }
+                );
+            } catch { /* offline fallback handled by idb */ }
+        },
+        [id, user, profile]
+    );
+
+    const checkStruggleZone = useCallback((nextIdx: number) => {
+        if (!bookBrain) return;
+        const nextSection = sections[nextIdx];
+        if (!nextSection) return;
+
+        const diffEntry = bookBrain.difficulty_map?.find(
+            (d: any) => d.section_title === nextSection.title || d.section_id === `section_${nextIdx}`
+        );
+        const isStruggle = diffEntry?.overall_difficulty > 0.6 ||
+            bookBrain.struggle_zones?.some(
+                (z: any) => z.section_title === nextSection.title || z.section_id === `section_${nextIdx}`
+            );
+
+        if (isStruggle && bookBrain.vocabulary?.length > 0) {
+            const nextContent = (nextSection.content || "").toLowerCase();
+            const relevantVocab = bookBrain.vocabulary
+                .filter((v: any) => nextContent.includes(v.word?.toLowerCase()))
+                .slice(0, 5);
+            if (relevantVocab.length >= 2) {
+                setStruggleVocab(relevantVocab);
+                setShowStrugglePrep(true);
+            }
+        }
+    }, [bookBrain, sections]);
+
+    const maybeTriggerMicroCheck = useCallback(() => {
+        const isAdhd = (profile?.disabilityType === "adhd" || profile?.disabilityType === "both");
+        if (!isAdhd) return false;
+
+        const chunkQuiz = allQuizzes.find(q => q.chunkIndex === currentSectionIndex);
+        if (chunkQuiz) {
+            setMicroCheck({
+                id: chunkQuiz.id,
+                question: chunkQuiz.question,
+                options: chunkQuiz.options,
+                answer: chunkQuiz.correctAnswer,
+            });
+            setMicroCheckAnswer(null);
+            return true;
+        }
+
+        const sec = sections[currentSectionIndex];
+        if (!sec?.content) return false;
+        if (microCheckWordsRef.current < MICRO_CHECK_INTERVAL) return false;
+        microCheckWordsRef.current = 0;
+
+        const firstSentence = sec.content.split(/[.!?]/)[0]?.trim() || "";
+        if (firstSentence.length < 20) return false;
+
+        setMicroCheck({
+            question: "Quick check — what was this section mainly about?",
+            options: [
+                firstSentence.slice(0, 60) + "…",
+                "A description of a different character",
+                "A flashback to an earlier event",
+            ],
+            answer: 0,
+        });
+        setMicroCheckAnswer(null);
+        return true;
+    }, [profile, allQuizzes, currentSectionIndex, sections]);
+
+    const startBreathingBreak = useCallback(() => {
+        setBreathingBreak(true);
+        setBreathPhase("inhale");
+        const phases: ("inhale" | "hold" | "exhale")[] = ["inhale", "hold", "exhale"];
+        let phaseIdx = 0;
+        let cycles = 0;
+        breathIntervalRef.current = setInterval(() => {
+            phaseIdx = (phaseIdx + 1) % 3;
+            const newPhase = phases[phaseIdx];
+            setBreathPhase(newPhase);
+            if (phaseIdx === 0) {
+                cycles += 1;
+                if (cycles >= 3) {
+                    if (breathIntervalRef.current) clearInterval(breathIntervalRef.current);
+                    setBreathingBreak(false);
+                }
+            }
+        }, 4000);
+    }, []);
+
+    const handleNextSection = useCallback(() => {
+        const sectionWords = currentSection.wordCount ?? words.length;
+        if (!microCheck) {
+            const triggered = maybeTriggerMicroCheck();
+            if (triggered) return;
+        }
+
+        if (currentSectionIndex < totalSections - 1) {
+            const next = currentSectionIndex + 1;
+            checkStruggleZone(next);
+            if (profile?.disabilityType === "adhd" || profile?.disabilityType === "both") {
+                adhdSectionCountRef.current += 1;
+                if (adhdSectionCountRef.current >= ADHD_SECTION_BREAK_EVERY) {
+                    adhdSectionCountRef.current = 0;
+                    const nextSection = sections[next];
+                    if (nextSection?.content) {
+                        const firstSentence = nextSection.content.split(/[.!?]/)[0]?.trim();
+                        if (firstSentence && firstSentence.length > 20) {
+                            setCliffhangerTeaser(firstSentence.slice(0, 120) + "…");
+                        }
+                    }
+                    startBreathingBreak();
+                }
+            }
+            if (next > highestUnlockedIndex && !completedSections.has(currentSectionIndex)) {
+                toast({
+                    title: "Section Locked",
+                    description: "Please mark this section as complete before moving forward.",
+                    variant: "destructive",
+                });
+                return;
+            }
+            setCurrentSectionIndex(next);
+            saveProgress(next, "in_progress");
+            setTimeInChapter(0);
+            microCheckWordsRef.current += sectionWords;
+            setActiveWordIndex(-1);
+            setCurrentTime(0);
+            setIsPlaying(false);
+            setMicroCheck(null);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+            saveProgress(currentSectionIndex, "completed");
+            if (sessionId && idToken) {
+                fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/sessions/${sessionId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                    body: JSON.stringify({
+                        completionRate: 1.0,
+                        avgAttentionScore: getAvgAttention(),
+                        status: "completed",
+                    }),
+                }).catch(() => { });
+            }
+            navigate(`/student/quiz/${id}?sessionId=${sessionId}`);
+        }
+    }, [
+        currentSectionIndex, totalSections, saveProgress,
+        currentSection.wordCount, words.length, sessionId, idToken,
+        navigate, id, checkStruggleZone, maybeTriggerMicroCheck, microCheck,
+        profile, sections, startBreathingBreak,
+    ]);
+
+    const handlePrevSection = useCallback(() => {
+        if (currentSectionIndex > 0) {
+            const prev = currentSectionIndex - 1;
+            setCurrentSectionIndex(prev);
+            saveProgress(prev, "in_progress");
+            setTimeInChapter(0);
+            setActiveWordIndex(-1);
+            setCurrentTime(0);
+            setIsPlaying(false);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+    }, [currentSectionIndex, saveProgress]);
     const displayWords = displayText.split(/\s+/).filter(Boolean);
 
     // ── Session creation ───────────────────────────────────────────────────────
@@ -215,6 +429,42 @@ const AdaptiveReader = () => {
         };
         init();
     }, [user, id, profile]);
+
+    // ── Attention Tracking ──────────────────────────────────────────────────
+    useEffect(() => {
+        const interval = setInterval(() => {
+            // Simple visibility-based attention score
+            attentionPoints.current.push(document.visibilityState === 'visible' ? 1.0 : 0.0);
+        }, 10000); // Sample every 10s
+        return () => clearInterval(interval);
+    }, []);
+
+    const getAvgAttention = () => {
+        if (attentionPoints.current.length === 0) return 1.0;
+        return attentionPoints.current.reduce((a, b) => a + b, 0) / attentionPoints.current.length;
+    };
+
+    // ── Periodic Heartbeat ──────────────────────────────────────────────────
+    useEffect(() => {
+        if (!sessionId || !idToken) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const avgAttn = getAvgAttention();
+                await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/sessions/${sessionId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                    body: JSON.stringify({ 
+                        avgAttentionScore: avgAttn,
+                        status: 'active',
+                        completionRate: currentSectionIndex / Math.max(totalSections, 1)
+                    }),
+                });
+            } catch (e) { /* silent fail */ }
+        }, 60000); // Pulse every minute
+
+        return () => clearInterval(interval);
+    }, [sessionId, idToken, currentSectionIndex, totalSections]);
 
     // ── Fetch lesson ───────────────────────────────────────────────────────────
     useEffect(() => {
@@ -339,6 +589,10 @@ const AdaptiveReader = () => {
             if (!isPlaying || currentChunkIndex !== 0) return; // Only fetch at start of section
             if (audioUrl) return; // Already fetched
             
+            // Cancel any local TTS that may have started before AI audio was ready
+            window.speechSynthesis?.cancel();
+            isFetchingAudioRef.current = true;
+            setIsFetchingAudio(true);
             setIsSynthesizing(true);
             try {
                 const response = await fetch(`${AI_URL}/tts/synthesize`, {
@@ -347,7 +601,7 @@ const AdaptiveReader = () => {
                     body: JSON.stringify({
                         text: displayText,
                         language: lesson?.language || "english",
-                        disability_type: user?.disabilityType || "none"
+                        disability_type: profile?.disabilityType || "none"
                     })
                 });
                 
@@ -355,11 +609,15 @@ const AdaptiveReader = () => {
                 const data = await response.json();
                 const blob = await (await fetch(`data:audio/mp3;base64,${data.audio_base64}`)).blob();
                 const url = URL.createObjectURL(blob);
+                // Cancel again right before we play to ensure local TTS is stopped
+                window.speechSynthesis?.cancel();
                 setAudioUrl(url);
             } catch (err) {
                 console.warn("AI TTS failed, falling back to local:", err);
             } finally {
                 setIsSynthesizing(false);
+                setIsFetchingAudio(false);
+                isFetchingAudioRef.current = false;
             }
         };
 
@@ -377,13 +635,27 @@ const AdaptiveReader = () => {
         if (audioUrl) {
             if (!audioRef.current) {
                 audioRef.current = new Audio(audioUrl);
-                audioRef.current.onended = () => setIsPlaying(false);
+                audioRef.current.onended = () => {
+                    if (currentSectionIndex < totalSections - 1) {
+                        handleNextSection();
+                        setIsPlaying(true);
+                    } else {
+                        setIsPlaying(false);
+                        setTtsProgress(100);
+                    }
+                };
+                audioRef.current.ontimeupdate = () => {
+                    if (audioRef.current) {
+                        const prog = (audioRef.current.currentTime / audioRef.current.duration) * 100;
+                        setTtsProgress(prog || 0);
+                    }
+                };
             } else if (audioRef.current.src !== audioUrl) {
                 audioRef.current.src = audioUrl;
             }
             audioRef.current.play().catch(e => console.error("Audio play failed:", e));
         }
-    }, [isPlaying, audioUrl]);
+    }, [isPlaying, audioUrl, handleNextSection, currentSectionIndex, totalSections]);
 
     // Cleanup audio
     useEffect(() => {
@@ -401,8 +673,10 @@ const AdaptiveReader = () => {
 
     // Local TTS Fallback (Chunked)
     useEffect(() => {
-        // Skip local TTS if AI audio is available
-        if (audioUrl) return;
+        // Skip local TTS if AI audio is available OR if we are currently fetching AI audio
+        // This is the key guard against the double-voice race condition
+        // Using ref for synchronous check
+        if (audioUrl || isFetchingAudioRef.current || isSynthesizing) return;
         
         if (!isPlaying || !window.speechSynthesis || ttsChunks.length === 0) {
             window.speechSynthesis?.cancel();
@@ -426,7 +700,29 @@ const AdaptiveReader = () => {
 
         utter.onend = () => {
             clearInterval(interval);
-            setCurrentChunkIndex(prev => prev + 1);
+            if (currentChunkIndex + 1 < ttsChunks.length) {
+                setCurrentChunkIndex(prev => prev + 1);
+                setTtsProgress(((currentChunkIndex + 1) / ttsChunks.length) * 100);
+            } else {
+                // Continuous reading: auto-advance to next section
+                if (currentSectionIndex < totalSections - 1) {
+                    handleNextSection();
+                    setIsPlaying(true); // Ensure it keeps playing in next section
+                } else {
+                    setIsPlaying(false);
+                    setTtsProgress(100);
+                }
+            }
+        };
+
+        utter.onboundary = (event) => {
+            if (event.name === 'word') {
+                const charIndex = event.charIndex;
+                const chunkLen = ttsChunks[currentChunkIndex].length;
+                const chunkBaseProgress = (currentChunkIndex / ttsChunks.length) * 100;
+                const chunkRelativeProgress = (charIndex / chunkLen) * (100 / ttsChunks.length);
+                setTtsProgress(chunkBaseProgress + chunkRelativeProgress);
+            }
         };
 
         utter.onerror = (e) => {
@@ -439,12 +735,15 @@ const AdaptiveReader = () => {
         window.speechSynthesis.speak(utter);
 
         return () => clearInterval(interval);
-    }, [isPlaying, currentChunkIndex, ttsChunks, audioUrl]);
+    }, [isPlaying, currentChunkIndex, ttsChunks, audioUrl, isFetchingAudio, isSynthesizing, handleNextSection, currentSectionIndex, totalSections]);
 
     // Reset when changing section
     useEffect(() => {
         setCurrentChunkIndex(0);
         setAudioUrl(null);
+        setIsPlaying(false);
+        setTimeInChapter(0); // Reset timer for new section
+        
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current = null;
@@ -454,234 +753,21 @@ const AdaptiveReader = () => {
 
     // ── Mock word highlight timer (for generic mode) ──────────────────────────
     useEffect(() => {
-        if (!isPlaying) return;
+        if (!isPlaying || showQuizPrompt) return; // Silent if quiz prompt already up
         let interval: ReturnType<typeof setInterval>;
         interval = setInterval(() => {
             setCurrentTime((prev) => {
                 const next = prev + 0.1;
-                if (next > 5) { setIsPlaying(false); return 0; }
+                if (next > 5) { /* stop mock timer */ return 0; }
                 const idx = Math.floor((next / 5) * Math.min(8, displayWords.length));
                 setActiveWordIndex(idx);
-                if (next > 4 && !showQuizPrompt) setShowQuizPrompt(true);
+                // Don't show quiz prompt if TTS is active
+                if (next > 4 && !showQuizPrompt && !isPlaying) setShowQuizPrompt(true);
                 return next;
             });
         }, 100);
         return () => clearInterval(interval);
     }, [isPlaying, displayWords.length, showQuizPrompt]);
-
-    // ── Navigation ─────────────────────────────────────────────────────────────
-    const saveProgress = useCallback(
-        async (index: number, status: "in_progress" | "completed" = "in_progress") => {
-            await idbSaveProgress(id!, index);
-            if (!user || !id) return;
-            try {
-                const token = await user.getIdToken();
-                await fetch(
-                    `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${id}`,
-                    {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                        body: JSON.stringify({
-                            currentSection: index,
-                            status,
-                            schoolId: profile?.schoolId,
-                        }),
-                    }
-                );
-            } catch { /* offline fallback handled by idb */ }
-        },
-        [id, user, profile]
-    );
-
-    // ── Check if next section is a struggle zone ──────────────────────────────
-    const checkStruggleZone = useCallback((nextIdx: number) => {
-        if (!bookBrain) return;
-        const nextSection = sections[nextIdx];
-        if (!nextSection) return;
-
-        const diffEntry = bookBrain.difficulty_map?.find(
-            (d: any) => d.section_title === nextSection.title || d.section_id === `section_${nextIdx}`
-        );
-        const isStruggle = diffEntry?.overall_difficulty > 0.6 ||
-            bookBrain.struggle_zones?.some(
-                (z: any) => z.section_title === nextSection.title || z.section_id === `section_${nextIdx}`
-            );
-
-        if (isStruggle && bookBrain.vocabulary?.length > 0) {
-            const nextContent = (nextSection.content || "").toLowerCase();
-            const relevantVocab = bookBrain.vocabulary
-                .filter((v: any) => nextContent.includes(v.word?.toLowerCase()))
-                .slice(0, 5);
-            if (relevantVocab.length >= 2) {
-                setStruggleVocab(relevantVocab);
-                setShowStrugglePrep(true);
-            }
-        }
-    }, [bookBrain, sections]);
-
-    // ── ADHD micro-check: show a simple comprehension pulse every ~250 words ──
-    const maybeTriggerMicroCheck = useCallback(() => {
-        const isAdhd = (profile?.disabilityType === "adhd" || profile?.disabilityType === "both");
-        if (!isAdhd) return false;
-
-        // Try to find a quiz associated with this chunkIndex
-        const chunkQuiz = allQuizzes.find(q => q.chunkIndex === currentSectionIndex);
-
-        if (chunkQuiz) {
-            setMicroCheck({
-                id: chunkQuiz.id,
-                question: chunkQuiz.question,
-                options: chunkQuiz.options,
-                answer: chunkQuiz.correctAnswer,
-            });
-            setMicroCheckAnswer(null);
-            return true;
-        }
-
-        // Fallback: build a lightweight comprehension pulse from the just-read section
-        const sec = sections[currentSectionIndex];
-        if (!sec?.content) return false;
-
-        if (microCheckWordsRef.current < MICRO_CHECK_INTERVAL) return false;
-        microCheckWordsRef.current = 0;
-
-        const firstSentence = sec.content.split(/[.!?]/)[0]?.trim() || "";
-        if (firstSentence.length < 20) return false;
-
-        setMicroCheck({
-            question: "Quick check — what was this section mainly about?",
-            options: [
-                firstSentence.slice(0, 60) + "…",
-                "A description of a different character",
-                "A flashback to an earlier event",
-            ],
-            answer: 0,
-        });
-        setMicroCheckAnswer(null);
-        return true;
-    }, [profile, allQuizzes, currentSectionIndex, sections]);
-
-    const startBreathingBreak = useCallback(() => {
-        setBreathingBreak(true);
-        setBreathPhase("inhale");
-        const phases: ("inhale" | "hold" | "exhale")[] = ["inhale", "hold", "exhale"];
-        let phaseIdx = 0;
-        let cycles = 0;
-        breathIntervalRef.current = setInterval(() => {
-            phaseIdx = (phaseIdx + 1) % 3;
-            const newPhase = phases[phaseIdx];
-            setBreathPhase(newPhase);
-            if (phaseIdx === 0) {
-                cycles += 1;
-                if (cycles >= 3) {
-                    if (breathIntervalRef.current) clearInterval(breathIntervalRef.current);
-                    setBreathingBreak(false);
-                }
-            }
-        }, 4000);
-    }, []);
-
-    // Time tracking effect
-    useEffect(() => {
-        const interval = setInterval(() => {
-            if (!focusMode) {
-                setTimeInChapter(prev => prev + 1);
-            }
-        }, 1000);
-        return () => clearInterval(interval);
-    }, [focusMode]);
-
-    // Periodic sync with AI service for live progress
-    useEffect(() => {
-        if (timeInChapter > 0 && timeInChapter % 30 === 0 && user && id) {
-            fetch(`${import.meta.env.VITE_AI_URL || "http://localhost:8082"}/comprehension/record`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    student_id: user.uid,
-                    book_id: id,
-                    section_id: String(currentSectionIndex),
-                    section_title: sections[currentSectionIndex]?.title || `Chapter ${currentSectionIndex + 1}`,
-                    time_spent_s: 30,
-                    section_text: displayText.slice(0, 1000),
-                }),
-            }).catch(() => { });
-        }
-    }, [timeInChapter, user, id, currentSectionIndex, sections, displayText]);
-
-    const handleNextSection = useCallback(() => {
-        const sectionWords = currentSection.wordCount ?? words.length;
-
-        // ADHD bite-sized check: trigger before moving to next section
-        if (!microCheck) {
-            const triggered = maybeTriggerMicroCheck();
-            if (triggered) {
-                return;
-            }
-        }
-
-        if (currentSectionIndex < totalSections - 1) {
-            const next = currentSectionIndex + 1;
-            checkStruggleZone(next);
-
-            // ADHD breathing break every N sections (Phase 3)
-            const isAdhd = (profile?.disabilityType === "adhd" || profile?.disabilityType === "both");
-            if (isAdhd) {
-                adhdSectionCountRef.current += 1;
-                if (adhdSectionCountRef.current >= ADHD_SECTION_BREAK_EVERY) {
-                    adhdSectionCountRef.current = 0;
-                    const nextSection = sections[next];
-                    if (nextSection?.content) {
-                        const firstSentence = nextSection.content.split(/[.!?]/)[0]?.trim();
-                        if (firstSentence && firstSentence.length > 20) {
-                            setCliffhangerTeaser(firstSentence.slice(0, 120) + "…");
-                        }
-                    }
-                    startBreathingBreak();
-                }
-            }
-
-            setCurrentSectionIndex(next);
-            saveProgress(next, "in_progress");
-            microCheckWordsRef.current += sectionWords;
-            setActiveWordIndex(-1);
-            setCurrentTime(0);
-            setIsPlaying(false);
-            setMicroCheck(null);
-            window.scrollTo({ top: 0, behavior: "smooth" });
-        } else {
-            saveProgress(currentSectionIndex, "completed");
-            // Save session summary before quiz
-            if (sessionId && idToken) {
-                fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/sessions/${sessionId}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-                    body: JSON.stringify({
-                        completionRate: 1.0,
-                        status: "completed",
-                    }),
-                }).catch(() => { });
-            }
-            navigate(`/student/quiz/${id}`);
-        }
-    }, [
-        currentSectionIndex, totalSections, saveProgress,
-        currentSection.wordCount, words.length, sessionId, idToken,
-        navigate, id, checkStruggleZone, maybeTriggerMicroCheck, microCheck,
-        profile, sections, startBreathingBreak,
-    ]);
-
-    const handlePrevSection = useCallback(() => {
-        if (currentSectionIndex > 0) {
-            const prev = currentSectionIndex - 1;
-            setCurrentSectionIndex(prev);
-            saveProgress(prev, "in_progress");
-            setActiveWordIndex(-1);
-            setCurrentTime(0);
-            setIsPlaying(false);
-            window.scrollTo({ top: 0, behavior: "smooth" });
-        }
-    }, [currentSectionIndex, saveProgress]);
 
     // ── Play dialogue lines extraction ────────────────────────────────────────
     const dialogueLines: DialogueLine[] = (() => {
@@ -1079,20 +1165,55 @@ const AdaptiveReader = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+            <div className={`max-w-4xl mx-auto transition-all duration-500 pb-24 px-4 ${focusMode ? "pt-0" : "pt-4"}`}>
+                    <AnimatePresence>
+                        {!focusMode && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+                                className="flex items-center justify-between mb-8 flex-wrap gap-3"
+                            >
+                                <Button variant="ghost" size="sm" className="gap-2 font-black uppercase tracking-widest text-xs" onClick={() => navigate("/student/lessons")}>
+                                    <ArrowLeft className="w-5 h-5" /> {t("reader.exitReader")}
+                                </Button>
 
-            <div className={`max-w-4xl mx-auto transition-all duration-500 pb-24 ${focusMode ? "pt-0" : "pt-4"}`}>
-                <AnimatePresence>
-                    {!focusMode && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-                            className="flex items-center justify-between mb-8 flex-wrap gap-3"
-                        >
-                            <Button variant="ghost" size="sm" className="gap-2 font-bold" onClick={() => navigate("/student/lessons")}>
-                                <ArrowLeft className="w-4 h-4" /> {t("reader.exitReader")}
-                            </Button>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                                <div className="flex items-center gap-2">
+                                    <Button 
+                                        variant={showSettings ? "default" : "secondary"} 
+                                        size="sm" 
+                                        className="rounded-2xl h-10 px-4 font-bold gap-2 shadow-sm transition-all hover:shadow-md"
+                                        onClick={() => setShowSettings(!showSettings)}
+                                    >
+                                        <Type className="w-4 h-4" />
+                                        {showSettings ? "Close Settings" : "Reading Settings"}
+                                    </Button>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* ── Dyslexia Settings Panel ── */}
+                    <AnimatePresence>
+                        {showSettings && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="overflow-hidden mb-8"
+                            >
+                                <Card className="rounded-[32px] border-2 border-primary/20 bg-background/60 backdrop-blur-xl shadow-2xl p-6">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-sm font-black uppercase tracking-widest text-primary">Reading Preferences</h3>
+                                        <Badge variant="outline" className="rounded-full border-primary/30 text-primary uppercase text-[9px] font-black">Beta Adaptive Features</Badge>
+                                    </div>
+                                    <DyslexiaControls 
+                                        settings={dyslexiaSettings} 
+                                        onChange={setDyslexiaSettings} 
+                                        alwaysExpanded={true}
+                                    />
+                                </Card>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                 {/* ── Sliding Chapter Navigation (Revamp) ── */}
                 {!focusMode && totalSections > 1 && (
@@ -1100,10 +1221,18 @@ const AdaptiveReader = () => {
                         sections={sections}
                         currentIndex={currentSectionIndex}
                         onSelect={(idx) => {
+                            if (idx > highestUnlockedIndex) {
+                                toast({
+                                    title: "Section Locked",
+                                    description: "Please complete previous sections first.",
+                                });
+                                return;
+                            }
                             setCurrentSectionIndex(idx);
                             saveProgress(idx, "in_progress");
                             window.scrollTo({ top: 0, behavior: "smooth" });
                         }}
+                        highestUnlockedIndex={highestUnlockedIndex}
                     />
                 )}
 
@@ -1139,7 +1268,7 @@ const AdaptiveReader = () => {
 
                 {/* ── Overall Progress ── */}
                 {!focusMode && totalSections > 1 && (
-                    <div className="mb-6 flex items-center gap-4 px-1">
+                    <div className="mt-8 mb-6 flex items-center gap-4 px-1">
                         <span className="text-xs font-black uppercase tracking-widest text-muted-foreground shrink-0">
                             {currentSectionIndex + 1} / {totalSections}
                         </span>
@@ -1151,12 +1280,12 @@ const AdaptiveReader = () => {
                 )}
 
                 {/* ── Reader Card ── */}
-                <Card className={`rounded-[40px] border-2 border-border shadow-2xl transition-all duration-500 overflow-hidden ${focusMode ? "bg-secondary/20 border-primary/20" : "bg-card"}`}>
+                    <Card className={`rounded-[40px] border-2 border-border shadow-2xl transition-all duration-500 overflow-hidden ${focusMode ? "bg-secondary/20 border-primary/20 scale-[1.02]" : "bg-card"}`}>
 
                     {/* Internal Header */}
                     <div className="p-8 border-b border-border/50 flex items-center justify-between bg-secondary/10 flex-wrap gap-4">
                         <div>
-                            <h1 className="text-2xl font-bold tracking-tight">{lesson?.title}</h1>
+                            <h1 className="text-2xl font-black tracking-tight text-primary">{(lesson?.title || "").replace(/\*\*/g, '')}</h1>
                             <div className="flex items-center gap-2 mt-1">
                                 <p className="text-sm text-muted-foreground font-medium">{lesson?.author}</p>
                                 {totalSections > 1 && (
@@ -1170,15 +1299,22 @@ const AdaptiveReader = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            {bookBrain?.characters?.length > 0 && (
+                            {bookBrain && (
                                 <Button
                                     variant={showCharacterMap ? "default" : "secondary"}
                                     size="sm"
                                     className="rounded-xl h-10 px-4 font-bold gap-2"
+                                    disabled={!bookBrain?.characters?.length}
+                                    title={!bookBrain?.characters?.length ? "No characters detected for this content" : undefined}
                                     onClick={() => setShowCharacterMap(v => !v)}
                                 >
                                     <Users className="w-4 h-4" />
                                     {t("reader.characters")}
+                                    {bookBrain?.characters?.length > 0 && (
+                                        <span className="ml-0.5 rounded-full bg-primary/20 text-primary text-[9px] font-black px-1.5 py-0.5 min-w-[16px] text-center">
+                                            {bookBrain.characters.length}
+                                        </span>
+                                    )}
                                 </Button>
                             )}
                             <Button
@@ -1325,112 +1461,202 @@ const AdaptiveReader = () => {
                                 >
                                     <RotateCcw className="w-5 h-5" />
                                 </Button>
+                                <div className="h-8 w-px bg-border/50 mx-2" />
+                                <Button
+                                    variant="outline"
+                                    className={`h-12 px-6 rounded-2xl font-bold gap-3 transition-all shadow-md ${showSTT ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:border-primary/50'}`}
+                                    onClick={() => setShowSTT(true)}
+                                    title="Read Aloud Practice"
+                                >
+                                    <Mic className={`w-5 h-5 ${!showSTT ? 'text-primary' : ''}`} />
+                                    <span>Practice Reading</span>
+                                </Button>
                             </div>
                             <div className="flex-1 w-full space-y-2">
                                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">
                                     <span>{isPlaying ? "🔊 TTS Active" : "Voice Activity"}</span>
+                                    {isPlaying && (
+                                        <span className="text-primary animate-pulse">{Math.round(ttsProgress)}%</span>
+                                    )}
                                 </div>
-                                <Progress value={0} className="h-2 rounded-full bg-background" />
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-3 text-muted-foreground group">
-                                    <Type className="w-5 h-5 group-hover:text-primary transition-colors" />
-                                    <div className="w-20">
-                                        <Slider defaultValue={[100]} max={150} min={80} step={1} />
-                                    </div>
-                                </div>
-                                <div className="h-8 w-px bg-border" />
-                                <Button
-                                    className="rounded-xl font-bold gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                                    onClick={() => navigate(`/student/quiz/${id}`)}
-                                >
-                                    <BrainCircuit className="w-4 h-4" /> Quiz
-                                </Button>
+                                <Slider 
+                                    value={[ttsProgress]} 
+                                    max={100} 
+                                    step={1} 
+                                    className="h-2"
+                                    onValueChange={([val]) => {
+                                        if (!ttsChunks.length) return;
+                                        setTtsProgress(val);
+                                        const targetChunk = Math.min(
+                                            Math.floor((val / 100) * ttsChunks.length),
+                                            ttsChunks.length - 1
+                                        );
+                                        setCurrentChunkIndex(targetChunk);
+                                        if (!isPlaying) setIsPlaying(true);
+                                    }}
+                                />
                             </div>
                         </div>
                     </div>
 
-                    {/* Chapter Navigation Controls */}
-                    {totalSections > 1 && (
-                        <div className="p-6 bg-background/50 border-t border-border flex items-center justify-between gap-4">
+                    {/* Unified Navigation Button */}
+                    {!focusMode && (
+                        <div className="flex items-center justify-between px-8 pb-8 gap-4 min-h-[5rem]">
                             <Button
-                                variant="outline" className="rounded-xl px-6 font-bold gap-2"
-                                onClick={handlePrevSection} disabled={currentSectionIndex === 0}
+                                variant="ghost" 
+                                className="rounded-full px-6 font-bold gap-2 text-muted-foreground hover:text-foreground"
+                                onClick={handlePrevSection} 
+                                disabled={currentSectionIndex === 0}
                             >
-                                <ChevronLeft className="w-4 h-4" /> {t("reader.previous")}
+                                <ChevronLeft className="w-4 h-4" /> Previous
                             </Button>
-                            
-                            <Button
-                                variant={completedSections.has(currentSectionIndex) ? "secondary" : "outline"}
-                                className={`rounded-full px-6 font-black transition-all ${completedSections.has(currentSectionIndex) ? "text-emerald-500 border-emerald-500/30" : "hover:border-primary/50"}`}
-                                onClick={async () => {
-                                    // 1. Check Quiz-Gate: Must have passed any quiz belonging to this or past chapters
-                                    // A quiz for "Chapters 1-3" (chunk 1) must be passed before marking Ch 3 complete.
-                                    const currentChunk = Math.floor(currentSectionIndex / 3); // 0-based chunk for gate check
+
+                            {(() => {
+                                const isCurrentSectionCompleted = completedSections.has(currentSectionIndex);
+                                const isLastSection = currentSectionIndex === totalSections - 1;
+                                const allSectionsCompleted = completedSections.size === totalSections;
+
+                                if (!isCurrentSectionCompleted) {
+                                    const currentChunk = Math.floor(currentSectionIndex / 3);
+                                    let needsQuiz = false;
+                                    
                                     if (currentChunk > 0) {
-                                        // If we are in chunk 1 (Ch 4-6), we must have passed chunk 0 (Ch 1-3)
                                         const prevChunkScore = progress?.quizScores?.[currentChunk];
                                         if (!prevChunkScore || !prevChunkScore.passed) {
-                                            toast({
-                                                title: "Quiz Required",
-                                                description: `Please pass Quiz ${currentChunk} before completing this chapter.`,
-                                                variant: "destructive",
-                                            });
-                                            return;
+                                            needsQuiz = true;
                                         }
                                     }
 
-                                    const newSet = new Set(completedSections);
-                                    newSet.add(currentSectionIndex);
-                                    setCompletedSections(newSet);
-                                    
-                                    // Save to progress API
-                                    saveProgress(currentSectionIndex, newSet.size === totalSections ? "completed" : "in_progress");
-                                    
-                                    // Update session completion rate
-                                    if (sessionId && idToken) {
-                                        const rate = newSet.size / totalSections;
-                                        fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/sessions/${sessionId}`, {
-                                            method: "PATCH",
-                                            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-                                            body: JSON.stringify({
-                                                completionRate: rate,
-                                                status: rate === 1 ? "completed" : "active",
-                                            }),
-                                        }).catch(() => { });
-                                        
-                                        // Update AI service comprehension tracker correctly
-                                        fetch(`${import.meta.env.VITE_AI_URL || "http://localhost:8082"}/comprehension/record`, {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({
-                                                student_id: user?.uid,
-                                                book_id: id,
-                                                section_id: String(currentSectionIndex),
-                                                section_title: sections[currentSectionIndex]?.title || `Chapter ${currentSectionIndex + 1}`,
-                                                time_spent_s: 60, // estimate or actual tracked time
-                                                section_text: displayText.slice(0, 2000),
-                                            }),
-                                        }).catch(() => { });
+                                    if (needsQuiz) {
+                                        return (
+                                            <div className="flex flex-col items-end gap-2">
+                                                <p className="text-[10px] font-black text-primary uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/20 whitespace-nowrap shadow-sm backdrop-blur-sm animate-pulse">
+                                                    Required Checkpoint
+                                                </p>
+                                                <Button
+                                                    className="rounded-full px-8 h-12 font-black gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg glow-primary transition-transform hover:scale-105"
+                                                    onClick={() => navigate(`/student/quiz/${id}?sessionId=${sessionId}&chunk=${currentChunk}`)}
+                                                >
+                                                    <BrainCircuit className="w-5 h-5" />
+                                                    Take Quiz {currentChunk}
+                                                </Button>
+                                            </div>
+                                        );
                                     }
-                                }}
-                            >
-                                {completedSections.has(currentSectionIndex) ? "✓ Completed" : "Mark as Complete"}
-                            </Button>
 
-                            <Button
-                                className="rounded-xl px-6 font-bold gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                                onClick={handleNextSection}
-                            >
-                                {currentSectionIndex < totalSections - 1 ? t("reader.next") : t("reader.finish")} <ChevronRight className="w-4 h-4" />
-                            </Button>
+                                    return (
+                                        <Button
+                                            variant="outline"
+                                            className="rounded-full px-8 h-12 font-black transition-all hover:border-primary/50 gap-2 shadow-sm"
+                                            onClick={async () => {
+                                                const newSet = new Set(completedSections);
+                                                newSet.add(currentSectionIndex);
+                                                setCompletedSections(newSet);
+                                                saveProgress(currentSectionIndex, newSet.size === totalSections ? "completed" : "in_progress");
+                                                
+                                                if (sessionId && idToken) {
+                                                    const rate = newSet.size / totalSections;
+                                                    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/sessions/${sessionId}`, {
+                                                        method: "PATCH",
+                                                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                                                        body: JSON.stringify({
+                                                            completionRate: rate,
+                                                            status: rate === 1 ? "completed" : "active",
+                                                        }),
+                                                    }).catch(() => { });
+                                                    setShowDifficultyModal(true);
+                                                }
+                                            }}
+                                        >
+                                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                                            Mark as Complete
+                                        </Button>
+                                    );
+                                }
+
+                                if (!isLastSection) {
+                                    const nextIdx = currentSectionIndex + 1;
+                                    const nextChunk = Math.floor(nextIdx / 3);
+                                    let isGatedByQuiz = false;
+                                    
+                                    if (nextChunk > Math.floor(currentSectionIndex / 3)) {
+                                         // We are crossing a chunk boundary (every 3 sections)
+                                         // Check if there is a quiz for the completed chunk
+                                         const currentChunk = Math.floor(currentSectionIndex / 3);
+                                         const chunkQuiz = allQuizzes.find(q => q.chunkIndex === currentChunk);
+                                         if (chunkQuiz) {
+                                             const chunkScore = progress?.quizScores?.[currentChunk];
+                                             if (!chunkScore || !chunkScore.passed) {
+                                                 isGatedByQuiz = true;
+                                             }
+                                         }
+                                    }
+
+                                    if (isGatedByQuiz) {
+                                        return (
+                                            <div className="flex flex-col items-end gap-2 text-right">
+                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 shadow-sm">
+                                                    🔒 Quiz Required to Continue
+                                                </p>
+                                                <Button
+                                                    className="rounded-full px-8 h-12 font-black gap-2 bg-amber-500 text-white hover:bg-amber-600 shadow-lg"
+                                                    onClick={() => navigate(`/student/quiz/${id}?sessionId=${sessionId}&chunk=${Math.floor(currentSectionIndex / 3)}`)}
+                                                >
+                                                    <BrainCircuit className="w-5 h-5" />
+                                                    Take Mastery Quiz
+                                                </Button>
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <Button
+                                            className="rounded-full px-8 h-12 font-black gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg glow-primary"
+                                            onClick={handleNextSection}
+                                        >
+                                            Next Section <ChevronRight className="w-5 h-5" />
+                                        </Button>
+                                    );
+                                }
+
+                                return (
+                                    <div className="flex flex-col items-end gap-2">
+                                        {!allSectionsCompleted && (
+                                            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 whitespace-nowrap shadow-sm backdrop-blur-sm">
+                                                Finish all chapters to unlock quiz
+                                            </p>
+                                        )}
+                                        <Button
+                                            disabled={!allSectionsCompleted}
+                                            className={`rounded-full px-8 h-12 font-black gap-2 transition-all shadow-xl ${allSectionsCompleted ? "bg-accent text-accent-foreground hover:scale-105" : "opacity-50"}`}
+                                            onClick={() => {
+                                                if (sessionId && idToken) {
+                                                    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/sessions/${sessionId}`, {
+                                                        method: "PATCH",
+                                                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                                                        body: JSON.stringify({
+                                                            completionRate: 1.0,
+                                                            avgAttentionScore: getAvgAttention(),
+                                                            status: "completed",
+                                                        }),
+                                                    }).catch(() => { });
+                                                }
+                                                navigate(`/student/quiz/${id}?sessionId=${sessionId}`);
+                                            }}
+                                        >
+                                            <BrainCircuit className="w-5 h-5" />
+                                            Attempt the Quiz
+                                        </Button>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     )}
                 </Card>
 
                 {/* Quiz Engagement Prompt */}
                 <AnimatePresence>
-                    {showQuizPrompt && !focusMode && (
+                    {showQuizPrompt && !focusMode && !isPlaying && (
                         <motion.div
                             initial={{ opacity: 0, y: 50, scale: 0.9 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1457,8 +1683,6 @@ const AdaptiveReader = () => {
                     )}
                 </AnimatePresence>
 
-            </div>
-
             {/* ── Comprehension Mini-Panel ── */}
             {!focusMode && user && id && (
                 <ComprehensionMiniPanel
@@ -1479,7 +1703,12 @@ const AdaptiveReader = () => {
                             fetch(`${AI_URL}/comprehension/vocab`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ student_id: user.uid, book_id: id, word }),
+                                body: JSON.stringify({ 
+                                    student_id: user.uid, 
+                                    book_id: id, 
+                                    word,
+                                    source: "click" // Explicitly mark as click
+                                }),
                             }).catch(() => { });
                         }
                     }}
@@ -1531,7 +1760,12 @@ const AdaptiveReader = () => {
                         fetch(`${AI_URL}/comprehension/vocab`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ student_id: user.uid, book_id: id, word }),
+                            body: JSON.stringify({ 
+                                student_id: user.uid, 
+                                book_id: id, 
+                                word,
+                                source: "highlight" // Explicitly mark as highlight
+                            }),
                         }).catch(() => { });
                     }
                 }}
@@ -1544,10 +1778,106 @@ const AdaptiveReader = () => {
                     }
                 }}
                 onHighlightCategorized={(_text, _category) => {
-                    // highlight feedback — no-op without AI service
+                    // console.log("Categorized:", _text, _category);
                 }}
                 onPhonics={(word) => setPhonicsWord(word)}
             />
+
+            {/* ── Reading Assessment Modal (SST) ── */}
+            {showSTT && (
+                <ReadingAssessment
+                    expectedText={currentSection.content?.slice(0, 1000) || ""}
+                    studentId={user?.uid}
+                    bookId={id}
+                    sessionId={sessionId}
+                    idToken={idToken}
+                    onClose={() => setShowSTT(false)}
+                />
+            )}
+
+            {/* Phase 3: Difficulty Rating Modal */}
+            <AnimatePresence>
+                {showDifficultyModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="w-full max-w-md bg-card border border-border shadow-2xl rounded-3xl p-8 text-center"
+                        >
+                            <h3 className="text-2xl font-black mb-2">How was this chapter?</h3>
+                            <p className="text-muted-foreground mb-8">Your feedback helps your teacher support you better.</p>
+                            
+                            <div className="flex justify-center gap-4 mb-8">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                        key={star}
+                                        onClick={() => setPendingDifficulty(star)}
+                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold transition-all ${
+                                            pendingDifficulty === star 
+                                            ? "bg-primary text-primary-foreground scale-110 shadow-lg shadow-primary/25" 
+                                            : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                        }`}
+                                    >
+                                        {star}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex flex-col gap-3">
+                                <Button 
+                                    disabled={!pendingDifficulty || isSubmittingProgress}
+                                    className="h-14 rounded-2xl text-lg font-black bg-primary hover:bg-primary/90"
+                                    onClick={async () => {
+                                        if (!pendingDifficulty) return;
+                                        setIsSubmittingProgress(true);
+                                        
+                                        const wordCount = displayWords.length;
+                                        // Calc WPM: wordCount / (seconds / 60)
+                                        const wpm = (timeInChapter > 5) ? (wordCount / (timeInChapter / 60)) : 0;
+
+                                        try {
+                                            await fetch(`${AI_URL}/comprehension/record`, {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({
+                                                    student_id: user?.uid,
+                                                    book_id: id,
+                                                    section_id: String(currentSectionIndex),
+                                                    section_title: sections[currentSectionIndex]?.title || `Chapter ${currentSectionIndex + 1}`,
+                                                    time_spent_s: timeInChapter,
+                                                    section_text: displayText.slice(0, 2000),
+                                                    subjective_difficulty: pendingDifficulty,
+                                                    reading_speed_wpm: Math.round(wpm * 10) / 10
+                                                }),
+                                            });
+                                            toast({
+                                                title: "Goal Reached!",
+                                                description: "Your progress and feedback have been saved.",
+                                            });
+                                        } catch (err) {
+                                            console.error("Failed to record progress:", err);
+                                        } finally {
+                                            setIsSubmittingProgress(false);
+                                            setShowDifficultyModal(false);
+                                            setPendingDifficulty(null);
+                                        }
+                                    }}
+                                >
+                                    {isSubmittingProgress ? "Saving..." : "Submit Feedback"}
+                                </Button>
+                                <Button 
+                                    variant="ghost" 
+                                    className="h-12 rounded-2xl font-bold text-muted-foreground"
+                                    onClick={() => setShowDifficultyModal(false)}
+                                >
+                                    Skip for now
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            </div>
         </DashboardLayout>
     );
 };

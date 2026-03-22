@@ -20,7 +20,7 @@ import json
 import os
 import re
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
@@ -65,6 +65,8 @@ class ChapterProgress:
     comprehension_score: float = 0
     highlights_made: int = 0
     vocab_lookups: int = 0
+    reading_speed_wpm: Optional[float] = None
+    subjective_difficulty: Optional[int] = None  # 1-5 rating from student
     completed: bool = False
 
 
@@ -97,6 +99,9 @@ class ComprehensionGraph:
 
     # Predicted struggle zones
     struggle_predictions: List[Dict[str, Any]] = field(default_factory=list)
+
+    # STT Reading Fluency
+    stt_readings: List[Dict[str, Any]] = field(default_factory=list) # {timestamp, section_id, accuracy, wpm, feedback}
 
     # Timestamps
     first_session: float = 0
@@ -158,10 +163,12 @@ class ComprehensionTracker:
                     vocab_mastered=data.get("vocab_mastered", []),
                     highlights=data.get("highlights", []),
                     struggle_predictions=data.get("struggle_predictions", []),
+                    stt_readings=data.get("stt_readings", []),
                     first_session=data.get("first_session", 0),
                     last_session=data.get("last_session", 0),
                     total_time_s=data.get("total_time_s", 0),
                     sessions_count=data.get("sessions_count", 0),
+                    # Migration: some files might not have these yet
                 )
                 # Reconstruct chapter progress
                 for cp_data in data.get("chapter_progress", []):
@@ -209,12 +216,15 @@ class ComprehensionTracker:
                     "comprehension_score": cp.comprehension_score,
                     "highlights_made": cp.highlights_made,
                     "vocab_lookups": cp.vocab_lookups,
+                    "reading_speed_wpm": cp.reading_speed_wpm,
+                    "subjective_difficulty": cp.subjective_difficulty,
                     "completed": cp.completed,
                 }
                 for cp in graph.chapter_progress
             ],
             "highlights": graph.highlights[-100:],  # Keep last 100
             "struggle_predictions": graph.struggle_predictions,
+            "stt_readings": graph.stt_readings[-50:], # Keep last 50
             "first_session": graph.first_session,
             "last_session": graph.last_session,
             "total_time_s": graph.total_time_s,
@@ -236,6 +246,8 @@ class ComprehensionTracker:
         quiz_score: Optional[float] = None,
         characters_seen: Optional[List[str]] = None,
         section_text: str = "",
+        subjective_difficulty: Optional[int] = None,
+        reading_speed_wpm: Optional[float] = None,
     ):
         """Record that a student read a section."""
         graph = self.get_or_create(student_id, book_id)
@@ -268,6 +280,8 @@ class ComprehensionTracker:
                 time_spent_s=time_spent_s,
                 quiz_score=quiz_score,
                 comprehension_score=quiz_score or 0.5,
+                subjective_difficulty=subjective_difficulty,
+                reading_speed_wpm=reading_speed_wpm,
             ))
 
         # Track characters
@@ -318,12 +332,21 @@ class ComprehensionTracker:
         self._save(student_id, book_id)
 
     def record_vocab_lookup(
-        self, student_id: str, book_id: str, word: str
+        self, student_id: str, book_id: str, word: str, source: str = "highlight"
     ):
-        """Record a vocabulary word lookup."""
+        """Record a vocabulary word lookup from a specific interaction source."""
         graph = self.get_or_create(student_id, book_id)
-        if word.lower() not in [w.lower() for w in graph.vocab_looked_up]:
-            graph.vocab_looked_up.append(word.lower())
+        word_lower = word.lower()
+        
+        # Check if already tracked, otherwise add
+        existing = next((v for v in graph.vocab_looked_up if isinstance(v, dict) and v["word"] == word_lower), None)
+        if not existing:
+            # Migration support: vocab_looked_up might be List[str] or List[dict]
+            graph.vocab_looked_up.append({
+                "word": word_lower,
+                "timestamp": time.time(),
+                "source": source
+            })
         self._save(student_id, book_id)
 
     def record_vocab_mastered(
@@ -341,6 +364,37 @@ class ComprehensionTracker:
         """Record that a student encountered a literary device."""
         graph = self.get_or_create(student_id, book_id)
         graph.devices_recognized[device] = graph.devices_recognized.get(device, 0) + 1
+        self._save(student_id, book_id)
+
+    def record_stt_assessment(
+        self,
+        student_id: str,
+        book_id: str,
+        section_id: str,
+        accuracy: float,
+        wpm: float,
+        feedback: str = "",
+        mispronounced: List[str] = None
+    ):
+        """Record a speech-to-text reading assessment result."""
+        graph = self.get_or_create(student_id, book_id)
+        graph.stt_readings.append({
+            "timestamp": time.time(),
+            "section_id": section_id,
+            "accuracy": accuracy,
+            "wpm": wpm,
+            "feedback": feedback,
+            "mispronounced": mispronounced or []
+        })
+        
+        # Also update overall progress if relevant
+        for cp in graph.chapter_progress:
+            if cp.chapter_id == section_id:
+                # If they read correctly, improve comprehension score slightly
+                if accuracy > 80:
+                    cp.comprehension_score = min(1.0, cp.comprehension_score + 0.05)
+                break
+                
         self._save(student_id, book_id)
 
     def get_summary(
@@ -364,6 +418,21 @@ class ComprehensionTracker:
             if chapters_read > 0 else 0
         )
 
+        # Calculate chapter-level telemetry
+        chapters_with_wpm = [c for c in graph.chapter_progress if c.reading_speed_wpm is not None and c.reading_speed_wpm > 0]
+        avg_wpm = sum(c.reading_speed_wpm for c in chapters_with_wpm) / len(chapters_with_wpm) if chapters_with_wpm else 0
+        
+        diff_ratings = [c.subjective_difficulty for c in graph.chapter_progress if c.subjective_difficulty is not None and c.subjective_difficulty > 0]
+        avg_subjective_diff = sum(diff_ratings) / len(diff_ratings) if diff_ratings else 0
+
+        # Group vocabulary by source
+        vocab_by_source = defaultdict(list)
+        for entry in graph.vocab_looked_up:
+            if isinstance(entry, dict):
+                vocab_by_source[entry.get("source", "highlight")].append(entry["word"])
+            else: # Migration support for old List[str] format
+                vocab_by_source["highlight"].append(entry)
+
         vocab_target = max(len(graph.vocab_looked_up), 1)
         vocab_progress = len(graph.vocab_mastered) / vocab_target
 
@@ -378,6 +447,8 @@ class ComprehensionTracker:
             "chapters_with_good_comprehension": len(chapters_good),
             "chapters_needing_revisit": chapters_needing_revisit,
             "average_comprehension": round(avg_comprehension, 2),
+            "average_wpm": round(avg_wpm, 1),
+            "average_subjective_difficulty": round(avg_subjective_diff, 1),
             "characters_understood": {
                 name: round(score, 2)
                 for name, score in sorted(
@@ -393,6 +464,7 @@ class ComprehensionTracker:
             "total_highlights": len(graph.highlights),
             "recent_highlights": graph.highlights[-20:],  # last 20 for teacher common-pattern detection
             "struggle_predictions": graph.struggle_predictions,
+            "stt_history": graph.stt_readings,
             "last_session": graph.last_session,
         }
 
@@ -424,4 +496,53 @@ class ComprehensionTracker:
             "sessions_count": graph.sessions_count,
             "last_read": graph.last_session,
             "total_time_minutes": round(graph.total_time_s / 60, 1),
+        }
+
+    def get_class_wide_stats(self, book_id: str) -> Dict[str, Any]:
+        """
+        Aggregate stats across all students for a specific book.
+        This enables Class-Level and Content-Level insights.
+        """
+        files = [f for f in os.listdir(self.storage_dir) if f.endswith(f"_{book_id}.json")]
+        
+        all_tricky_words = Counter()
+        chapter_stats = defaultdict(lambda: {"times": [], "scores": [], "ratings": [], "count": 0})
+        
+        for filename in files:
+            try:
+                with open(os.path.join(self.storage_dir, filename)) as f:
+                    data = json.load(f)
+                    
+                # Accummulate tricky words (lookups)
+                for word in data.get("vocab_looked_up", []):
+                    all_tricky_words[word] += 1
+                    
+                # Accumulate chapter-level metrics
+                for cp in data.get("chapter_progress", []):
+                    cid = cp["chapter_id"]
+                    chapter_stats[cid]["count"] += 1
+                    if cp.get("time_spent_s"):
+                        chapter_stats[cid]["times"].append(cp["time_spent_s"])
+                    if cp.get("quiz_score") is not None:
+                        chapter_stats[cid]["scores"].append(cp["quiz_score"])
+                    if cp.get("subjective_difficulty") is not None:
+                        chapter_stats[cid]["ratings"].append(cp["subjective_difficulty"])
+            except Exception:
+                continue
+
+        # Process aggregates
+        formatted_chapters = {}
+        for cid, stats in chapter_stats.items():
+            formatted_chapters[cid] = {
+                "avg_time_s": sum(stats["times"]) / len(stats["times"]) if stats["times"] else 0,
+                "avg_score": sum(stats["scores"]) / len(stats["scores"]) if stats["scores"] else 0,
+                "avg_difficulty_rating": sum(stats["ratings"]) / len(stats["ratings"]) if stats["ratings"] else 0,
+                "student_count": stats["count"]
+            }
+
+        return {
+            "book_id": book_id,
+            "top_tricky_words": [{"word": w, "count": c} for w, c in all_tricky_words.most_common(20)],
+            "chapter_insights": formatted_chapters,
+            "student_count": len(files)
         }

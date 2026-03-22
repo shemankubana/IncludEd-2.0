@@ -270,11 +270,27 @@ const CharacterMapPanel: React.FC<CharacterMapPanelProps> = ({
                                 </span>
                             </div>
 
-                            {selected.description && (
-                                <p className="text-[11px] text-foreground/80 italic leading-relaxed bg-secondary/30 p-2 rounded-xl border border-border/50">
-                                    {selected.description}
-                                </p>
-                            )}
+                            <AnimatePresence mode="wait">
+                                {selected.description ? (
+                                    <motion.div
+                                        key="desc-found"
+                                        initial={{ opacity: 0, y: 5 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="text-[11px] text-foreground/90 italic leading-relaxed bg-primary/5 p-3 rounded-2xl border border-primary/10 shadow-sm"
+                                    >
+                                        {selected.description}
+                                    </motion.div>
+                                ) : (selected.importance !== "background") ? (
+                                    <motion.div
+                                        key="desc-loading"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        className="text-[10px] text-muted-foreground italic p-2 border border-dashed border-border rounded-xl text-center"
+                                    >
+                                        ✨ {t("character.analyzingPersonality") || "Analyzing personality..."}
+                                    </motion.div>
+                                ) : null}
+                            </AnimatePresence>
 
                             {familiarityScores[selected.name] !== undefined && (
                                 <div>

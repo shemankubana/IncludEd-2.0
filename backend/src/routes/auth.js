@@ -20,6 +20,19 @@ router.post('/sync', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'Invalid school code. Please check with your school administrator.' });
       }
       schoolId = school.id;
+    } else {
+      // If no school code provided (e.g., manual test signups), assign a default school
+      const existingSchool = await School.findOne({ where: { name: 'My School' } });
+      if (existingSchool) {
+        schoolId = existingSchool.id;
+      } else {
+        const newSchool = await School.create({
+          name: 'My School',
+          code: Math.random().toString(36).substring(2, 8).toUpperCase(),
+          isActive: true
+        });
+        schoolId = newSchool.id;
+      }
     }
 
     // ── Determine status ─────────────────────────────────────────────
@@ -30,7 +43,23 @@ router.post('/sync', authenticateToken, async (req, res) => {
     let user = await User.findOne({ where: { email } });
 
     if (user) {
-      await user.update({ firstName, lastName, role, schoolId, classLevel, term, yearEnrolled });
+      const updates = {};
+      if (firstName) updates.firstName = firstName;
+      if (lastName) updates.lastName = lastName;
+      if (classLevel) updates.classLevel = classLevel;
+      if (term) updates.term = term;
+      if (yearEnrolled) updates.yearEnrolled = yearEnrolled;
+
+      // Only update role if explicitly provided in this payload
+      if (role) updates.role = role;
+
+      // If they provided a specific schoolCode, update their schoolId.
+      // Or, if they currently have NO schoolId at all, assign the resolved (fallback) one.
+      if (schoolId && (req.body.schoolCode || !user.schoolId)) {
+        updates.schoolId = schoolId;
+      }
+
+      await user.update(updates);
     } else {
       user = await User.create({
         id: firebaseUid,

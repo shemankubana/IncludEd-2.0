@@ -275,13 +275,15 @@ export const DyslexiaText: React.FC<DyslexiaRendererProps> = ({
 interface DyslexiaControlsProps {
     settings: DyslexiaSettings;
     onChange: (settings: DyslexiaSettings) => void;
+    alwaysExpanded?: boolean;
 }
 
 export const DyslexiaControls: React.FC<DyslexiaControlsProps> = ({
     settings,
     onChange,
+    alwaysExpanded = false,
 }) => {
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(alwaysExpanded);
 
     const toggle = (key: keyof DyslexiaSettings) => {
         onChange({ ...settings, [key]: !settings[key] });
@@ -293,109 +295,110 @@ export const DyslexiaControls: React.FC<DyslexiaControlsProps> = ({
     };
 
     return (
-        <div className="dyslexia-controls">
-            <button
-                className="dyslexia-controls__toggle"
-                onClick={() => setExpanded(v => !v)}
-            >
-                <Eye size={16} />
-                Reading Settings
-            </button>
+        <div className="dyslexia-controls space-y-4">
+            {!alwaysExpanded && (
+                <button
+                    className="dyslexia-controls__toggle flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-all font-bold text-sm shadow-sm"
+                    onClick={() => setExpanded(v => !v)}
+                >
+                    <Eye size={16} className="text-primary" />
+                    Reading Settings
+                </button>
+            )}
 
-            {expanded && (
-                <div className="dyslexia-controls__panel">
-                    <label className="dyslexia-controls__option">
-                        <input
-                            type="checkbox"
-                            checked={settings.bionicReading}
-                            onChange={() => toggle("bionicReading")}
-                        />
-                        <Type size={14} />
-                        Bionic Reading (bold starts)
-                    </label>
+            {(expanded || alwaysExpanded) && (
+                <div className="dyslexia-controls__panel grid grid-cols-1 md:grid-cols-2 gap-4 p-2">
+                    <div className="space-y-3">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-2">Visual Aids</h4>
+                        <label className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/20 border border-border/50 cursor-pointer hover:bg-secondary/30 transition-all group">
+                            <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-primary text-primary focus:ring-primary"
+                                checked={settings.bionicReading}
+                                onChange={() => toggle("bionicReading")}
+                            />
+                            <div className="flex flex-col">
+                                <span className="text-sm font-bold group-hover:text-primary transition-colors">Bionic Reading</span>
+                                <span className="text-[10px] text-muted-foreground">Bold starts for faster decoding</span>
+                            </div>
+                        </label>
 
-                    <label className="dyslexia-controls__option">
-                        <input
-                            type="checkbox"
-                            checked={settings.syllableColors}
-                            onChange={() => toggle("syllableColors")}
-                        />
-                        <Palette size={14} />
-                        Color-coded syllables
-                    </label>
+                        <label className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/20 border border-border/50 cursor-pointer hover:bg-secondary/30 transition-all group">
+                            <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-primary text-primary focus:ring-primary"
+                                checked={settings.syllableColors}
+                                onChange={() => toggle("syllableColors")}
+                            />
+                            <div className="flex flex-col">
+                                <span className="text-sm font-bold group-hover:text-primary transition-colors">Color Syllables</span>
+                                <span className="text-[10px] text-muted-foreground">Hues for complex words</span>
+                            </div>
+                        </label>
 
-                    <label className="dyslexia-controls__option">
-                        <input
-                            type="checkbox"
-                            checked={settings.readingRuler}
-                            onChange={() => toggle("readingRuler")}
-                        />
-                        <Ruler size={14} />
-                        Reading ruler
-                    </label>
-
-                    <label className="dyslexia-controls__option">
-                        <input
-                            type="checkbox"
-                            checked={settings.syllableMarkers}
-                            onChange={() => toggle("syllableMarkers")}
-                        />
-                        <Minus size={14} />
-                        Syllable markers (·)
-                    </label>
-
-                    <label className="dyslexia-controls__option">
-                        <input
-                            type="checkbox"
-                            checked={settings.alternatingLines}
-                            onChange={() => toggle("alternatingLines")}
-                        />
-                        Alternating line backgrounds
-                    </label>
-
-                    <div className="dyslexia-controls__font-select">
-                        <span className="text-xs font-medium">Font:</span>
-                        <select
-                            value={settings.fontChoice}
-                            onChange={(e) => onChange({
-                                ...settings,
-                                fontChoice: e.target.value as DyslexiaFontChoice,
-                                openDyslexicFont: e.target.value === "openDyslexic",
-                            })}
-                            className="text-xs px-2 py-1 rounded border border-border bg-background"
-                        >
-                            <option value="default">Default</option>
-                            <option value="openDyslexic">OpenDyslexic</option>
-                            <option value="lexend">Lexend</option>
-                        </select>
+                        <label className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/20 border border-border/50 cursor-pointer hover:bg-secondary/30 transition-all group">
+                            <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-primary text-primary focus:ring-primary"
+                                checked={settings.readingRuler}
+                                onChange={() => toggle("readingRuler")}
+                            />
+                            <div className="flex flex-col">
+                                <span className="text-sm font-bold group-hover:text-primary transition-colors">Reading Ruler</span>
+                                <span className="text-[10px] text-muted-foreground">Focus on current line</span>
+                            </div>
+                        </label>
                     </div>
 
-                    <div className="dyslexia-controls__slider">
-                        <span>Font size</span>
-                        <button onClick={() => adjust("fontSize", -0.1)}><Minus size={12} /></button>
-                        <span>{settings.fontSize.toFixed(1)}</span>
-                        <button onClick={() => adjust("fontSize", 0.1)}><Plus size={12} /></button>
-                    </div>
+                    <div className="space-y-3">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-2">Typography</h4>
+                        
+                        <div className="p-3 rounded-2xl bg-secondary/20 border border-border/50 space-y-2">
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="text-sm font-bold">Font Type</span>
+                                <select
+                                    value={settings.fontChoice}
+                                    onChange={(e) => onChange({
+                                        ...settings,
+                                        fontChoice: e.target.value as DyslexiaFontChoice,
+                                        openDyslexicFont: e.target.value === "openDyslexic",
+                                    })}
+                                    className="text-xs px-2 py-1 rounded-lg border-2 border-primary/20 bg-background font-bold focus:border-primary outline-none"
+                                >
+                                    <option value="default">Standard</option>
+                                    <option value="openDyslexic">OpenDyslexic</option>
+                                    <option value="lexend">Lexend (ADHD)</option>
+                                </select>
+                            </div>
+                        </div>
 
-                    <div className="dyslexia-controls__slider">
-                        <span>Line height</span>
-                        <button onClick={() => adjust("lineHeight", -0.1)}><Minus size={12} /></button>
-                        <span>{settings.lineHeight.toFixed(1)}</span>
-                        <button onClick={() => adjust("lineHeight", 0.1)}><Plus size={12} /></button>
-                    </div>
-
-                    <div className="dyslexia-controls__slider">
-                        <span>Letter spacing</span>
-                        <button onClick={() => adjust("letterSpacing", -0.5)}><Minus size={12} /></button>
-                        <span>{settings.letterSpacing}px</span>
-                        <button onClick={() => adjust("letterSpacing", 0.5)}><Plus size={12} /></button>
-                    </div>
-
-                    <div className="dyslexia-controls__slider">
-                        <span>Word spacing</span>
-                        <button onClick={() => adjust("wordSpacing", -1)}><Minus size={12} /></button>
-                        <span>{settings.wordSpacing}px</span>
-                        <button onClick={() => adjust("wordSpacing", 1)}><Plus size={12} /></button>
+                        <div className="p-3 rounded-2xl bg-secondary/20 border border-border/50 space-y-4">
+                            {[
+                                { label: "Size", key: "fontSize" as const, step: 0.1, unit: "rem" },
+                                { label: "Line Height", key: "lineHeight" as const, step: 0.1, unit: "" },
+                                { label: "Letter Gap", key: "letterSpacing" as const, step: 0.5, unit: "px" },
+                                { label: "Word Gap", key: "wordSpacing" as const, step: 1, unit: "px" },
+                            ].map((s) => (
+                                <div key={s.key} className="flex items-center justify-between">
+                                    <span className="text-xs font-bold">{s.label}</span>
+                                    <div className="flex items-center gap-3">
+                                        <button 
+                                            className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 transition-all"
+                                            onClick={() => adjust(s.key, -s.step)}
+                                        >
+                                            <Minus size={14} />
+                                        </button>
+                                        <span className="text-xs font-black w-8 text-center">{(settings[s.key] as number).toFixed(s.unit === "px" ? 0 : 1)}{s.unit}</span>
+                                        <button 
+                                            className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 transition-all"
+                                            onClick={() => adjust(s.key, s.step)}
+                                        >
+                                            <Plus size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}

@@ -45,6 +45,8 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
         const scoreResult = await Session.findOne({
             attributes: [
                 [sequelize.fn('AVG', sequelize.fn('COALESCE', sequelize.col('quizScore'), 0)), 'avgQuiz'],
+                [sequelize.fn('AVG', sequelize.fn('COALESCE', sequelize.col('readingScore'), 0)), 'avgReading'],
+                [sequelize.fn('AVG', sequelize.fn('COALESCE', sequelize.col('readingAccuracy'), 0)), 'avgAccuracy'],
                 [sequelize.fn('AVG', sequelize.col('avgAttentionScore')), 'avgAttention'],
                 [sequelize.fn('AVG', sequelize.col('completionRate')), 'avgCompletion'],
                 [sequelize.fn('COUNT', sequelize.literal('DISTINCT "literatureId"')), 'lessonsUsed'],
@@ -78,6 +80,8 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
                 'studentId',
                 [sequelize.fn('MAX', sequelize.col('startedAt')), 'lastActive'],
                 [sequelize.fn('AVG', sequelize.col('quizScore')), 'avgQuizScore'],
+                [sequelize.fn('AVG', sequelize.col('readingScore')), 'avgReadingScore'],
+                [sequelize.fn('AVG', sequelize.col('readingAccuracy')), 'avgReadingAccuracy'],
                 [sequelize.fn('AVG', sequelize.col('completionRate')), 'avgCompletion'],
                 [sequelize.fn('COUNT', sequelize.col('id')), 'sessionCount'],
             ],
@@ -96,10 +100,14 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
             const sess = sessionMap[s.id];
             const compRate = parseFloat(sess?.avgCompletion || 0);
             const quizScore = parseFloat(sess?.avgQuizScore || 0);
+            const readAccuracy = parseFloat(sess?.avgReadingAccuracy || 0);
+            const readScore = parseFloat(sess?.avgReadingScore || 0);
 
-            // Progress is primarily completion rate, but quiz score contributes if available
-            // If no quiz yet, progress = completion rate
-            const progressVal = (quizScore > 0) ? (compRate * 0.7 + quizScore * 0.3) : compRate;
+            // Progress factors in completion, quiz, and reading practice
+            const performanceWeight = (quizScore > 0 || readScore > 0) ? 0.4 : 0;
+            const progressVal = (performanceWeight > 0) 
+                ? (compRate * 0.6 + (quizScore * 0.7 + (readScore / 100) * 0.3) * 0.4) 
+                : compRate;
 
             return {
                 id: s.id,
@@ -107,6 +115,7 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
                 email: s.email,
                 lastActive: sess ? (sess.lastActive ? new Date(sess.lastActive).toISOString() : 'Active') : 'Never',
                 progress: Math.round(progressVal * 100),
+                readingAccuracy: Math.round(readAccuracy),
                 status: progressVal > 0.8 ? "Mastered" : progressVal > 0.4 ? "On Track" : "Starting",
                 sessionCount: parseInt(sess?.sessionCount || 0)
             };
@@ -118,6 +127,8 @@ router.get('/class', authenticateToken, requireTeacher, async (req, res) => {
                 totalSessions,
                 completedSessions,
                 avgQuizScore: parseFloat(scoreResult?.avgQuiz || 0).toFixed(3),
+                avgReadingScore: parseFloat(scoreResult?.avgReading || 0).toFixed(3),
+                avgReadingAccuracy: parseFloat(scoreResult?.avgAccuracy || 0).toFixed(3),
                 avgAttention: parseFloat(scoreResult?.avgAttention || 0).toFixed(3),
                 avgCompletion: parseFloat(scoreResult?.avgCompletion || 0).toFixed(3),
                 totalLessons: parseInt(scoreResult?.lessonsUsed || 0), // This maps to "Lessons Used" card
@@ -241,6 +252,17 @@ router.get('/rl-training-data', authenticateToken, async (req, res) => {
  */
 router.get('/insights', authenticateToken, requireTeacher, async (req, res) => {
     try {
+        const schoolId = req.user.schoolId;
+        const whereClause = {
+            status: { [Op.in]: ['active', 'completed'] }
+        };
+        // Scope to school if set
+        if (schoolId) {
+            const schoolStudents = await User.findAll({ where: { role: 'student', schoolId }, attributes: ['id'], raw: true });
+            const ids = schoolStudents.map(s => s.id);
+            if (ids.length > 0) whereClause.studentId = { [Op.in]: ids };
+        }
+        
         // Collect class stats similar to /class but pass to AI
         const stats = await Session.findAll({
             attributes: [
@@ -248,8 +270,9 @@ router.get('/insights', authenticateToken, requireTeacher, async (req, res) => {
                 [sequelize.fn('AVG', sequelize.col('quizScore')), 'avgQuiz'],
                 [sequelize.fn('AVG', sequelize.col('avgAttentionScore')), 'avgAttention'],
                 [sequelize.fn('AVG', sequelize.col('completionRate')), 'avgCompletion'],
+                [sequelize.fn('AVG', sequelize.fn('COALESCE', sequelize.col('readingAccuracy'), 0)), 'avgReadingAccuracy'],
             ],
-            where: { status: 'completed' },
+            where: whereClause,
             group: ['disabilityType'],
             raw: true,
         });

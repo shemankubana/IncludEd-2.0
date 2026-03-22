@@ -11,12 +11,14 @@ interface Section {
 interface ChapterNavigationProps {
   sections: Section[];
   currentIndex: number;
+  highestUnlockedIndex?: number;
   onSelect: (index: number) => void;
 }
 
 const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
   sections,
   currentIndex,
+  highestUnlockedIndex = 999,
   onSelect,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,21 +48,25 @@ const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
       >
         {sections.map((section, idx) => {
           const isActive = currentIndex === idx;
+          const isLocked = idx > highestUnlockedIndex;
           // Simple cleaning for short labels like "Chapter 1"
           const label = section.title.length > 20 ? section.title.slice(0, 17) + "..." : section.title;
 
           return (
             <motion.button
               key={idx}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onSelect(idx)}
+              whileTap={isLocked ? {} : { scale: 0.95 }}
+              onClick={() => !isLocked && onSelect(idx)}
+              disabled={isLocked}
               className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
                 isActive
                   ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                  : isLocked
+                  ? "bg-secondary/20 text-muted-foreground/40 cursor-not-allowed opacity-50"
                   : "bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground"
               }`}
             >
-              {label}
+              {isLocked ? `🔒 ${label}` : label}
             </motion.button>
           );
         })}

@@ -59,6 +59,14 @@ export const Session = sequelize.define('Session', {
         type: DataTypes.FLOAT,
         allowNull: true
     },
+    readingScore: {
+        type: DataTypes.FLOAT,
+        allowNull: true
+    },
+    readingAccuracy: {
+        type: DataTypes.FLOAT,
+        allowNull: true
+    },
     quizAttempts: {
         type: DataTypes.INTEGER,
         defaultValue: 0

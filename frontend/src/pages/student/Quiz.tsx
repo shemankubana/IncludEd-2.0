@@ -29,6 +29,7 @@ const ComprehensionQuiz = () => {
     const { id } = useParams();
     const [searchParams] = useSearchParams();
     const chunkParam = searchParams.get("chunk");
+    const sessionId = searchParams.get("sessionId");
     const { user } = useAuth();
 
     const [currentStep,    setCurrentStep]    = useState(0);
@@ -145,6 +146,19 @@ const ComprehensionQuiz = () => {
                         body: JSON.stringify({ score: finalScore, total: quizData.length, badge: badge?.badge }),
                     });
                 }
+
+                // NEW: Report to Node.js Session table for teacher analytics
+                if (sessionId) {
+                    const sessionUpdate = chunkParam !== null 
+                        ? { quizScore: pct / 100 } // Just update score for chunk
+                        : { quizScore: pct / 100, status: "completed", completionRate: 1.0 }; // Final quiz completes it
+                        
+                    await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                        body: JSON.stringify(sessionUpdate),
+                    });
+                }
             } catch { /* non-critical */ }
         }
 
@@ -242,9 +256,15 @@ const ComprehensionQuiz = () => {
                             <Button size="lg" className="w-full rounded-2xl h-14 text-lg font-black gap-3 shadow-xl" onClick={() => navigate("/student/achievements")}>
                                 View Achievements
                             </Button>
-                            <Button size="lg" variant="outline" className="w-full rounded-2xl h-14 text-lg font-black gap-3" onClick={() => navigate("/student/dashboard")}>
-                                Dashboard <ArrowRight className="w-5 h-5" />
-                            </Button>
+                            {chunkParam !== null ? (
+                                <Button size="lg" variant="outline" className="w-full rounded-2xl h-14 text-lg font-black gap-3 bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => navigate(`/student/reader/${id}`)}>
+                                    Continue Reading <ArrowRight className="w-5 h-5" />
+                                </Button>
+                            ) : (
+                                <Button size="lg" variant="outline" className="w-full rounded-2xl h-14 text-lg font-black gap-3" onClick={() => navigate("/student/dashboard")}>
+                                    Dashboard <ArrowRight className="w-5 h-5" />
+                                </Button>
+                            )}
                         </div>
                     </motion.div>
                 </div>

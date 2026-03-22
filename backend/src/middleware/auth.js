@@ -27,6 +27,14 @@ export const authenticateToken = async (req, res, next) => {
     const { User } = await import('../models/User.js');
     const dbUser = await User.findByPk(decodedToken.uid);
 
+    if (!dbUser && req.path !== '/sync' && req.path !== '/me' && req.path !== '/submit' && req.originalUrl !== '/api/onboarding/submit') {
+        // If user is not in DB and not trying to sync or check profile/onboarding, block with 404
+        return res.status(404).json({ 
+            error: 'User profile not found in database. Please sync your account.',
+            code: 'USER_NOT_FOUND'
+        });
+    }
+
     // NOTE: attaching decodedToken.uid as userId for compatibility with existing routes
     req.user = {
       ...decodedToken,

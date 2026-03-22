@@ -10,12 +10,25 @@ router.post('/submit', authenticateToken, async (req, res) => {
         const { dyslexiaScore, adhdScore, disabilityType, preferences } = req.body;
         const userId = req.user.uid;
 
-        // Map disability type to encoded float for RL
+        // Ensure user record exists in the User table (auto-sync if missing)
+        const { User } = await import('../models/User.js');
+        const [dbUser] = await User.findOrCreate({
+            where: { id: userId },
+            defaults: {
+                email: req.user.email || 'student@included.com',
+                firstName: req.user.name?.split(' ')[0] || 'Student',
+                lastName: req.user.name?.split(' ').slice(1).join(' ') || '',
+                role: 'student',
+                status: 'active'
+            }
+        });
+
+        // Map disability type to encoded float for RL (must match ai-service/services/rl_agent_service.py)
         const encodedMap = {
             'none': 0.0,
             'dyslexia': 0.5,
             'adhd': 1.0,
-            'both': 0.75 // Custom mapping if both are present
+            'both': 1.5 // Aligned with Python service
         };
 
         const disabilityTypeEncoded = encodedMap[disabilityType] || 0.0;

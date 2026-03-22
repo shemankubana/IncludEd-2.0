@@ -141,32 +141,41 @@ def _categorize(word: str, context: str) -> str:
 
 # ── Gemini-powered explanation ────────────────────────────────────────────────
 
-def _gemini_explain(
-    word: str,
-    context: str,
-    category: str,
-    gemini_service: Any,
-) -> Optional[Dict[str, str]]:
-    """Call Gemini to generate definition + analogy for a word in context."""
-    if not gemini_service or not gemini_service.is_available():
-        return None
-
-    prompt = f"""You are explaining a word to a 10-year-old child who has dyslexia.
-Word: "{word}"
-Sentence from their book: "{context[:200]}"
-Word category: {category}
-
-Write a JSON response with exactly these keys:
-  "definition" — one simple sentence (max 15 words), no big words
-  "analogy"    — start with "Like when..." and use something from everyday life
-
-Return only valid JSON, nothing else."""
-
     system = "You are a kind children's reading teacher. Always use simple, encouraging language."
     result = gemini_service.generate_json(prompt, system)
     if result and "definition" in result and "analogy" in result:
         return result
     return None
+
+
+def _gemini_explain_batch(
+    words_data: List[Dict[str, str]],
+    gemini_service: Any,
+) -> Dict[str, Dict[str, str]]:
+    """Call Gemini to explain multiple words at once. Returns {word: {definition, analogy}}."""
+    if not gemini_service or not gemini_service.is_available() or not words_data:
+        return {}
+
+    prompt = f"""You are explaining these words from a book to a 10-year-old child with dyslexia.
+For each word, provide a simple definition and a 'Like when...' analogy.
+
+Words to explain:
+{json.dumps(words_data, indent=2)}
+
+Return a JSON object where each key is the word, and the value is an object with:
+  "definition" — one simple sentence (max 15 words), no complex vocabulary
+  "analogy"    — start with "Like when..." using everyday examples
+
+Return ONLY valid JSON, no markdown formatting."""
+
+    system = "You are a kind children's reading teacher. Always use simple language for kids with dyslexia."
+    try:
+        results = gemini_service.generate_json(prompt, system)
+        if isinstance(results, dict):
+            return results
+    except Exception as e:
+        print(f"⚠️ Batch explanation failed: {e}")
+    return {}
 
 
 # ── FLAN-T5 explanation ────────────────────────────────────────────────────────
@@ -269,18 +278,34 @@ class VocabAnalyzer:
         # Limit to top N hardest words
         raw = raw[: self._max_per_chapter]
 
+        if not raw:
+            return []
+
+        # Prepare batch for Gemini
+        gemini_batch = []
+        for item in raw:
+            word = item["word"]
+            context = item.get("context", "")
+            category = _categorize(word, context)
+            gemini_batch.append({
+                "word": word,
+                "context": context[:150],
+                "category": category
+            })
+
+        # Call batch explainer
+        batch_explanations = _gemini_explain_batch(gemini_batch, self._gemini)
+
         results = []
         for item in raw:
             word     = item["word"]
             context  = item.get("context", "")
             category = _categorize(word, context)
 
-            # Get explanation (Gemini → FLAN-T5 → template)
-            explanation = (
-                _gemini_explain(word, context, category, self._gemini)
-                or _flan_explain(word, context)
-                or _template_explain(word, category)
-            )
+            # Get explanation from batch OR fallback
+            explanation = batch_explanations.get(word)
+            if not explanation:
+                explanation = _flan_explain(word, context) or _template_explain(word, category)
 
             results.append({
                 "word":          word,
@@ -317,11 +342,15 @@ class VocabAnalyzer:
         if not context:
             context = f'The word "{word}" appears in this text.'
 
-        explanation = (
-            _gemini_explain(word, context, category, self._gemini)
-            or _flan_explain(word, context)
-            or _template_explain(word, category)
-        )
+        batch_explanations = _gemini_explain_batch([{
+            "word": word, 
+            "context": context[:150], 
+            "category": category
+        }], self._gemini)
+        
+        explanation = batch_explanations.get(word)
+        if not explanation:
+            explanation = _flan_explain(word, context) or _template_explain(word, category)
 
         return {
             "word":          word,

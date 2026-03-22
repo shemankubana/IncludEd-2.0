@@ -25,6 +25,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
         return <Navigate to="/auth" state={{ from: location }} replace />;
     }
 
+    if (!profile && location.pathname !== "/onboarding") {
+        // Logged in to Firebase but no DB profile - force onboarding/sync
+        return <Navigate to="/onboarding" replace />;
+    }
+
     if (requiredRole && profile && profile.role !== requiredRole) {
         // ALLOW TEACHERS IN PREVIEW MODE TO ACCESS STUDENT ROUTES
         if (profile.role === "teacher" && previewMode && requiredRole === "student") {

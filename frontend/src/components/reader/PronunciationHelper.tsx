@@ -28,7 +28,7 @@ const PronunciationHelper: React.FC<PronunciationHelperProps> = ({
     const fetchPhonics = async () => {
       setLoading(true);
       try {
-        const resp = await fetch(`${import.meta.env.VITE_AI_URL || "http://localhost:8000"}/word/phonics`, {
+        const resp = await fetch(`${import.meta.env.VITE_AI_URL || "http://localhost:8082"}/word/phonics`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ word }),
@@ -47,14 +47,39 @@ const PronunciationHelper: React.FC<PronunciationHelperProps> = ({
     if (word) fetchPhonics();
   }, [word]);
 
-  const speak = () => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(word);
-    utter.rate = 0.8;
-    // Set language if provided
-    if (language === "fr") utter.lang = "fr-FR";
-    window.speechSynthesis.speak(utter);
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
+
+  const speak = async () => {
+    setIsSynthesizing(true);
+    try {
+      const resp = await fetch(`${import.meta.env.VITE_AI_URL || "http://localhost:8082"}/tts/synthesize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: word,
+          language: language === "fr" ? "french" : "english",
+        }),
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const audio = new Audio(`data:audio/mp3;base64,${data.audio_base64}`);
+        window.speechSynthesis?.cancel(); // Ensure robotic voice is stopped
+        audio.play();
+      } else {
+        throw new Error("AI TTS failed");
+      }
+    } catch (err) {
+      console.warn("AI TTS failed, falling back to local:", err);
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(word);
+      utter.rate = 0.8;
+      if (language === "fr") utter.lang = "fr-FR";
+      window.speechSynthesis.speak(utter);
+    } finally {
+      setIsSynthesizing(false);
+    }
   };
 
   return (

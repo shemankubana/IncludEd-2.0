@@ -15,10 +15,10 @@ class HFInferenceService:
         self.api_token = api_token or os.environ.get("HF_API_TOKEN")
         self.client = InferenceClient(token=self.api_token)
         
-        # Default models for each task — Qwen is widely supported on HF serverless
+        # Default models for each task — Qwen 72B is the primary high-quality fallback
         self.models = {
-            "structural_analysis": "Qwen/Qwen2.5-7B-Instruct",
-            "quiz_generation": "Qwen/Qwen2.5-7B-Instruct",
+            "structural_analysis": "Qwen/Qwen2.5-72B-Instruct",
+            "quiz_generation": "Qwen/Qwen2.5-72B-Instruct",
             "character_ner": "dbmdz/bert-large-cased-finetuned-conll03-english",
             "character_qa": "deepset/deberta-v3-base-squad2"
         }

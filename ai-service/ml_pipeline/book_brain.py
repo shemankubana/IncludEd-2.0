@@ -345,22 +345,30 @@ def _extract_characters_from_units(
             "description": "", # To be filled by Gemini
         })
 
-    # Sort by importance
+    # Sort by importance and filter for description generation
+    # Phase 4 Update: Include both major and minor characters for descriptions (up to 20 total)
     characters.sort(key=lambda c: c["line_count"], reverse=True)
-    major_only = [c["name"] for c in characters if c["importance"] != "background"][:12]
+    chars_to_describe = [c["name"] for c in characters if c["importance"] in ["major", "minor"]][:20]
 
     # Fill descriptions via Gemini (Phase 3 spoiler safety)
-    if gemini and gemini.is_available() and major_only:
-        prompt = f"""Provide child-friendly, spoiler-safe descriptions for these characters: {", ".join(major_only)}. 
-Focus on their personality and physical traits, NOT story twists or endings.
-Respond in JSON: {{"CharacterName": "Description"}}"""
+    if gemini and gemini.is_available() and chars_to_describe:
+        print(f"🎬 Generating child-friendly descriptions for {len(chars_to_describe)} characters...")
+        prompt = f"""You are a kind literature teacher. Provide very short (1-2 sentences), child-friendly, and spoiler-safe descriptions for these characters: {", ".join(chars_to_describe)}. 
+Focus on their personality traits and role, NOT plot twists or endings. Assume the reader is 10 years old.
+Respond in JSON format: {{"CharacterName": "A short, engaging description"}}"""
         try:
             desc_map = gemini.generate_json(prompt)
             if isinstance(desc_map, dict):
+                count = 0
                 for c in characters:
                     if c["name"] in desc_map:
                         c["description"] = desc_map[c["name"]]
-        except: pass
+                        count += 1
+                print(f"✅ Successfully added {count} character descriptions.")
+            else:
+                print(f"⚠️ Gemini returned non-dict character description map: {type(desc_map)}")
+        except Exception as e:
+            print(f"❌ Failed to generate character descriptions: {e}")
 
     return characters
 

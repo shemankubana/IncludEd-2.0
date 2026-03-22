@@ -18,6 +18,7 @@ import MyContent from "./pages/teacher/MyContent";
 import TeacherProfile from "./pages/teacher/Profile";
 import PendingApproval from "./pages/teacher/PendingApproval";
 import LiteratureAnalyzer from "./pages/teacher/LiteratureAnalyzer";
+import LiteratureReview from "./pages/teacher/LiteratureReview";
 
 // Dashboard Components
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="/teacher/pending" element={<PendingApproval />} />
               <Route path="/teacher/analyze" element={<ProtectedRoute requiredRole="teacher"><LiteratureAnalyzer /></ProtectedRoute>} />
               <Route path="/teacher/reader/:id" element={<ProtectedRoute requiredRole="teacher"><AdaptiveReader /></ProtectedRoute>} />
+              <Route path="/teacher/review/:id" element={<ProtectedRoute requiredRole="teacher"><LiteratureReview /></ProtectedRoute>} />
 
               {/* Admin Routes */}
               <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />

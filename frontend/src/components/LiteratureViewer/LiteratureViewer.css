@@ -660,13 +660,16 @@
 .highlight-popup {
   width: 420px;
   max-width: calc(100vw - 32px);
+  max-height: 85vh;
   background: hsl(var(--card));
   border: 1.5px solid hsl(var(--border));
   border-radius: 1.25rem;
   box-shadow: 0 12px 48px hsl(var(--foreground) / 0.15);
   padding: 1rem;
   animation: fadeSlideIn 0.2s ease;
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.2) transparent;
 }
 
 .highlight-popup__close {

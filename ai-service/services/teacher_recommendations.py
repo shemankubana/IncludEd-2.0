@@ -69,6 +69,7 @@ class TeacherRecommendationEngine:
             student_name: Student's name
             profile: From learner_embedding.get_profile_summary()
             recent_sessions: Last 3–5 completed sessions with metrics
+            stt_history: List of past STT assessments
 
         Returns:
             List of StudentRecommendation objects, ranked by priority
@@ -183,6 +184,49 @@ class TeacherRecommendationEngine:
                     expected_impact="Better engagement; session completion rate +10%",
                 )
             )
+
+        # ── Trigger 6: Low STT Accuracy (Phonics/Decoding) ──────────────────
+        stt_history = profile.get("stt_history", [])
+        if stt_history:
+            avg_acc = np.mean([h.get("accuracy", 0) for h in stt_history])
+            if avg_acc < 75:
+                recommendations.append(
+                    StudentRecommendation(
+                        student_id=student_id,
+                        student_name=student_name,
+                        priority="high",
+                        action=(
+                            "Provide targeted phonics support and decoding exercises. "
+                            "Focus on the 'tricky words' identified in recent readings."
+                        ),
+                        rationale=(
+                            f"Reading accuracy is averaging {avg_acc:.1f}%. "
+                            "Consistent decoding errors suggesting phonemic awareness gaps."
+                        ),
+                        expected_impact="Accuracy improvement to 85%+ within 3 sessions"
+                    )
+                )
+
+        # ── Trigger 7: Low STT WPM (Fluency) ───────────────────────────────
+        if stt_history:
+            avg_wpm = np.mean([h.get("wpm", 0) for h in stt_history])
+            if avg_wpm < 60: # Threshold for primary level fluency
+                recommendations.append(
+                    StudentRecommendation(
+                        student_id=student_id,
+                        student_name=student_name,
+                        priority="medium",
+                        action=(
+                            "Recommend 'Echo Reading' or paired reading with a fluent partner. "
+                            "Encourage using the TTS 'Follow Along' feature while reading."
+                        ),
+                        rationale=(
+                            f"Reading speed is {avg_wpm:.1f} WPM, which is below fluent threshold. "
+                            "Cognitive load from decoding may be impacting overall comprehension."
+                        ),
+                        expected_impact="WPM increase by 10-15% through modeled fluency"
+                    )
+                )
 
         # Sort by priority
         priority_order = {"high": 0, "medium": 1, "low": 2}

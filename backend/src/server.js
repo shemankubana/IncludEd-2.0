@@ -32,6 +32,7 @@ import { Session } from './models/Session.js';
 import { RLTrainingData } from './models/RLTrainingData.js';
 import { Vocabulary } from './models/Vocabulary.js';
 import { VocabularyMastery } from './models/VocabularyMastery.js';
+import { StudentProfile } from './models/StudentProfile.js';
 
 // ── Define Associations ──────────────────────────────────────────────────────
 LessonProgress.belongsTo(Literature, { foreignKey: 'literatureId' });
@@ -57,6 +58,9 @@ Literature.hasMany(Vocabulary, { foreignKey: 'literatureId' });
 VocabularyMastery.belongsTo(Vocabulary, { foreignKey: 'vocabularyId' });
 VocabularyMastery.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(VocabularyMastery, { foreignKey: 'userId' });
+
+User.hasOne(StudentProfile, { foreignKey: 'userId' });
+StudentProfile.belongsTo(User, { foreignKey: 'userId' });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -120,28 +124,12 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('Database connected');
 
-    // Migrate Vocabularies.difficulty from ENUM to FLOAT if needed
-    try {
-      await sequelize.query(`
-        ALTER TABLE "Vocabularies"
-        ALTER COLUMN "difficulty" TYPE FLOAT
-        USING CASE difficulty::text
-          WHEN 'easy' THEN 0.25
-          WHEN 'medium' THEN 0.5
-          WHEN 'hard' THEN 0.75
-          ELSE 0.5
-        END;
-      `);
-      console.log('Migrated Vocabularies.difficulty to FLOAT');
-    } catch (_) {
-      // Column already FLOAT or table doesn't exist yet — sync will handle it
-    }
-
+    // Manual migration handled by sync()
     await sequelize.sync({ alter: true });
     console.log('Database synced');
 
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

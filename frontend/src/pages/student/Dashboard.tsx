@@ -42,8 +42,9 @@ const StudentDashboard = () => {
     const { user, profile } = useAuth();
     const [loading, setLoading] = useState(true);
     const [recentLessons, setRecentLessons] = useState<any[]>([]);
-    const [leaderboard, setLeaderboard] = useState<any[]>([]); // Added leaderboard state
-    const navigate = useNavigate(); // Added useNavigate hook
+    const [leaderboard, setLeaderboard] = useState<any[]>([]);
+    const [myStats, setMyStats] = useState<any>(null);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -53,10 +54,11 @@ const StudentDashboard = () => {
                 const headers = { "Authorization": `Bearer ${idToken}` };
                 const baseUrl = API_BASE;
 
-                // Fetch progress and leaderboard in parallel
-                const [progressRes, leaderboardRes] = await Promise.all([
+                // Fetch progress, leaderboard, and own stats in parallel
+                const [progressRes, leaderboardRes, myStatsRes] = await Promise.all([
                     fetch(`${baseUrl}/api/progress`, { headers }),
-                    fetch(`${baseUrl}/api/stats/leaderboard`, { headers })
+                    fetch(`${baseUrl}/api/stats/leaderboard`, { headers }),
+                    fetch(`${baseUrl}/api/stats/me`, { headers })
                 ]);
 
                 if (progressRes.ok) {
@@ -78,7 +80,16 @@ const StudentDashboard = () => {
                 }
 
                 if (leaderboardRes.ok) {
-                    setLeaderboard(await leaderboardRes.json());
+                    const lbData = await leaderboardRes.json();
+                    setLeaderboard(lbData);
+                    // Find the current student's own stats in the leaderboard
+                    const mine = lbData.find((entry: any) => entry.userId === user.uid);
+                    if (mine) setMyStats(mine);
+                }
+
+                // Prefer the dedicated /stats/me endpoint for own XP data
+                if (myStatsRes?.ok) {
+                    setMyStats(await myStatsRes.json());
                 }
 
             } catch (error) {
@@ -103,13 +114,14 @@ const StudentDashboard = () => {
 
     const student = {
         name: profile?.firstName || "Explorer",
-        xp: profile?.stats?.xp || 0,
-        nextLevelXp: (profile?.stats?.level || 1) * 500,
-        streak: profile?.stats?.streak || 0,
-        lessonsCompleted: profile?.stats?.completedLessons || 0,
-        timeSpent: `${profile?.stats?.totalReadingTime || 0}m`,
-        level: profile?.stats?.level || 1,
-        badges: profile?.stats?.badges || []
+        // Prefer real stats from StudentStats table, fall back to profile
+        xp: myStats?.xp ?? profile?.stats?.xp ?? 0,
+        level: myStats?.level ?? profile?.stats?.level ?? 1,
+        nextLevelXp: (myStats?.level ?? profile?.stats?.level ?? 1) * 500,
+        streak: myStats?.streak ?? profile?.stats?.streak ?? 0,
+        lessonsCompleted: myStats?.completedLessons ?? profile?.stats?.completedLessons ?? 0,
+        timeSpent: `${myStats?.totalReadingTime ?? profile?.stats?.totalReadingTime ?? 0}m`,
+        badges: myStats?.badges ?? profile?.stats?.badges ?? []
     };
 
     return (

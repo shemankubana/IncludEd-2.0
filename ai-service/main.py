@@ -139,6 +139,8 @@ class ComprehensionRecordRequest(BaseModel):
     quiz_score: Optional[float] = None
     characters_seen: Optional[List[str]] = None
     section_text: str = ""  # raw section content for theme extraction (D4)
+    subjective_difficulty: Optional[int] = None
+    reading_speed_wpm: Optional[float] = None
 
 
 class HighlightRecordRequest(BaseModel):
@@ -152,6 +154,7 @@ class VocabRecordRequest(BaseModel):
     student_id: str
     book_id: str
     word: str
+    source: str = "highlight"
 
 
 class SessionUpdateRequest(BaseModel):
@@ -457,10 +460,13 @@ async def record_section_read(req: ComprehensionRecordRequest):
     comprehension_tracker.record_section_read(
         req.student_id, req.book_id, req.section_id,
         req.section_title, req.chapter_title,
-        req.time_spent_s, req.quiz_score, req.characters_seen,
+        req.time_spent_s,        req.quiz_score,
+        req.characters_seen,
         req.section_text,
+        req.subjective_difficulty,
+        req.reading_speed_wpm
     )
-    return {"status": "recorded"}
+    return {"status": "ok", "student_id": req.student_id, "book_id": req.book_id}
 
 
 @app.post("/comprehension/highlight", tags=["comprehension"])
@@ -477,9 +483,9 @@ async def record_highlight(req: HighlightRecordRequest):
 async def record_vocab_lookup(req: VocabRecordRequest):
     """Record a vocabulary word lookup."""
     comprehension_tracker.record_vocab_lookup(
-        req.student_id, req.book_id, req.word,
+        req.student_id, req.book_id, req.word, req.source
     )
-    return {"status": "recorded"}
+    return {"status": "recorded", "word": req.word, "source": req.source}
 
 
 @app.post("/comprehension/vocab-mastered", tags=["comprehension"])
@@ -679,6 +685,13 @@ async def teacher_class_alerts(req: ClassAlertsRequest):
     return {"alerts": alerts}
 
 
+@app.get("/teacher/class-wide-stats/{book_id}", tags=["teacher"])
+async def teacher_class_wide_stats(book_id: str):
+    """Get aggregated stats across all students for a specific book."""
+    stats = comprehension_tracker.get_class_wide_stats(book_id)
+    return stats
+
+
 @app.post("/teacher/common-highlights", tags=["teacher"])
 async def teacher_common_highlights(req: CommonHighlightRequest):
     """
@@ -706,6 +719,7 @@ class StudentRecommendationRequest(BaseModel):
     student_name: str
     student_profile: Dict[str, Any]
     recent_sessions: List[Dict[str, Any]]
+    book_id: Optional[str] = None
 
 
 class ClassRecommendationRequest(BaseModel):
@@ -733,10 +747,18 @@ async def get_student_recommendations(req: StudentRecommendationRequest):
     - Student frequently backtracks → recommend pre-reading vocabulary
     """
     engine = get_recommendation_engine()
+    
+    # Enrich profile with STT history if book_id is provided
+    profile = req.student_profile.copy()
+    if req.book_id:
+        comp_summary = comprehension_tracker.get_summary(req.student_id, req.book_id)
+        if comp_summary.get("stt_history"):
+            profile["stt_history"] = comp_summary["stt_history"]
+
     recommendations = engine.recommend_for_student(
         req.student_id,
         req.student_name,
-        req.student_profile,
+        profile,
         req.recent_sessions,
     )
     return {
@@ -971,10 +993,12 @@ async def assess_reading(req: STTAssessmentRequest):
 
     # Update comprehension tracker if student context provided
     if req.student_id and req.book_id:
-        comprehension_tracker.record_section_read(
-            req.student_id, req.book_id, "stt_assessment",
-            "Reading Assessment", "",
-            req.duration_seconds, result.get("accuracy", 0) / 100,
+        comprehension_tracker.record_stt_assessment(
+            req.student_id, req.book_id, req.book_id, # using book_id as section_id if not specific
+            result.get("accuracy", 0),
+            result.get("wpm", 0),
+            feedback=result.get("feedback", ""),
+            mispronounced=[w["expected"] for w in result.get("mispronunciations", [])]
         )
 
     return result

@@ -31,4 +31,27 @@ router.get('/leaderboard', authenticateToken, async (req, res) => {
     }
 });
 
+/**
+ * GET /api/stats/me
+ * Returns the authenticated student's own stats.
+ */
+router.get('/me', authenticateToken, async (req, res) => {
+    try {
+        let stats = await StudentStats.findOne({ where: { userId: req.user.userId } });
+        if (!stats) {
+            // Create a default row if none exists yet
+            const userRecord = await User.findByPk(req.user.userId);
+            stats = await StudentStats.create({
+                userId: req.user.userId,
+                schoolId: userRecord?.schoolId || null,
+                xp: 0, level: 1, streak: 0, completedLessons: 0, totalReadingTime: 0, badges: []
+            });
+        }
+        res.json(stats);
+    } catch (error) {
+        console.error('❌ Stats/me error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

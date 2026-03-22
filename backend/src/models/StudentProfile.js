@@ -77,5 +77,9 @@ export const StudentProfile = sequelize.define('StudentProfile', {
     avgQuizScore: {
         type: DataTypes.FLOAT,
         defaultValue: 0.0
+    },
+    avgReadingScore: {
+        type: DataTypes.FLOAT,
+        defaultValue: 0.0
     }
 });

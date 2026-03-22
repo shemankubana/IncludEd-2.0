@@ -211,6 +211,27 @@ class CharacterService:
 
         return characters
 
+    def _regex_person_fallback(self, text: str) -> List[str]:
+        """
+        Simple regex-based NER fallback. 
+        Looks for Capitalized words that aren't at the start of a sentence
+        or are part of a multi-word name.
+        """
+        # Improved regex for names: Capitalized words, potentially with multiple parts
+        name_pattern = re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b')
+        potential_names = name_pattern.findall(text)
+        
+        # Filter noise and short matches
+        names = []
+        for name in potential_names:
+            name_upper = name.upper()
+            if name_upper in _NER_NOISE or len(name) < 3:
+                continue
+            if name not in names:
+                names.append(name)
+        
+        return names[:15] # Limit to 15 for safety
+
 
 # ── Module-level singleton ─────────────────────────────────────────────────────
 

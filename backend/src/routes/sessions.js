@@ -33,6 +33,14 @@ router.post('/', authenticateToken, async (req, res) => {
         res.status(201).json({ sessionId: session.id, aiSessionId });
     } catch (error) {
         console.error('❌ Session create error:', error.message);
+        
+        if (error.name === 'SequelizeForeignKeyConstraintError') {
+            return res.status(400).json({ 
+                error: 'Cannot create session: User profile or literature record does not exist.',
+                code: 'CONSTRAINT_VIOLATION'
+            });
+        }
+        
         res.status(500).json({ error: error.message });
     }
 });
@@ -55,6 +63,8 @@ router.patch('/:id', authenticateToken, async (req, res) => {
             avgSessionFatigue,
             completionRate,
             quizScore,
+            readingScore,
+            readingAccuracy,
             quizAttempts,
             finalReward,
             rlActionsCount,
@@ -72,6 +82,8 @@ router.patch('/:id', authenticateToken, async (req, res) => {
             avgSessionFatigue,
             completionRate,
             quizScore,
+            readingScore,
+            readingAccuracy,
             quizAttempts,
             finalReward,
             rlActionsCount,
@@ -92,8 +104,10 @@ router.patch('/:id', authenticateToken, async (req, res) => {
         const profile = await StudentProfile.findOne({ where: { userId: session.studentId } });
         if (profile) {
             const newTotal = profile.totalSessions + 1;
-            const prevAttn = profile.avgAttentionScore * profile.totalSessions;
-            const prevQuiz = profile.avgQuizScore * profile.totalSessions;
+            const prevAttn = (profile.avgAttentionScore || 0) * profile.totalSessions;
+            const prevQuiz = (profile.avgQuizScore || 0) * profile.totalSessions;
+            const prevRead = (profile.avgReadingScore || 0) * profile.totalSessions;
+            
             await profile.update({
                 totalSessions: newTotal,
                 avgAttentionScore: avgAttentionScore != null
@@ -102,6 +116,9 @@ router.patch('/:id', authenticateToken, async (req, res) => {
                 avgQuizScore: quizScore != null
                     ? (prevQuiz + quizScore) / newTotal
                     : profile.avgQuizScore,
+                avgReadingScore: readingScore != null
+                    ? (prevRead + readingScore) / newTotal
+                    : profile.avgReadingScore,
             });
         }
 

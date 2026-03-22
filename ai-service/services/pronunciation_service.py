@@ -18,24 +18,32 @@ class PronunciationService:
     
     def get_phonics_breakdown(self, word: str) -> Dict[str, Any]:
         """
-        Returns a detailed breakdown of a word for learners.
+        Returns a detailed breakdown of a word or phrase for learners.
         """
-        word = word.lower().strip(".,!?;:\"' ")
-        syllables = self._split_syllables(word)
-        phonics = []
+        input_text = word.lower().strip(".,!?;:\"' ")
+        words = input_text.split()
         
-        for syl in syllables:
-            p = syl
-            for pattern, replacement in _PHONETIC_MAP.items():
-                p = p.replace(pattern, replacement)
-            phonics.append(p)
+        all_syllables = []
+        all_phonics = []
+        
+        for w in words:
+            syllables = self._split_syllables(w)
+            phonics = []
+            for syl in syllables:
+                p = syl
+                for pattern, replacement in _PHONETIC_MAP.items():
+                    p = p.replace(pattern, replacement)
+                phonics.append(p)
+            
+            all_syllables.append("".join(syllables)) # Original word
+            all_phonics.append("-".join(phonics))
             
         return {
-            "word": word,
-            "syllables": syllables,
-            "phonics": phonics,
-            "display": " · ".join(syllables),
-            "pronunciation": "-".join(phonics)
+            "word": " ".join(words),
+            "syllables": words,
+            "phonics": all_phonics,
+            "display": " ".join(words),
+            "pronunciation": " ".join(all_phonics)
         }
 
     def _split_syllables(self, word: str) -> List[str]:
