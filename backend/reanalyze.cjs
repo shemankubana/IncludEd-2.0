@@ -44,13 +44,13 @@ async function reanalyze() {
     const nerResp = await axios.post(`${AI_SERVICE_URL}/ner/extract`, {
       sections,
       title: literature.title
-    }, { timeout: 180000 });
+    }, { timeout: 600000 });
 
     console.log(`   - 2/2: Mapping Vocabulary...`);
     const vocabResp = await axios.post(`${AI_SERVICE_URL}/vocab/batch-analyze`, {
       sections,
       section_titles: titles
-    }, { timeout: 180000 });
+    }, { timeout: 600000 });
 
     const bookBrain = {
       ...(literature.bookBrain || {}),

@@ -1,7 +1,7 @@
 const { Sequelize, DataTypes } = require('sequelize');
+require('dotenv').config();
 
-const DB_URL = 'postgresql://neondb_owner:npg_e4D1URqKTfbS@ep-super-star-adyat9th-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-const sequelize = new Sequelize(DB_URL, {
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
   logging: false

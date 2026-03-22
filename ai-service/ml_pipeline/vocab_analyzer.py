@@ -41,37 +41,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from services.word_difficulty_service import WordDifficultyService
 
-# ── Optional FLAN-T5 (Tier 2) ─────────────────────────────────────────────────
-
-_FLAN_PIPELINE: Optional[Any] = None
-_FLAN_OK = False
-
-try:
-    from transformers import pipeline as _hf_pipeline
-    _FLAN_OK = True
-except ImportError:
-    pass
-
-
-def _load_flan() -> bool:
-    global _FLAN_PIPELINE
-    if _FLAN_PIPELINE is not None:
-        return True
-    if not _FLAN_OK:
-        return False
-    try:
-        print("🔬 VocabAnalyzer: Loading FLAN-T5-base…")
-        _FLAN_PIPELINE = _hf_pipeline(
-            "text2text-generation",
-            model="google/flan-t5-base",
-            max_new_tokens=200,
-        )
-        print("✅ VocabAnalyzer: FLAN-T5 ready")
-        return True
-    except Exception as e:
-        print(f"⚠️  VocabAnalyzer: FLAN-T5 unavailable ({e})")
-        _FLAN_PIPELINE = None
-        return False
+# ── Optional HF Fallback (Tier 2) ──────────────────────────────────────────────
+# No local model loading to save memory (D7 compliance)
 
 
 # ── Archaic / cultural word lists ─────────────────────────────────────────────
@@ -178,25 +149,38 @@ Return ONLY valid JSON, no markdown formatting."""
     return {}
 
 
-# ── FLAN-T5 explanation ────────────────────────────────────────────────────────
-
-def _flan_explain(word: str, context: str) -> Optional[Dict[str, str]]:
-    """Use FLAN-T5 to generate a child-friendly definition."""
-    if not _load_flan():
+def _hf_explain(word: str, context: str, hf_service: Any) -> Optional[Dict[str, str]]:
+    """Use Hugging Face API to generate a child-friendly definition."""
+    if not hf_service:
         return None
+    
     prompt = (
-        f'Explain the word "{word}" from this sentence in simple words for a child: '
-        f'"{context[:150]}". Give a short definition and a simple analogy.'
+        f'You are a kind teacher. Explain the word "{word}" from this sentence in very simple words '
+        f'for a 10-year-old child: "{context[:200]}". '
+        f'Respond ONLY with a JSON object: {{"definition": "...", "analogy": "Like when..."}}'
     )
+    
     try:
-        out = _FLAN_PIPELINE(prompt)[0]["generated_text"].strip()
-        # Split into definition + analogy heuristically
-        lines = [l.strip() for l in out.split("\n") if l.strip()]
-        definition = lines[0] if lines else f"A word that means something special."
-        analogy    = lines[1] if len(lines) > 1 else "Like a piece of a puzzle in this story."
-        return {"definition": definition, "analogy": analogy}
-    except Exception:
-        return None
+        # Use the high-quality Qwen 72B model for fallback
+        response = hf_service.client.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            model=hf_service.models["quiz_generation"],
+            max_tokens=200,
+        )
+        text = response.choices[0].message.content.strip()
+        
+        # Extract JSON
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "{" in text and "}" in text:
+            text = text[text.find("{"):text.rfind("}")+1]
+            
+        res = json.loads(text)
+        if "definition" in res and "analogy" in res:
+            return res
+    except Exception as e:
+        print(f"⚠️ HF Fallback explanation failed: {e}")
+    return None
 
 
 # ── Template fallback ─────────────────────────────────────────────────────────
@@ -228,11 +212,13 @@ class VocabAnalyzer:
     def __init__(
         self,
         gemini_service: Optional[Any] = None,
+        hf_service: Optional[Any] = None,
         difficulty_threshold: float = 0.45,
         max_words_per_chapter: int = 30,
     ):
         self._difficulty_svc   = WordDifficultyService()
         self._gemini           = gemini_service
+        self._hf               = hf_service
         self._threshold        = difficulty_threshold
         self._max_per_chapter  = max_words_per_chapter
 
@@ -305,7 +291,7 @@ class VocabAnalyzer:
             # Get explanation from batch OR fallback
             explanation = batch_explanations.get(word)
             if not explanation:
-                explanation = _flan_explain(word, context) or _template_explain(word, category)
+                explanation = _hf_explain(word, context, self._hf) or _template_explain(word, category)
 
             results.append({
                 "word":          word,
@@ -350,7 +336,7 @@ class VocabAnalyzer:
         
         explanation = batch_explanations.get(word)
         if not explanation:
-            explanation = _flan_explain(word, context) or _template_explain(word, category)
+            explanation = _hf_explain(word, context, self._hf) or _template_explain(word, category)
 
         return {
             "word":          word,
@@ -389,8 +375,8 @@ class VocabAnalyzer:
 
 _analyzer: Optional[VocabAnalyzer] = None
 
-def get_vocab_analyzer(gemini_service: Optional[Any] = None) -> VocabAnalyzer:
+def get_vocab_analyzer(gemini_service: Optional[Any] = None, hf_service: Optional[Any] = None) -> VocabAnalyzer:
     global _analyzer
     if _analyzer is None:
-        _analyzer = VocabAnalyzer(gemini_service=gemini_service)
+        _analyzer = VocabAnalyzer(gemini_service=gemini_service, hf_service=hf_service)
     return _analyzer

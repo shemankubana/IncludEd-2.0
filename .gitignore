@@ -1,5 +1,12 @@
 backend/.env
 backend/node_modules
+
+# One-off utility/debug scripts (may contain local DB URLs)
+backend/inject_mock.cjs
+backend/check_status.cjs
+backend/check_book_brain.cjs
+backend/reanalyze.cjs
+backend/manual_migrate.js
 frontend/.env
 backend/serviceAccountKey.json
 venv/
