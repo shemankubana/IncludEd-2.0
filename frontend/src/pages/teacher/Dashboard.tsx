@@ -553,12 +553,20 @@ const TeacherDashboard = () => {
                                             Overall Class Engagement
                                         </h3>
                                         <Card className="rounded-[28px] border-2 border-primary/20 bg-primary/5">
-                                            <CardContent className="p-6">
-                                                <div className="prose prose-sm dark:prose-invert max-w-none space-y-3">
-                                                    {intelligenceData.classInsights.split('\n').map((para, i) => (
-                                                        para.trim() ? <p key={i} className="leading-relaxed font-medium">{para.replace(/^- /, '• ')}</p> : null
-                                                    ))}
-                                                </div>
+                                            <CardContent className="p-6 space-y-3">
+                                                {intelligenceData.classInsights.split('\n').map((line, i) => {
+                                                    const t = line.trim();
+                                                    if (!t) return null;
+                                                    if (/^#{1,3}\s/.test(t)) {
+                                                        return <p key={i} className="text-sm font-black uppercase tracking-widest text-primary">{t.replace(/^#{1,3}\s/, '')}</p>;
+                                                    }
+                                                    if (/^[-*]\s/.test(t)) {
+                                                        const content = t.replace(/^[-*]\s/, '').replace(/\*\*(.*?)\*\*/g, '$1');
+                                                        return <div key={i} className="flex gap-2 text-sm font-medium"><span className="text-primary mt-0.5">•</span><span>{content}</span></div>;
+                                                    }
+                                                    const content = t.replace(/\*\*(.*?)\*\*/g, '$1');
+                                                    return <p key={i} className="text-sm leading-relaxed font-medium text-foreground/80">{content}</p>;
+                                                })}
                                             </CardContent>
                                         </Card>
                                     </section>
@@ -623,18 +631,26 @@ const TeacherDashboard = () => {
                                             </CardHeader>
                                             <CardContent className="p-6">
                                                 <div className="space-y-4">
-                                                    {intelligenceData.classStats.chapter_stats?.slice(0, 3).map((chapter: any, i: number) => (
+                                                    {Object.entries(intelligenceData.classStats.chapter_insights || {})
+                                                        .sort(([, a]: any, [, b]: any) => (b.avg_difficulty_rating ?? 0) - (a.avg_difficulty_rating ?? 0))
+                                                        .slice(0, 3)
+                                                        .map(([chapterId, chapter]: [string, any], i: number) => (
                                                         <div key={i} className="flex items-center justify-between border-b border-border/50 pb-3 last:border-0 last:pb-0">
                                                             <div>
-                                                                <p className="font-bold text-sm">{chapter.chapter_title}</p>
-                                                                <p className="text-[10px] text-muted-foreground font-medium">Avg Difficulty: {chapter.avg_difficulty.toFixed(1)}/5</p>
+                                                                <p className="font-bold text-sm">{chapterId}</p>
+                                                                <p className="text-[10px] text-muted-foreground font-medium">
+                                                                    Avg Difficulty: {(chapter.avg_difficulty_rating ?? 0).toFixed(1)}/5 · {chapter.student_count} student{chapter.student_count !== 1 ? 's' : ''}
+                                                                </p>
                                                             </div>
                                                             <div className="text-right">
-                                                                <p className="font-black text-primary text-sm">{Math.round(chapter.avg_score * 100)}%</p>
+                                                                <p className="font-black text-primary text-sm">{Math.round((chapter.avg_score ?? 0) * 100)}%</p>
                                                                 <p className="text-[9px] text-muted-foreground uppercase font-black">Comprehension</p>
                                                             </div>
                                                         </div>
                                                     ))}
+                                                    {Object.keys(intelligenceData.classStats.chapter_insights || {}).length === 0 && (
+                                                        <p className="text-xs text-muted-foreground italic">No chapter data yet — students need to complete sections first.</p>
+                                                    )}
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -648,13 +664,14 @@ const TeacherDashboard = () => {
                                             </CardHeader>
                                             <CardContent className="p-6">
                                                 <div className="flex flex-wrap gap-2">
-                                                    {intelligenceData.classStats.top_tricky_words?.slice(0, 8).map((word: string, i: number) => (
-                                                        <Badge key={i} variant="outline" className="rounded-xl px-4 py-2 font-black text-primary border-primary/20 bg-primary/5">
-                                                            {word}
+                                                    {intelligenceData.classStats.top_tricky_words?.slice(0, 8).map((entry: any, i: number) => (
+                                                        <Badge key={i} variant="outline" className="rounded-xl px-3 py-1.5 font-black text-primary border-primary/20 bg-primary/5 flex items-center gap-1.5">
+                                                            {typeof entry === "string" ? entry : entry.word}
+                                                            {entry.count && <span className="text-[9px] font-bold text-muted-foreground bg-muted rounded px-1">{entry.count}×</span>}
                                                         </Badge>
                                                     ))}
                                                     {(!intelligenceData.classStats.top_tricky_words || intelligenceData.classStats.top_tricky_words.length === 0) && (
-                                                        <p className="text-xs text-muted-foreground italic">No common vocabulary struggles detected yet.</p>
+                                                        <p className="text-xs text-muted-foreground italic">No vocabulary lookups recorded yet — data populates as students use the vocab helper.</p>
                                                     )}
                                                 </div>
                                             </CardContent>

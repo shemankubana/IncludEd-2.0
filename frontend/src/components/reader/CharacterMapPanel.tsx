@@ -41,9 +41,9 @@ interface CharacterMapPanelProps {
 // ── Colour palette per importance ─────────────────────────────────────────────
 
 const IMPORTANCE_STYLE = {
-    major: { fill: "#4F46E5", stroke: "#3730a3", radius: 40, textSize: 11 },
-    minor: { fill: "#0891B2", stroke: "#0e7490", radius: 28, textSize: 9 },
-    background: { fill: "#6B7280", stroke: "#4B5563", radius: 18, textSize: 7 },
+    major: { fill: "#4F46E5", stroke: "#3730a3", radius: 65, textSize: 15 },
+    minor: { fill: "#0891B2", stroke: "#0e7490", radius: 48, textSize: 13 },
+    background: { fill: "#6B7280", stroke: "#4B5563", radius: 32, textSize: 11 },
 };
 
 // ── Layout helpers ────────────────────────────────────────────────────────────
@@ -91,8 +91,8 @@ const CharacterMapPanel: React.FC<CharacterMapPanelProps> = ({
     const majorChars = displayChars.filter(c => c.importance === "major");
     const otherChars = displayChars.filter(c => c.importance !== "major");
 
-    const innerR = majorChars.length === 1 ? 0 : 80;
-    const outerR = majorChars.length <= 2 ? 160 : 180;
+    const innerR = majorChars.length === 1 ? 0 : 95;
+    const outerR = majorChars.length <= 2 ? 175 : 195;
 
     const innerPositions = circularLayout(majorChars.length, cx, cy, innerR);
     const outerPositions = circularLayout(otherChars.length, cx, cy, outerR);
@@ -185,7 +185,7 @@ const CharacterMapPanel: React.FC<CharacterMapPanelProps> = ({
                     {displayChars.map(char => {
                         const pos = positions[char.name];
                         if (!pos) return null;
-                        const style = IMPORTANCE_STYLE[char.importance];
+                        const style = IMPORTANCE_STYLE[char.importance] || IMPORTANCE_STYLE.background;
                         const familiarity = familiarityScores[char.name] ?? 0;
                         const isSelected = selectedChar === char.name;
                         const isFaded = selectedChar && !isSelected && !connectedNames.has(char.name);

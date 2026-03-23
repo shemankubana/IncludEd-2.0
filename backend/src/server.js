@@ -12,6 +12,7 @@ import adminRoutes from './routes/admin.js';
 import progressRoutes from './routes/progress.js';
 import sessionsRoutes from './routes/sessions.js';
 import vocabRoutes from './routes/vocab.js';
+import invitationsRoutes from './routes/invitations.js';
 import { sequelize } from './config/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +34,7 @@ import { RLTrainingData } from './models/RLTrainingData.js';
 import { Vocabulary } from './models/Vocabulary.js';
 import { VocabularyMastery } from './models/VocabularyMastery.js';
 import { StudentProfile } from './models/StudentProfile.js';
+import { Invitation } from './models/Invitation.js';
 
 // ── Define Associations ──────────────────────────────────────────────────────
 LessonProgress.belongsTo(Literature, { foreignKey: 'literatureId' });
@@ -61,6 +63,12 @@ User.hasMany(VocabularyMastery, { foreignKey: 'userId' });
 
 User.hasOne(StudentProfile, { foreignKey: 'userId' });
 StudentProfile.belongsTo(User, { foreignKey: 'userId' });
+
+Invitation.belongsTo(School, { foreignKey: 'schoolId' });
+School.hasMany(Invitation, { foreignKey: 'schoolId' });
+
+Invitation.belongsTo(User, { foreignKey: 'inviterId', as: 'inviter' });
+User.hasMany(Invitation, { foreignKey: 'inviterId' });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -102,6 +110,7 @@ app.use('/api/sessions', sessionsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/vocab', vocabRoutes);
+app.use('/api/invitations', invitationsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

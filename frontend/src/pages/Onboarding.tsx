@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
@@ -58,9 +58,24 @@ const Onboarding = () => {
     const [currentStep, setCurrentStep] = useState(0);
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(false);
-    const { user, refreshProfile } = useAuth();
+    const { user, profile, refreshProfile } = useAuth();
     const navigate = useNavigate();
     const { toast } = useToast();
+
+    // Only new students should see onboarding
+    useEffect(() => {
+        if (profile?.role && profile.role !== "student") {
+            const dashboard = profile.role === "teacher" ? "/teacher/dashboard" : "/admin/dashboard";
+            navigate(dashboard, { replace: true });
+        }
+    }, [profile, navigate]);
+    
+    const role = profile?.role;
+    // Student already completed onboarding — go straight to dashboard
+    if (role === "student" && profile?.disabilityType !== undefined && profile?.disabilityType !== null) {
+        navigate("/student/dashboard", { replace: true });
+        return null;
+    }
 
     const handleAnswer = (value: string) => {
         const stepId = onboardingSteps[currentStep].id;

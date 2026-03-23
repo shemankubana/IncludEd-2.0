@@ -68,28 +68,43 @@ async function sendEmail({ toEmail, subject, html }) {
 }
 
 /**
- * Send a student invitation email (sent by teacher).
+ * Unified invitation email for both teacher and student invites.
+ * role ∈ { 'teacher', 'student' }
  */
-export async function sendStudentInvite({ toEmail, teacherName, schoolName, schoolCode }) {
-  const link = `${FRONTEND}/auth?code=${schoolCode}&role=student`;
-  const subject = `You've been invited to join ${schoolName} on IncludEd`;
+export async function sendInviteEmail({ toEmail, role, inviterName, schoolName, token }) {
+  const link = `${FRONTEND}/invite/${token}`;
+  const isTeacher = role === 'teacher';
+  const subject = isTeacher
+    ? `You're invited as a Teacher at ${schoolName} – IncludEd`
+    : `You've been invited to join ${schoolName} on IncludEd`;
+
   const html = `
-    <div style="font-family:sans-serif;max-width:520px;margin:auto">
-      <h2 style="color:#6d28d9">Welcome to IncludEd!</h2>
-      <p><strong>${teacherName}</strong> has invited you to join <strong>${schoolName}</strong>
-         on the IncludEd adaptive reading platform.</p>
-      <p>Click below to create your student account:</p>
-      <a href="${link}"
-         style="display:inline-block;padding:12px 28px;background:#6d28d9;color:#fff;
-                border-radius:8px;text-decoration:none;font-weight:bold;margin:12px 0">
-        Create My Account
-      </a>
-      <p style="font-size:12px;color:#888">
-        Or copy this link: <a href="${link}">${link}</a>
+    <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:32px 24px;border:1px solid #e5e7eb;border-radius:12px">
+      <div style="text-align:center;margin-bottom:24px">
+        <h1 style="color:#6d28d9;font-size:24px;margin:0">📚 IncludEd</h1>
+        <p style="color:#6b7280;font-size:13px;margin:4px 0">Adaptive Learning Platform</p>
+      </div>
+      <h2 style="color:#111827;font-size:18px">
+        ${isTeacher ? "You're invited as a Teacher!" : "You've been invited to IncludEd!"}
+      </h2>
+      <p style="color:#374151;line-height:1.6">
+        <strong>${inviterName}</strong> has invited you to ${isTeacher ? 'join as a teacher at' : 'create a student account at'}
+        <strong>${schoolName}</strong> on the IncludEd adaptive reading platform.
       </p>
-      <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-      <p style="font-size:11px;color:#aaa">
-        School code: <strong>${schoolCode}</strong> · IncludEd Adaptive Learning Platform
+      ${isTeacher ? `<p style="color:#374151;line-height:1.6">After setting up your account, an admin will review and activate it.</p>` : ''}
+      <div style="text-align:center;margin:28px 0">
+        <a href="${link}"
+           style="display:inline-block;padding:14px 32px;background:#6d28d9;color:#fff;
+                  border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">
+          ${isTeacher ? 'Set Up My Teacher Account' : 'Create My Account'}
+        </a>
+      </div>
+      <p style="font-size:12px;color:#9ca3af;text-align:center">
+        This link expires in 7 days. If you weren't expecting this, you can safely ignore it.
+      </p>
+      <hr style="border:none;border-top:1px solid #f3f4f6;margin:20px 0">
+      <p style="font-size:11px;color:#d1d5db;text-align:center">
+        Or copy: <a href="${link}" style="color:#6d28d9">${link}</a>
       </p>
     </div>
   `;
@@ -97,32 +112,11 @@ export async function sendStudentInvite({ toEmail, teacherName, schoolName, scho
   await sendEmail({ toEmail, subject, html });
 }
 
-/**
- * Send a teacher invitation email (sent by admin).
- */
-export async function sendTeacherInvite({ toEmail, adminName, schoolName, schoolCode }) {
-  const link = `${FRONTEND}/auth?code=${schoolCode}&role=teacher`;
-  const subject = `Teacher invitation: ${schoolName} on IncludEd`;
-  const html = `
-    <div style="font-family:sans-serif;max-width:520px;margin:auto">
-      <h2 style="color:#6d28d9">You're invited as a Teacher!</h2>
-      <p><strong>${adminName}</strong> has invited you to set up a teacher account
-         at <strong>${schoolName}</strong> on the IncludEd adaptive reading platform.</p>
-      <p>Click below to create your teacher account — you will need school approval before you can log in:</p>
-      <a href="${link}"
-         style="display:inline-block;padding:12px 28px;background:#6d28d9;color:#fff;
-                border-radius:8px;text-decoration:none;font-weight:bold;margin:12px 0">
-        Set Up Teacher Account
-      </a>
-      <p style="font-size:12px;color:#888">
-        Or copy this link: <a href="${link}">${link}</a>
-      </p>
-      <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-      <p style="font-size:11px;color:#aaa">
-        School code: <strong>${schoolCode}</strong> · IncludEd Adaptive Learning Platform
-      </p>
-    </div>
-  `;
+// Legacy helpers (kept for backward compatibility)
+export async function sendStudentInvite({ toEmail, teacherName, schoolName, token }) {
+  return sendInviteEmail({ toEmail, role: 'student', inviterName: teacherName, schoolName, token });
+}
 
-  await sendEmail({ toEmail, subject, html });
+export async function sendTeacherInvite({ toEmail, adminName, schoolName, token }) {
+  return sendInviteEmail({ toEmail, role: 'teacher', inviterName: adminName, schoolName, token });
 }

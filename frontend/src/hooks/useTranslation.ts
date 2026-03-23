@@ -61,6 +61,7 @@ const en = {
     "character.major": "major",
     "character.minor": "minor",
     "character.background": "background",
+    "character.analyzingPersonality": "Analyzing personality...",
 };
 
 const fr = {
@@ -124,6 +125,7 @@ const fr = {
     "character.major": "principal",
     "character.minor": "secondaire",
     "character.background": "figurant",
+    "character.analyzingPersonality": "Analyse de la personnalité...",
 };
 
 const dictionaries = { en, fr };

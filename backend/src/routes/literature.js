@@ -6,6 +6,7 @@ import { processPDF } from '../services/pdfProcessor.js';
 import { splitIntoChapters } from '../services/chapterSplitter.js';
 import { generateQuestions } from '../services/questionGenerator.js';
 import { sequelize } from '../config/database.js';
+import { Op } from 'sequelize';
 import axios from 'axios';
 
 const router = express.Router();
@@ -289,23 +290,39 @@ router.get('/my-content', authenticateToken, async (req, res) => {
 // List all literature (for student dashboard / library)
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const user = await import('../models/User.js').then(m => m.User.findByPk(req.user.userId));
-    const schoolId = user?.schoolId;
+    // schoolId and classLevel come from the auth middleware (no extra DB fetch needed)
+    const schoolId = req.user.schoolId;
+
+    // Fetch classLevel from DB since middleware doesn't include it
+    const { User } = await import('../models/User.js');
+    const dbUser = await User.findByPk(req.user.userId, { attributes: ['classLevel'] });
+    const classLevel = dbUser?.classLevel;
+
+    // Build conditions as an array so multiple Op.or clauses don't overwrite each other
+    const conditions = [{ status: 'ready' }];
+
+    // School: show content from the student's school OR content with no school restriction
+    if (schoolId) {
+      conditions.push({ [Op.or]: [{ schoolId }, { schoolId: null }] });
+    }
+
+    // Grade level: if student has a classLevel, only show matching grade OR unrestricted content
+    if (classLevel) {
+      conditions.push({ [Op.or]: [{ gradeLevel: classLevel }, { gradeLevel: null }, { gradeLevel: '' }] });
+    }
 
     const literature = await Literature.findAll({
-      where: {
-        ...(schoolId ? { schoolId } : {}),
-        status: 'ready'
-      },
+      where: { [Op.and]: conditions },
       order: [['createdAt', 'DESC']],
-      limit: 50
+      limit: 50,
     });
-    const result = literature.map(l => ({
+
+    res.json(literature.map(l => ({
       ...l.toJSON(),
-      estimatedMinutes: Math.ceil(l.wordCount / 200)
-    }));
-    res.json(result);
+      estimatedMinutes: Math.ceil(l.wordCount / 200),
+    })));
   } catch (error) {
+    console.error('❌ Literature list error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

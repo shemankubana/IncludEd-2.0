@@ -73,6 +73,7 @@ const MyContent = () => {
     const [reprocessingId, setReprocessingId] = useState<string | null>(null);
     const [analyzingId, setAnalyzingId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    const [publishingId, setPublishingId] = useState<string | null>(null);
 
     const handleReprocess = async (id: string) => {
         if (!user) return;
@@ -177,6 +178,25 @@ const MyContent = () => {
         } finally {
             setDeletingId(null);
             setConfirmDeleteId(null);
+        }
+    };
+
+    const handlePublish = async (id: string) => {
+        if (!user) return;
+        setPublishingId(id);
+        try {
+            const idToken = await user.getIdToken();
+            const res = await fetch(`${API}/api/literature/${id}/publish`, {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${idToken}` }
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
+            setContent(prev => prev.map(c => c.id === id ? { ...c, status: 'ready' } : c));
+            toast({ title: "Published!", description: "Students can now see this lesson in their library." });
+        } catch (err: any) {
+            toast({ title: "Publish failed", description: err.message, variant: "destructive" });
+        } finally {
+            setPublishingId(null);
         }
     };
 
@@ -366,17 +386,30 @@ const MyContent = () => {
                                                         >
                                                             <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Preview
                                                         </Button>
+                                                        {item.status === 'draft' && (
+                                                            <Button
+                                                                size="sm"
+                                                                className="rounded-2xl h-10 px-4 font-black text-xs flex-1 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white transition-all"
+                                                                disabled={publishingId === item.id}
+                                                                onClick={() => handlePublish(item.id)}
+                                                            >
+                                                                {publishingId === item.id
+                                                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                                    : <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />}
+                                                                Publish
+                                                            </Button>
+                                                        )}
                                                         {(item.status === 'draft' || item.status === 'ready') && (
                                                             <Button
                                                                 size="sm"
-                                                                className={`rounded-2xl h-10 px-4 font-black text-xs flex-1 shadow-sm transition-all ${
-                                                                    item.status === 'draft' 
-                                                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white' 
-                                                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                                                className={`rounded-2xl h-10 px-4 font-black text-xs shadow-sm transition-all ${
+                                                                    item.status === 'draft'
+                                                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white flex-1'
                                                                 }`}
                                                                 onClick={() => navigate(`/teacher/review/${item.id}`)}
                                                             >
-                                                                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> 
+                                                                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
                                                                 {item.status === 'draft' ? 'Review' : 'Questions'}
                                                             </Button>
                                                         )}

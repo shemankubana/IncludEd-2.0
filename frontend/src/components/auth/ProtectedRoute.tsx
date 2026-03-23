@@ -27,6 +27,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
 
     if (!profile && location.pathname !== "/onboarding") {
         // Logged in to Firebase but no DB profile - force onboarding/sync
+        // BUT only for student routes or generic routes. 
+        // If they are trying to reach a teacher/admin area, it's better to force a re-auth/sync.
+        if (requiredRole === "teacher" || requiredRole === "admin") {
+            return <Navigate to="/auth" replace />;
+        }
         return <Navigate to="/onboarding" replace />;
     }
 

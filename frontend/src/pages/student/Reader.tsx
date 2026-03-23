@@ -188,7 +188,12 @@ const AdaptiveReader = () => {
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     // Track if we are currently fetching AI audio to prevent local TTS from starting simultaneously
     const isFetchingAudioRef = useRef(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const ttsRef = useRef<SpeechSynthesisUtterance | null>(null);
+    const attentionPoints = useRef<number[]>([]);
     const lastHeartbeatRef = useRef<number>(Date.now());
+
+    const totalSections = sections.length;
 
     // Sequential Progression Logic
     const highestUnlockedIndex = useMemo(() => {
@@ -196,8 +201,6 @@ const AdaptiveReader = () => {
         const maxCompleted = Math.max(...Array.from(completedSections));
         return Math.min(maxCompleted + 1, totalSections - 1);
     }, [completedSections, totalSections]);
-
-    const totalSections = sections.length;
     const currentSection = sections[currentSectionIndex] || { title: "", content: "" };
 
     // Persist reading settings to localStorage whenever they change
@@ -385,7 +388,7 @@ const AdaptiveReader = () => {
         currentSectionIndex, totalSections, saveProgress,
         currentSection.wordCount, words.length, sessionId, idToken,
         navigate, id, checkStruggleZone, maybeTriggerMicroCheck, microCheck,
-        profile, sections, startBreathingBreak,
+        profile, sections, startBreathingBreak, completedSections, highestUnlockedIndex,
     ]);
 
     const handlePrevSection = useCallback(() => {
@@ -550,6 +553,7 @@ const AdaptiveReader = () => {
                     // Try server progress
                     try {
                         const token2 = await user.getIdToken();
+                        setIdToken(token2);
                         const progressRes = await fetch(
                             `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${id}`,
                             { headers: { Authorization: `Bearer ${token2}` } }
@@ -567,7 +571,7 @@ const AdaptiveReader = () => {
                         
                         // Fetch quizzes to check for gate
                         const quizRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/quiz/${id}`, {
-                            headers: { Authorization: `Bearer ${idToken}` }
+                            headers: { Authorization: `Bearer ${token2}` }
                         });
                         if (quizRes.ok) {
                             setQuizzes(await quizRes.json());
@@ -592,7 +596,6 @@ const AdaptiveReader = () => {
             // Cancel any local TTS that may have started before AI audio was ready
             window.speechSynthesis?.cancel();
             isFetchingAudioRef.current = true;
-            setIsFetchingAudio(true);
             setIsSynthesizing(true);
             try {
                 const response = await fetch(`${AI_URL}/tts/synthesize`, {
@@ -616,7 +619,6 @@ const AdaptiveReader = () => {
                 console.warn("AI TTS failed, falling back to local:", err);
             } finally {
                 setIsSynthesizing(false);
-                setIsFetchingAudio(false);
                 isFetchingAudioRef.current = false;
             }
         };
@@ -735,7 +737,7 @@ const AdaptiveReader = () => {
         window.speechSynthesis.speak(utter);
 
         return () => clearInterval(interval);
-    }, [isPlaying, currentChunkIndex, ttsChunks, audioUrl, isFetchingAudio, isSynthesizing, handleNextSection, currentSectionIndex, totalSections]);
+    }, [isPlaying, currentChunkIndex, ttsChunks, audioUrl, isSynthesizing, handleNextSection, currentSectionIndex, totalSections]);
 
     // Reset when changing section
     useEffect(() => {
@@ -1552,8 +1554,10 @@ const AdaptiveReader = () => {
                                                 const newSet = new Set(completedSections);
                                                 newSet.add(currentSectionIndex);
                                                 setCompletedSections(newSet);
-                                                saveProgress(currentSectionIndex, newSet.size === totalSections ? "completed" : "in_progress");
-                                                
+                                                const allDone = newSet.size === totalSections;
+
+                                                saveProgress(currentSectionIndex, allDone ? "completed" : "in_progress");
+
                                                 if (sessionId && idToken) {
                                                     const rate = newSet.size / totalSections;
                                                     fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/sessions/${sessionId}`, {
@@ -1564,7 +1568,22 @@ const AdaptiveReader = () => {
                                                             status: rate === 1 ? "completed" : "active",
                                                         }),
                                                     }).catch(() => { });
+                                                }
+
+                                                if (allDone) {
+                                                    // Show feedback only once — at the very end of the entire book
                                                     setShowDifficultyModal(true);
+                                                } else {
+                                                    // Auto-advance to next section using local newSet (avoids stale-closure Section Locked issue)
+                                                    const next = currentSectionIndex + 1;
+                                                    setCurrentSectionIndex(next);
+                                                    saveProgress(next, "in_progress");
+                                                    setTimeInChapter(0);
+                                                    setActiveWordIndex(-1);
+                                                    setCurrentTime(0);
+                                                    setIsPlaying(false);
+                                                    setMicroCheck(null);
+                                                    window.scrollTo({ top: 0, behavior: "smooth" });
                                                 }
                                             }}
                                         >
