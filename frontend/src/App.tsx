@@ -25,6 +25,8 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import AdminUsers from "./pages/admin/Users";
 import AdminProfile from "./pages/admin/Profile";
 import Onboarding from "./pages/Onboarding";
+import AcceptInvite from "./pages/AcceptInvite";
+import AdminSchoolSetup from "./pages/AdminSchoolSetup";
 import NotFound from "./pages/NotFound";
 
 // Auth & Protection
@@ -69,6 +71,8 @@ const App = () => (
               <Route path="/admin/profile" element={<ProtectedRoute requiredRole="admin"><AdminProfile /></ProtectedRoute>} />
 
               <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+              <Route path="/invite/:token" element={<AcceptInvite />} />
+              <Route path="/admin-setup" element={<AdminSchoolSetup />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

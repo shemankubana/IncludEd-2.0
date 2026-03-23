@@ -319,20 +319,10 @@ const Auth = () => {
         </div>
 
         <div className="bg-card rounded-2xl border border-border p-8 shadow-lg overflow-y-auto max-h-[85vh] scrollbar-hide">
-          {/* Tab switcher */}
-          <div className="flex bg-secondary rounded-xl p-1 mb-6">
-            <button
-              onClick={() => setMode("login")}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === "login" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
-            >
-              Log In
-            </button>
-            <button
-              onClick={() => setMode("signup")}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === "signup" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
-            >
-              Sign Up
-            </button>
+          {/* Tab switcher — login only now; signup happens via invitations */}
+          <div className="text-center mb-6">
+            <h2 className="text-xl font-black tracking-tight">Welcome back</h2>
+            <p className="text-sm text-muted-foreground mt-1">Students and teachers sign up via email invitation.</p>
           </div>
 
           <AnimatePresence mode="wait">
@@ -393,10 +383,10 @@ const Auth = () => {
                   {loading ? "Signing in..." : `Sign In as ${loginRole}`}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
-                  Don't have an account?{" "}
-                  <button type="button" onClick={() => setMode("signup")} className="text-primary font-medium hover:underline">
-                    Sign up
-                  </button>
+                  Are you a school administrator?{" "}
+                  <a href="/admin-setup" className="text-primary font-medium hover:underline">
+                    Register your school
+                  </a>
                 </p>
               </motion.form>
             ) : mode === "forgot" ? (
@@ -429,100 +419,7 @@ const Auth = () => {
                   </button>
                 </p>
               </motion.form>
-            ) : (
-              <motion.form
-                key="signup"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                onSubmit={handleSignup}
-                className="space-y-4"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="signup-name">Full Name</Label>
-                  <Input id="signup-name" type="text" placeholder="Your full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input id="signup-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input id="signup-password" type="password" placeholder="Min 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="school-code">School Code</Label>
-                  <Input
-                    id="school-code"
-                    placeholder="e.g. KPS2024"
-                    value={schoolCode}
-                    onChange={(e) => setSchoolCode(e.target.value.toUpperCase())}
-                    required
-                    className="border-primary/50 text-center font-black tracking-widest uppercase"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Ask your school for the code.</p>
-                </div>
-
-                {selectedRole === "student" && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-2">
-                      <Label>Grade Level</Label>
-                      <select
-                        value={classLevel}
-                        onChange={e => setClassLevel(e.target.value)}
-                        className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        {["P1", "P2", "P3", "P4", "P5", "P6", "S1", "S2", "S3", "S4", "S5", "S6"].map(g => (
-                          <option key={g} value={g}>{g}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Term</Label>
-                      <select
-                        value={term}
-                        onChange={e => setTerm(e.target.value)}
-                        className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        {["Term 1", "Term 2", "Term 3"].map(t => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label>Register as...</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {roles.filter(r => r.value !== 'parent').map((role) => (
-                      <button
-                        key={role.value}
-                        type="button"
-                        onClick={() => setSelectedRole(role.value)}
-                        className={`p-2 rounded-xl border flex flex-col items-center justify-center transition-all ${selectedRole === role.value ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"}`}
-                      >
-                        <div className="text-xl mb-1">{role.icon}</div>
-                        <div className="text-[10px] font-black uppercase tracking-widest">{role.label}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <Button type="submit" className="w-full rounded-lg font-semibold" disabled={loading}>
-                  {loading ? "Creating account..." : "Sign Up"}
-                </Button>
-                <p className="text-xs text-center text-muted-foreground">
-                  Already have an account?{" "}
-                  <button type="button" onClick={() => setMode("login")} className="text-primary font-medium hover:underline">
-                    Log in
-                  </button>
-                </p>
-              </motion.form>
-            )}
+            ) : null}
           </AnimatePresence>
 
           <div className="relative my-6">

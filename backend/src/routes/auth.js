@@ -175,4 +175,53 @@ router.patch('/profile', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/auth/admin-setup — new school registration by an admin
+// Body: { firstName, lastName, schoolName, country, city }
+router.post('/admin-setup', authenticateToken, async (req, res) => {
+  try {
+    const { firstName, lastName, schoolName, country, city } = req.body;
+    const firebaseUid = req.user.uid;
+    const email = req.user.email;
+
+    if (!schoolName) return res.status(400).json({ error: 'schoolName is required' });
+
+    // Create school
+    const code = (schoolName.replace(/\s+/g, '').toUpperCase().slice(0, 5) +
+      Math.random().toString(36).substring(2, 5).toUpperCase());
+
+    const school = await School.create({
+      name: schoolName,
+      code,
+      country: country || 'Rwanda',
+      city: city || null,
+      isActive: true,
+    });
+
+    // Create admin user
+    let user = await User.findOne({ where: { email } });
+    if (user) {
+      await user.update({ firstName, lastName, role: 'admin', schoolId: school.id, status: 'active' });
+    } else {
+      user = await User.create({
+        id: firebaseUid,
+        email,
+        firstName: firstName || '',
+        lastName: lastName || '',
+        role: 'admin',
+        schoolId: school.id,
+        status: 'active',
+      });
+    }
+
+    res.json({
+      message: 'School and admin account created',
+      school: { id: school.id, name: school.name, code: school.code },
+      user: { id: user.id, email: user.email, role: user.role },
+    });
+  } catch (error) {
+    console.error('Admin setup error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

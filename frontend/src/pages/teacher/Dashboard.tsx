@@ -299,19 +299,19 @@ const TeacherDashboard = () => {
         setIsInviting(true);
         try {
             const idToken = await user?.getIdToken();
-            const res = await fetch(`${API_BASE}/api/schools/invite`, {
+            const res = await fetch(`${API_BASE}/api/invitations/send`, {
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${idToken}`,
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ email: inviteEmail })
+                body: JSON.stringify({ email: inviteEmail, role: 'student' })
             });
             const data = await res.json();
             if (res.ok) {
                 toast({
                     title: "Invitation Sent!",
-                    description: `An invite link has been generated for ${inviteEmail}. Link: ${data.link}`
+                    description: `A magic-link invite has been sent to ${inviteEmail}.`
                 });
                 setInviteEmail("");
             } else {
