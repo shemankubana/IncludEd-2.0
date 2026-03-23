@@ -35,6 +35,7 @@ import { Vocabulary } from './models/Vocabulary.js';
 import { VocabularyMastery } from './models/VocabularyMastery.js';
 import { StudentProfile } from './models/StudentProfile.js';
 import { Invitation } from './models/Invitation.js';
+import { School } from './models/School.js';
 
 // ── Define Associations ──────────────────────────────────────────────────────
 LessonProgress.belongsTo(Literature, { foreignKey: 'literatureId' });
