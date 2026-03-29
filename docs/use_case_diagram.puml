@@ -1,0 +1,100 @@
+@startuml IncludEd_Use_Case_Diagram
+
+left to right direction
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+
+skinparam usecase {
+    BackgroundColor #F0EEFF
+    BorderColor #635bff
+    FontColor #222222
+    ArrowColor #635bff
+}
+
+skinparam actor {
+    BackgroundColor #635bff
+    BorderColor #635bff
+    FontColor #222222
+}
+
+skinparam rectangle {
+    BorderColor #635bff
+    FontColor #635bff
+}
+
+actor "Student" as S
+actor "Teacher" as T
+actor "Admin" as A
+
+rectangle "IncludEd 2.0 System" {
+
+    ' ── Shared ──
+    usecase "Register & Login\n(Firebase Auth)" as UC_AUTH
+
+    ' ── Student Use Cases ──
+    usecase "Read Literature" as UC_READ
+    usecase "Take Comprehension Quiz" as UC_QUIZ
+    usecase "View Progress & Badges" as UC_PROGRESS
+    usecase "Use Adaptive Reader" as UC_ADAPT
+    usecase "RL Intervention\nSuggestion" as UC_RL
+    usecase "Text-to-Speech\nPlayback" as UC_TTS
+    usecase "Dyslexia Accessibility\nControls" as UC_DYS
+    usecase "Highlight to\nUnderstand" as UC_HIGHLIGHT
+    usecase "Kinyarwanda\nCultural Bridge" as UC_KINY
+    usecase "STT Reading\nAssessment" as UC_STT
+
+    ' ── Teacher Use Cases ──
+    usecase "Upload Literature\n(PDF)" as UC_UPLOAD
+    usecase "View Teacher\nDashboard" as UC_DASH
+    usecase "View Class\nAnalytics" as UC_ANALYTICS
+    usecase "AI-Generated\nInsights" as UC_INSIGHTS
+    usecase "Student Risk\nAlerts" as UC_RISK
+    usecase "Publish Content\nto Class" as UC_PUBLISH
+
+    ' ── Admin Use Cases ──
+    usecase "Manage Schools" as UC_SCHOOL
+    usecase "Invite Users\n(Magic Link)" as UC_INVITE
+    usecase "Assign Roles" as UC_ROLES
+
+    ' ── Student connections ──
+    S --> UC_AUTH
+    S --> UC_READ
+    S --> UC_QUIZ
+    S --> UC_PROGRESS
+    S --> UC_STT
+
+    ' ── Teacher connections ──
+    T --> UC_AUTH
+    T --> UC_UPLOAD
+    T --> UC_DASH
+    T --> UC_PUBLISH
+
+    ' ── Admin connections ──
+    A --> UC_AUTH
+    A --> UC_SCHOOL
+    A --> UC_INVITE
+    A --> UC_ROLES
+
+    ' ── Include relationships ──
+    UC_READ ..> UC_ADAPT : <<include>>
+    UC_ADAPT ..> UC_RL : <<include>>
+    UC_ADAPT ..> UC_TTS : <<include>>
+    UC_ADAPT ..> UC_DYS : <<include>>
+    UC_HIGHLIGHT ..> UC_KINY : <<include>>
+    UC_DASH ..> UC_ANALYTICS : <<include>>
+    UC_DASH ..> UC_RISK : <<include>>
+
+    ' ── Extend relationships ──
+    UC_READ <.. UC_HIGHLIGHT : <<extend>>
+    UC_READ <.. UC_QUIZ : <<extend>>
+    UC_ANALYTICS <.. UC_INSIGHTS : <<extend>>
+
+    ' ── Generalization ──
+    T --|> S : reads\nliterature too
+}
+
+@enduml

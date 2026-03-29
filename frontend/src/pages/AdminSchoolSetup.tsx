@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { BookOpen, Building2, Loader2, Mail, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Building2, Loader2, Mail, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
   createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
@@ -46,9 +47,19 @@ export default function AdminSchoolSetup() {
     e.preventDefault();
     setLoading(true);
     try {
-      // 1. Create Firebase account
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(credential.user, { displayName: `${firstName} ${lastName}` });
+      // 1. Create Firebase account (or sign in if it already exists)
+      let credential;
+      try {
+        credential = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(credential.user, { displayName: `${firstName} ${lastName}` });
+      } catch (fbErr: any) {
+        if (fbErr.code === "auth/email-already-in-use") {
+          credential = await signInWithEmailAndPassword(auth, email, password);
+          await updateProfile(credential.user, { displayName: `${firstName} ${lastName}` });
+        } else {
+          throw fbErr;
+        }
+      }
 
       // 2. Send verification email
       await sendEmailVerification(credential.user);
@@ -101,10 +112,7 @@ export default function AdminSchoolSetup() {
       >
         {/* Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2">
-            <BookOpen className="w-8 h-8 text-primary" />
-            <span className="text-2xl font-black">IncludEd</span>
-          </div>
+          <img src="/logo.png" alt="IncludEd Logo" className="w-[70%] mx-auto" />
           <h1 className="text-3xl font-black tracking-tight">Register Your School</h1>
           <p className="text-muted-foreground">Set up your school admin account to get started.</p>
         </div>

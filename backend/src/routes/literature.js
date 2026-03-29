@@ -138,9 +138,9 @@ router.post('/upload', authenticateToken, upload.fields([
       try {
         console.log(`🧩 Background periodic quiz generation for: ${literature.title}`);
         let totalCount = 0;
-        const chunkSize = 3;
-        
-        // Group sections into chunks of 3
+        const chunkSize = 4;
+
+        // Group sections into chunks of 4
         for (let i = 0; i < finalSections.length; i += chunkSize) {
           const chunk = finalSections.slice(i, i + chunkSize);
           const chunkContent = chunk.map(s => s.content).join('\n\n');

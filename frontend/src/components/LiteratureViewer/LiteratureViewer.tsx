@@ -279,6 +279,24 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
         }).catch(() => { /* fire-and-forget */ });
     }, [studentId, bookId]);
 
+    // ── RL Suggestion State ──
+    const [rlSuggestion, setRlSuggestion] = useState<{
+        actionId: number;
+        label: string;
+        dismissed: boolean;
+    } | null>(null);
+    const lastRlActionRef = useRef<number>(-1);
+    const rlCooldownRef = useRef<number>(0);
+
+    const RL_ACTION_DESCRIPTIONS: Record<number, { title: string; description: string }> = {
+        0: { title: "Keep Reading", description: "You're doing great — no changes needed!" },
+        1: { title: "Simplify Text (Light)", description: "Some sentences are tricky. Want a slightly simpler version?" },
+        2: { title: "Simplify Text (Full)", description: "This section looks challenging. Want an easier version?" },
+        3: { title: "Read Aloud + Highlights", description: "Listening while reading can help. Turn on text-to-speech?" },
+        4: { title: "Syllable Highlighting", description: "Breaking words into syllables may help. Enable syllable view?" },
+        5: { title: "Take a Break", description: "You seem tired or distracted. How about a short breathing break?" },
+    };
+
     // ── Signal Tracking & Telemetry ──
     const wordCount = analysisData?.metadata?.word_count as number || 0;
     const handleSignalUpdate = useCallback((signals: ReadingSignals) => {
@@ -291,27 +309,90 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
             body: JSON.stringify({
                 student_id: studentId,
                 session_duration_s: signals.avg_dwell_time_ms / 1000,
-                words_read: wordCount, // Simplified
+                words_read: wordCount,
                 reading_speed_wpm: signals.reading_speed_wpm,
                 backtrack_count: signals.backtrack_count,
                 scroll_events: signals.scroll_events,
                 attention_lapses: signals.attention_score < 0.5 ? 1 : 0,
-                highlights_made: 0, // tracked elsewhere
-                vocab_lookups: 0, // tracked elsewhere
+                highlights_made: 0,
+                vocab_lookups: 0,
                 time_of_day_hour: new Date().getHours(),
-                disability_type: adhdMode ? 1.0 : 0.5, // placeholder logic
+                disability_type: adhdMode ? 1.0 : 0.5,
                 doc_type: analysisData.document_type,
                 avg_dwell_time_ms: signals.avg_dwell_time_ms,
                 session_fatigue: signals.session_fatigue,
             }),
         }).catch(() => { });
-    }, [studentId, bookId, wordCount, adhdMode, analysisData.document_type]);
+
+        // ── RL Prediction (closed-loop) ──
+        // Respect cooldown: don't suggest again within 30s of dismissal
+        if (Date.now() < rlCooldownRef.current) return;
+
+        const contentTypeVal =
+            analysisData.document_type === "play" ? 1.0
+            : analysisData.document_type === "novel" ? 0.5
+            : 0.0;
+
+        const stateVector = [
+            Math.min(1, signals.reading_speed_wpm / 250),
+            signals.mouse_dwell,
+            signals.scroll_hesitation,
+            Math.min(1, signals.backtrack_count / 10),
+            signals.attention_score,
+            adhdMode ? 1.0 : 0.5,
+            (analysisData.metadata?.avg_difficulty as number) || 0.5,
+            signals.session_fatigue,
+            contentTypeVal,
+        ];
+
+        fetch(`${AI_URL}/rl/predict`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ state_vector: stateVector, content_type: contentTypeVal }),
+        })
+            .then(r => r.json())
+            .then(data => {
+                const actionId = data.action_id as number;
+                // Only suggest if it's a new, non-trivial action
+                if (actionId !== 0 && actionId !== lastRlActionRef.current) {
+                    lastRlActionRef.current = actionId;
+                    setRlSuggestion({ actionId, label: data.action_label, dismissed: false });
+                }
+            })
+            .catch(() => { });
+    }, [studentId, bookId, wordCount, adhdMode, analysisData.document_type, analysisData.metadata]);
 
     useSignalTracker({
         enabled: !!analysisData,
         wordCount,
         onUpdate: handleSignalUpdate,
     });
+
+    // ── RL Suggestion Handlers ──
+    const handleAcceptSuggestion = useCallback(() => {
+        if (!rlSuggestion) return;
+        const { actionId } = rlSuggestion;
+        setRlSuggestion(null);
+        lastRlActionRef.current = actionId;
+
+        // Apply the suggested adaptation
+        if (actionId === 3) {
+            // TTS + Highlights — toggle syllable colors as visual cue
+            setDyslexiaSettings(s => ({ ...s, syllableColors: true }));
+        } else if (actionId === 4) {
+            // Syllable Break
+            setDyslexiaSettings(s => ({ ...s, syllableColors: true }));
+        } else if (actionId === 1 || actionId === 2) {
+            // Simplification — enable bionic reading as approximation
+            setDyslexiaSettings(s => ({ ...s, bionicReading: true }));
+        }
+        // Action 5 (Attention Break) is handled by the ADHD chunking engine
+    }, [rlSuggestion]);
+
+    const handleDismissSuggestion = useCallback(() => {
+        setRlSuggestion(null);
+        rlCooldownRef.current = Date.now() + 30_000; // 30s cooldown
+    }, []);
 
     // Auto-select first act + scene when data arrives
     const [prevData, setPrevData] = useState<AnalyzeResponse | null>(null);
@@ -409,6 +490,82 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
                     onChange={setDyslexiaSettings}
                 />
             </div>
+
+            {/* ── RL Suggestion Banner ── */}
+            {rlSuggestion && !rlSuggestion.dismissed && (() => {
+                const info = RL_ACTION_DESCRIPTIONS[rlSuggestion.actionId] ?? {
+                    title: rlSuggestion.label,
+                    description: "The AI assistant has a suggestion for you.",
+                };
+                return (
+                    <div
+                        role="alert"
+                        style={{
+                            margin: "0.5rem 1.5rem",
+                            padding: "0.75rem 1rem",
+                            borderRadius: "0.75rem",
+                            border: "1.5px solid hsl(221 83% 53% / 0.3)",
+                            background: "hsl(221 83% 53% / 0.06)",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.75rem",
+                            animation: "rl-slide-in 0.3s ease-out",
+                        }}
+                    >
+                        <span style={{ fontSize: "1.4rem", flexShrink: 0 }}>
+                            {rlSuggestion.actionId === 5 ? "\u23F8\uFE0F" :
+                             rlSuggestion.actionId === 3 ? "\uD83D\uDD0A" :
+                             rlSuggestion.actionId === 4 ? "\u2702\uFE0F" : "\u2728"}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{
+                                margin: 0, fontWeight: 700,
+                                fontSize: "0.85rem", color: "hsl(var(--foreground))",
+                            }}>
+                                {info.title}
+                            </p>
+                            <p style={{
+                                margin: "0.15rem 0 0", fontSize: "0.78rem",
+                                color: "hsl(var(--muted-foreground))",
+                            }}>
+                                {info.description}
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleAcceptSuggestion}
+                            style={{
+                                padding: "0.35rem 0.8rem",
+                                borderRadius: "0.5rem",
+                                border: "none",
+                                background: "hsl(var(--primary))",
+                                color: "hsl(var(--primary-foreground))",
+                                fontSize: "0.78rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                whiteSpace: "nowrap",
+                            }}
+                        >
+                            Try it
+                        </button>
+                        <button
+                            onClick={handleDismissSuggestion}
+                            aria-label="Dismiss suggestion"
+                            style={{
+                                padding: "0.25rem",
+                                borderRadius: "0.4rem",
+                                border: "none",
+                                background: "transparent",
+                                color: "hsl(var(--muted-foreground))",
+                                fontSize: "1rem",
+                                cursor: "pointer",
+                                lineHeight: 1,
+                            }}
+                        >
+                            &times;
+                        </button>
+                    </div>
+                );
+            })()}
 
             {/* ── Comprehension Graph (student journey) ── */}
             {showComprehensionGraph && comprehensionData && (

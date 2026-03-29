@@ -1,0 +1,95 @@
+@startuml IncludEd_Cloud_Architecture
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam roundCorner 12
+
+skinparam rectangle {
+    BorderColor #635bff
+    BackgroundColor #F0EEFF
+    FontColor #222222
+}
+
+skinparam database {
+    BorderColor #635bff
+    BackgroundColor #F0EEFF
+    FontColor #222222
+}
+
+skinparam cloud {
+    BorderColor #635bff
+    BackgroundColor #F7F6FF
+    FontColor #222222
+}
+
+skinparam node {
+    BorderColor #635bff
+    BackgroundColor #F0EEFF
+    FontColor #222222
+}
+
+skinparam arrow {
+    Color #635bff
+}
+
+title <b>IncludEd 2.0 — Cloud-First Architecture</b>
+
+' ── Client Layer ──
+node "Client Device\n(Browser / PWA)" as CLIENT {
+    rectangle "React + TypeScript\n(Vite)" as FE {
+        rectangle "Adaptive Reader" as READER
+        rectangle "Teacher Dashboard" as TDASH
+        rectangle "Signal Tracker\n(Telemetry)" as TELEM
+    }
+    rectangle "Service Worker\n(Offline Cache)" as SW
+    rectangle "IndexedDB\n(Local Progress)" as IDB
+}
+
+' ── Backend Layer ──
+node "Backend Server\n(Node.js + Express)" as BE {
+    rectangle "REST API Routes" as ROUTES
+    rectangle "Firebase JWT\nVerification" as AUTH
+    rectangle "Insight Service" as INSIGHT_SVC
+}
+
+' ── AI Service Layer ──
+node "AI Service\n(Python FastAPI)" as AI {
+    rectangle "ML Pipeline\n(15 Modules)" as ML
+    rectangle "PPO RL Agent\n(Stable-Baselines3)" as RL
+    rectangle "Simplification\nService (3-Tier)" as SIMP
+    rectangle "Teacher Intelligence\n& Risk Engine" as TRISK
+}
+
+' ── Database Layer ──
+database "PostgreSQL\n(Sequelize)" as PG
+database "MongoDB\n(Telemetry)" as MONGO
+database "Redis\n(Cache)" as REDIS
+
+' ── Cloud APIs ──
+cloud "Cloud APIs" as CLOUD {
+    rectangle "Google Gemini" as GEMINI
+    rectangle "HuggingFace\nInference API" as HF
+    rectangle "Firebase Auth" as FIREBASE
+}
+
+' ── Connections ──
+CLIENT -down-> BE : REST API\n(JWT Auth)
+FE -right-> SW
+FE -right-> IDB
+TELEM -down-> BE : Behavioral\nSignals
+
+BE -down-> AI : RL Predict\nSimplify\nAnalyze
+BE -down-> PG : Users, Progress,\nLiterature
+BE -down-> MONGO : Telemetry\nEvents
+BE -down-> REDIS : Session\nCache
+BE -right-> FIREBASE : Token\nVerification
+
+AI -down-> CLOUD
+SIMP -down-> GEMINI : Tier 1
+SIMP -down-> HF : Tier 2
+ML -down-> HF : NER, Emotion\nModels
+RL -[hidden]down-> GEMINI
+
+@enduml

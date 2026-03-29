@@ -516,8 +516,39 @@ const AdaptiveReader = () => {
                     setSections(chunks.length > 0 ? chunks : [{ title: "Content", content: raw }]);
                 }
 
-                // Load progress from IndexedDB first (offline-safe)
+                // Load section index from IndexedDB first (offline-safe)
                 const cachedSection = await idbGetProgress(id);
+
+                // Always fetch server progress for completedSections + quizScores
+                try {
+                    const token2 = await user.getIdToken();
+                    setIdToken(token2);
+                    const progressRes = await fetch(
+                        `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${id}`,
+                        { headers: { Authorization: `Bearer ${token2}` } }
+                    );
+                    if (progressRes.ok) {
+                        const pd = await progressRes.json();
+                        setProgress(pd);
+                        if (pd?.completedSections) {
+                            setCompletedSections(new Set(pd.completedSections));
+                        }
+                        // Use server section if no IndexedDB cache
+                        if (cachedSection === null && pd?.currentSection !== undefined) {
+                            setCurrentSectionIndex(pd.currentSection);
+                        }
+                    }
+
+                    // Fetch quizzes to check for gate
+                    const quizRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/quiz/${id}`, {
+                        headers: { Authorization: `Bearer ${token2}` }
+                    });
+                    if (quizRes.ok) {
+                        setQuizzes(await quizRes.json());
+                    }
+                } catch { /* offline fallback */ }
+
+                // Use IndexedDB cached section index (most recent)
                 if (cachedSection !== null) {
                     setCurrentSectionIndex(cachedSection);
                     if (cachedSection > 0 && user) {
@@ -549,34 +580,6 @@ const AdaptiveReader = () => {
                             }
                         } catch { /* recap optional */ }
                     }
-                } else {
-                    // Try server progress
-                    try {
-                        const token2 = await user.getIdToken();
-                        setIdToken(token2);
-                        const progressRes = await fetch(
-                            `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/progress/${id}`,
-                            { headers: { Authorization: `Bearer ${token2}` } }
-                        );
-                        if (progressRes.ok) {
-                            const pd = await progressRes.json();
-                            setProgress(pd);
-                            if (pd?.currentSection !== undefined) {
-                                setCurrentSectionIndex(pd.currentSection);
-                            }
-                            if (pd?.completedSections) {
-                                setCompletedSections(new Set(pd.completedSections));
-                            }
-                        }
-                        
-                        // Fetch quizzes to check for gate
-                        const quizRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/quiz/${id}`, {
-                            headers: { Authorization: `Bearer ${token2}` }
-                        });
-                        if (quizRes.ok) {
-                            setQuizzes(await quizRes.json());
-                        }
-                    } catch { /* offline */ }
                 }
             } catch (error) {
                 console.error("Failed to fetch lesson:", error);
@@ -1519,33 +1522,6 @@ const AdaptiveReader = () => {
                                 const allSectionsCompleted = completedSections.size === totalSections;
 
                                 if (!isCurrentSectionCompleted) {
-                                    const currentChunk = Math.floor(currentSectionIndex / 3);
-                                    let needsQuiz = false;
-                                    
-                                    if (currentChunk > 0) {
-                                        const prevChunkScore = progress?.quizScores?.[currentChunk];
-                                        if (!prevChunkScore || !prevChunkScore.passed) {
-                                            needsQuiz = true;
-                                        }
-                                    }
-
-                                    if (needsQuiz) {
-                                        return (
-                                            <div className="flex flex-col items-end gap-2">
-                                                <p className="text-[10px] font-black text-primary uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/20 whitespace-nowrap shadow-sm backdrop-blur-sm animate-pulse">
-                                                    Required Checkpoint
-                                                </p>
-                                                <Button
-                                                    className="rounded-full px-8 h-12 font-black gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg glow-primary transition-transform hover:scale-105"
-                                                    onClick={() => navigate(`/student/quiz/${id}?sessionId=${sessionId}&chunk=${currentChunk}`)}
-                                                >
-                                                    <BrainCircuit className="w-5 h-5" />
-                                                    Take Quiz {currentChunk}
-                                                </Button>
-                                            </div>
-                                        );
-                                    }
-
                                     return (
                                         <Button
                                             variant="outline"
@@ -1595,34 +1571,24 @@ const AdaptiveReader = () => {
 
                                 if (!isLastSection) {
                                     const nextIdx = currentSectionIndex + 1;
-                                    const nextChunk = Math.floor(nextIdx / 3);
-                                    let isGatedByQuiz = false;
-                                    
-                                    if (nextChunk > Math.floor(currentSectionIndex / 3)) {
-                                         // We are crossing a chunk boundary (every 3 sections)
-                                         // Check if there is a quiz for the completed chunk
-                                         const currentChunk = Math.floor(currentSectionIndex / 3);
-                                         const chunkQuiz = allQuizzes.find(q => q.chunkIndex === currentChunk);
-                                         if (chunkQuiz) {
-                                             const chunkScore = progress?.quizScores?.[currentChunk];
-                                             if (!chunkScore || !chunkScore.passed) {
-                                                 isGatedByQuiz = true;
-                                             }
-                                         }
-                                    }
+                                    const nextChunk = Math.floor(nextIdx / 4);
+                                    const currentChunk = Math.floor(currentSectionIndex / 4);
+                                    const isCrossingBoundary = nextChunk > currentChunk;
+                                    const alreadyTookQuiz = progress?.quizScores?.[currentChunk];
 
-                                    if (isGatedByQuiz) {
+                                    // Mandatory quiz gate: must take quiz before crossing a chunk boundary for the first time
+                                    if (isCrossingBoundary && !alreadyTookQuiz) {
                                         return (
                                             <div className="flex flex-col items-end gap-2 text-right">
                                                 <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 shadow-sm">
-                                                    🔒 Quiz Required to Continue
+                                                    Knowledge Check Required
                                                 </p>
                                                 <Button
-                                                    className="rounded-full px-8 h-12 font-black gap-2 bg-amber-500 text-white hover:bg-amber-600 shadow-lg"
-                                                    onClick={() => navigate(`/student/quiz/${id}?sessionId=${sessionId}&chunk=${Math.floor(currentSectionIndex / 3)}`)}
+                                                    className="rounded-full px-8 h-12 font-black gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg glow-primary transition-transform hover:scale-105"
+                                                    onClick={() => navigate(`/student/quiz/${id}?sessionId=${sessionId}&chunk=${currentChunk}`)}
                                                 >
                                                     <BrainCircuit className="w-5 h-5" />
-                                                    Take Mastery Quiz
+                                                    Take Knowledge Check
                                                 </Button>
                                             </div>
                                         );
@@ -1693,7 +1659,7 @@ const AdaptiveReader = () => {
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <Button className="rounded-xl font-black h-12 bg-white text-accent hover:bg-white/90 shadow-lg" onClick={() => {
-                                    const chunk = Math.floor(currentSectionIndex / 3);
+                                    const chunk = Math.floor(currentSectionIndex / 4);
                                     navigate(`/student/quiz/${id}?chunk=${chunk}`);
                                 }}>Let's Go!</Button>
                                 <Button variant="ghost" className="rounded-xl font-bold h-12 text-white hover:bg-white/10" onClick={() => setShowQuizPrompt(false)}>Later</Button>

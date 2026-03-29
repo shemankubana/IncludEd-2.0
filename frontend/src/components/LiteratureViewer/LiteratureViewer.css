@@ -2168,3 +2168,15 @@
 .vocab-card:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
+
+/* ── RL Suggestion Banner Animation ── */
+@keyframes rl-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
