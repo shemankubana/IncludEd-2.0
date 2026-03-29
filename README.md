@@ -1,6 +1,6 @@
-# IncludEd 2.0 - ML-Powered PDF Accessibility for Neurodivergent Learners
+# IncludEd 2.0 — Adaptive Reading Platform for Neurodivergent Learners
 
-IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms literature PDFs into Dyslexia and ADHD-friendly reading experiences. Teachers upload PDFs of novels, plays, or general educational content, and the ML pipeline automatically analyzes, classifies, segments, and renders them in an accessible format with adaptive learning features.
+IncludEd 2.0 is an **RL-powered adaptive reading platform** that transforms literature PDFs into Dyslexia and ADHD-friendly reading experiences. Teachers upload novels, plays, or poems; a 15-module ML pipeline classifies, segments, and enriches them; and a PPO reinforcement learning agent monitors student reading behavior in real-time to suggest personalized interventions.
 
 ---
 
@@ -11,26 +11,16 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 - [System Architecture](#system-architecture)
 - [Key Features](#key-features)
 - [Installation & Setup](#installation--setup)
-- [Related Project Files](#related-project-files)
+- [Project Structure](#project-structure)
 - [Research Context](#research-context)
 
 ---
 
 ## Demo Video
 
-> A 5-minute walkthrough of IncludEd 2.0's core features — PDF analysis, accessible reading modes, TTS, quiz generation, teacher tools, and the adaptive RL engine.
+> A walkthrough of IncludEd 2.0's core features — PDF analysis, adaptive reading, TTS, quizzes, teacher analytics, and the RL engine.
 
 [![IncludEd 2.0 Demo](https://img.shields.io/badge/▶%20Watch%20Demo-Google%20Drive-blue?style=for-the-badge&logo=googledrive)](https://drive.google.com/file/d/12IU3FFzEQrm0FHPuDv1QC2dt-C-g2KKo/view?usp=sharing)
-
-<!-- TODO: Replace the link above with the actual 5-minute demo video URL.
-     The demo should showcase:
-       - Teacher: uploading & analyzing a PDF, previewing accessible content
-       - Student: reading with chat-bubble dialogue, OpenDyslexic font, bionic reading
-       - Student: TTS with word-level highlighting, focus mode
-       - Student: taking a quiz, vocabulary mastery, achievements
-       - Teacher: viewing student progress dashboards and recommendations
-       - RL Agent: adaptive content adjustments in action
--->
 
 ---
 
@@ -40,63 +30,72 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 |----------|------|
 | Web App  | [https://includ-ed-2-0.vercel.app/](https://includ-ed-2-0.vercel.app/) |
 
-<!-- TODO: Replace the link above with the actual deployed URL, or provide a downloadable package (.exe / .apk / .deb) link below:
-     | Desktop Installer | [Download .exe](https://link-to-installer) |
-     | Android APK       | [Download .apk](https://link-to-apk)       |
--->
-
 ---
 
 ## System Architecture
 
 ```
-┌─────────────────────────┐     ┌─────────────────────────┐     ┌─────────────────────────┐
-│   Frontend (React/TS)   │────▶│  Backend (Express.js)   │────▶│  AI Service (FastAPI)   │
-│       Port 8080         │     │       Port 3000          │     │       Port 8082          │
-├─────────────────────────┤     ├─────────────────────────┤     ├─────────────────────────┤
-│ • Sliding Chapter Nav   │     │ • Auth (Firebase + JWT) │     │ Cloud ML Infrastructure:│
-│ • Character Map Panel   │     │ • Literature CRUD       │     │  • HF Inference API     │
-│ • Phonics Breakdown     │     │ • Quiz Management       │     │  • Google Gemini API    │
-│ • Focus Mode            │     │ • Progress Tracking     │     │  • Mistral/Qwen/BERT    │
-│ • TTS + Word Sync       │     │ • Analytics             │     │  • RL Agent Integration │
-└─────────────────────────┘     └──────────┬──────────────┘     └─────────────────────────┘
-                                           │
-                                ┌──────────▼──────────────┐
-                                │   Database Cluster      │
-                                │  • PostgreSQL  (5433)   │
-                                │  • MongoDB     (27017)  │
-                                │  • Redis       (6379)   │
-                                │  • SQLite (dev fallback)│
-                                └─────────────────────────┘
+┌──────────────────────────┐     ┌──────────────────────────┐     ┌──────────────────────────┐
+│  Frontend (React 18/TS)  │────▶│  Backend (Express.js)    │────▶│  AI Service (FastAPI)     │
+│       Port 8080          │     │       Port 3000           │     │       Port 8082           │
+├──────────────────────────┤     ├──────────────────────────┤     ├──────────────────────────┤
+│ Adaptive Reader (PWA)    │     │ Firebase JWT Auth        │     │ 15-Module ML Pipeline    │
+│ Signal Tracker (5s)      │     │ Literature CRUD + Upload │     │ PPO RL Agent (SB3)       │
+│ RL Suggestion Banner     │     │ Quiz & Progress API      │     │ 3-Tier Simplification    │
+│ PlayDialogueUI (Plays)   │     │ Analytics + Insights     │     │ Teacher Intelligence     │
+│ Dyslexia Controls        │     │ School & Invitation Mgmt │     │ TTS (edge-tts)           │
+│ TTS + Word Sync          │     │ Session Telemetry        │     │ STT Assessment           │
+│ i18n (EN + FR)           │     │                          │     │ Kinyarwanda Bridge (107) │
+└──────────────────────────┘     └───────────┬──────────────┘     └──────────────────────────┘
+                                             │
+                                  ┌──────────▼──────────────┐     ┌──────────────────────────┐
+                                  │   Database Cluster      │     │   Cloud APIs             │
+                                  │  PostgreSQL (Sequelize)  │     │  Google Gemini (Tier 1)  │
+                                  │  MongoDB    (Telemetry)  │     │  HuggingFace  (Tier 2)   │
+                                  │  Redis      (Cache)      │     │  Firebase Auth           │
+                                  └─────────────────────────┘     └──────────────────────────┘
 ```
 
 ---
 
 ## Key Features
 
-### Cloud-First ML Pipeline (AI Service)
-- **Structural Analysis** — Mistral-7B via HF Inference for precise Act/Chapter detection.
-- **Pedagogical Quiz Gen** — Multi-tier generation via Gemini and Qwen 2.5 (Hugging Face).
-- **Intelligence Services** — BERT NER for characters and DeBERTa for contextual Q&A.
-- **Contextual Simplification** — Real-time text simplification + Author's Intent via Gemini.
-- **Phonics Engine** — Phonetic breakdown for any English/French word to aid pronunciation.
+### Reinforcement Learning Engine
+- **PPO agent** (Stable-Baselines3) with a 9-dimensional state space: reading speed, mouse dwell, scroll hesitation, backtrack frequency, attention score, disability type, text difficulty, session fatigue, content type
+- **6 adaptive actions**: Keep Original, Light Simplification, Heavy Simplification, TTS + Highlights, Syllable Break, Attention Break
+- **Student-controlled**: RL predictions appear as suggestion banners the student can accept or dismiss
+- Disability-specific reward structures and rule-based fallback when no model is available
+- Model hosted on HuggingFace Hub with automatic download
+
+### Cloud-First NLP Pipeline
+- **3-tier simplification** with intelligent fallback (Gemini → HuggingFace Qwen 72B → local rule-based engine)
+- **15 ML pipeline modules**: document classifier, structural segmenter, emotion analyzer (DistilRoBERTa), NER extractor (BERT), language detector (EN/FR), front matter filter, quiz generator (adaptive IRT difficulty), vocabulary analyzer, Book Brain pre-analysis, and more
+- **107-entry Kinyarwanda cultural bridging dictionary** mapping Western literary concepts to Rwandan parallels
+- **Phonics engine** for phonetic breakdown of English and French words
 
 ### Student Reading Experience
-- **Sliding Chapter Navigation** — A modern, touch-friendly navigation bar at the top of the reader.
-- **Character Map** — Dynamic relationship tracker that updates as the student reads.
-- **Highlight to Understand** — Instant simplification of difficult passages with cultural analogies (Rwanda context).
-- **Pronunciation Helper** — Phonics breakdown and audio playback for struggling readers.
-- **Chat-Bubble Dialogue** — Play scripts rendered as an interactive messaging interface.
-- **Adaptive RL Engine** — Adjusts text complexity and provides "Breathing Breaks" based on engagement.
+- **Adaptive Reader** with OpenDyslexic font, bionic reading, syllable colors, reading ruler, adjustable spacing/sizing
+- **PlayDialogueUI** — play scripts rendered as animated chat-bubble dialogue with character avatars
+- **Highlight to Understand** — select any passage for instant simplification with author's intent, vocabulary help, and Rwanda cultural bridge
+- **TTS with word-level highlighting** via edge-tts
+- **STT Reading Assessment** for fluency and accuracy tracking
+- **Comprehension quizzes** with adaptive difficulty, XP, and badge system (quiz_perfect, quiz_master, story_reader, streak badges)
+- **ADHD Chunking Engine** with timed segments and micro-breaks
+- **Character Map** and **Vocabulary Sidebar** powered by Book Brain pre-analysis
+- **PWA** with service worker and IndexedDB for offline progress caching
+- **Bilingual** interface (English + French via i18n)
 
-### Teacher Tools
-- **PDF Analyzer** — Upload, analyze, and preview how content appears to students.
-- **Progress Insights** — Monitor reading speed, comprehension, and vocabulary mastery.
+### Teacher Intelligence
+- **Dashboard** with 5 Recharts visualizations: student progress bars, reading accuracy distribution, progress vs accuracy comparison, status distribution pie, class-wide stats
+- **AI-generated insights** via Gemini for class-wide engagement analysis
+- **Risk classification engine**: students flagged as high/medium/low risk based on comprehension, pacing, frustration, and STT accuracy
+- **5 class-level alert types**: common struggle (urgent), pacing issues (warning), vocabulary patterns (warning), low engagement (info), common highlights (warning)
+- **Per-student recommendations** with actionable strategies (scheduling, TTS, simplified text, phonics support)
+- **Content publishing** workflow with draft/published status
 
-### Reinforcement Learning Engine
-- **9-dimensional state space** (reading speed, attention, disability type, text difficulty, etc.)
-- **6 adaptive actions** (original text, simplification levels, TTS, syllable breaks, attention breaks)
-- **Disability-specific reward structures** for personalized learning paths
+### Admin Tools
+- **School management** — create and configure schools
+- **User invitations** via magic links with role assignment (student, teacher, admin)
 
 ---
 
@@ -106,24 +105,21 @@ IncludEd 2.0 is an **ML-powered content accessibility platform** that transforms
 
 | Requirement | Version | Purpose |
 |-------------|---------|---------|
-| [Node.js](https://nodejs.org/) | v18+ | Backend & Frontend runtime |
-| [Python](https://www.python.org/) | 3.11+ | AI Service runtime |
-| [Docker & Docker Compose](https://www.docker.com/) | Latest | Database infrastructure |
-| [Git](https://git-scm.com/) | Latest | Version control |
-| Internet Connection | — | Required for cloud-based ML models (Hugging Face / Gemini) |
+| [Node.js](https://nodejs.org/) | v18+ | Backend & Frontend |
+| [Python](https://www.python.org/) | 3.11+ | AI Service |
+| [Docker & Docker Compose](https://www.docker.com/) | Latest | Databases |
+| Internet Connection | — | Cloud ML APIs (HuggingFace, Gemini) |
 
-### Step 1 — Clone the Repository
+### Step 1 — Clone
 
 ```bash
 git clone https://github.com/shemankubana/IncludEd-2.0.git
 cd IncludEd-2.0
 ```
 
-### Step 2 — Configure Environment Variables
+### Step 2 — Environment Variables
 
-Create `.env` files in each service directory using the templates below.
-
-**Backend** — create `backend/.env`:
+**Backend** — `backend/.env`:
 ```env
 PORT=3000
 DATABASE_URL=postgresql://user:password@localhost:5433/included_db
@@ -131,77 +127,31 @@ FRONTEND_URL=http://localhost:8080
 AI_SERVICE_URL=http://localhost:8082
 ```
 
-**Frontend** — create `frontend/.env`:
+**Frontend** — `frontend/.env`:
 ```env
 VITE_API_URL=http://localhost:3000
-VITE_AI_SERVICE_URL=http://localhost:8082
+VITE_AI_URL=http://localhost:8082
 VITE_FIREBASE_API_KEY=your_firebase_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
 VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
 ```
 
-**AI Service** — create `ai-service/.env`:
+**AI Service** — `ai-service/.env`:
 ```env
 HF_API_TOKEN=your_huggingface_token
 GEMINI_API_KEY=your_gemini_api_key
 USE_HF_INFERENCE=1
 ```
 
-> **Note**: This version of IncludEd 2.0 uses a **Cloud-First AI architecture**. All heavy processing is offloaded to Hugging Face Serverless endpoints and Google Gemini, ensuring smooth performance even on low-RAM laptops.
-
-> **Tip**: Copy from `.env.example` at the project root if available, and fill in your own values.
-
-### Step 3 — Start the Databases
+### Step 3 — Start Databases
 
 ```bash
 docker-compose up -d
 ```
 
-This launches PostgreSQL (port 5433), MongoDB (port 27017), and Redis (port 6379).
+Launches PostgreSQL (5433), MongoDB (27017), and Redis (6379).
 
-Verify they are running:
-```bash
-docker-compose ps
-```
-
-### Step 4 — Install & Start the Backend
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-The Express API server will start on **http://localhost:3000**.
-
-### Step 5 — Install & Start the AI Service
-
-```bash
-cd ai-service
-python -m venv venv
-source venv/bin/activate        # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
-python main.py
-```
-
-The FastAPI server will start on **http://localhost:8082**.
-
-### Step 6 — Install & Start the Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The React app will start on **http://localhost:8080**.
-
-### Step 7 — Open the App
-
-Navigate to **http://localhost:8080** in your browser. You should see the IncludEd landing page.
-
-### Quick Start Summary
+### Step 4 — Start Services
 
 | Terminal | Command | Service |
 |----------|---------|---------|
@@ -210,84 +160,115 @@ Navigate to **http://localhost:8080** in your browser. You should see the Includ
 | 3 | `cd ai-service && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt && python -m spacy download en_core_web_sm && python main.py` | AI Service (`:8082`) |
 | 4 | `cd frontend && npm install && npm run dev` | Frontend (`:8080`) |
 
+Open **http://localhost:8080** in your browser.
+
 ---
 
-## Related Project Files
+## Project Structure
 
 ### Frontend (`/frontend`)
 
 | File / Directory | Description |
 |------------------|-------------|
-| `src/App.tsx` | Main application router with protected routes |
-| `src/main.tsx` | Application entry point |
-| `src/pages/student/Dashboard.tsx` | Student dashboard page |
-| `src/pages/student/Reader.tsx` | Accessible literature reader |
-| `src/pages/student/Quiz.tsx` | Quiz interface |
-| `src/pages/student/Achievements.tsx` | Gamification & achievements |
-| `src/pages/teacher/Dashboard.tsx` | Teacher dashboard |
-| `src/pages/teacher/CreateContent.tsx` | Content creation tools |
-| `src/pages/teacher/LiteratureAnalyzer.tsx` | PDF analyzer page |
-| `src/pages/teacher/MyContent.tsx` | Content management |
-| `src/pages/admin/Dashboard.tsx` | Admin dashboard |
-| `src/components/reader/` | Student reader UI components |
-| `src/components/LiteratureViewer/` | Adaptive content rendering |
-| `src/components/play/` | Chat-bubble play dialogue |
-| `src/components/literature/` | Literature management UI |
-| `src/components/teacher/` | Teacher tool components |
-| `src/contexts/AuthContext.tsx` | Authentication state provider |
-| `src/services/` | API integration layer |
-| `vite.config.ts` | Vite build configuration |
-| `tailwind.config.ts` | Tailwind CSS configuration |
-| `package.json` | Frontend dependencies |
+| `src/App.tsx` | Main router with role-based protected routes (student/teacher/admin) |
+| `src/pages/student/Reader.tsx` | Adaptive reading interface with TTS, dyslexia controls, ADHD breaks |
+| `src/pages/student/Dashboard.tsx` | Student home — assigned literature, progress overview |
+| `src/pages/student/Quiz.tsx` | Comprehension quiz with adaptive difficulty |
+| `src/pages/student/Achievements.tsx` | XP, badges, and gamification |
+| `src/pages/student/Lessons.tsx` | Lesson browser |
+| `src/pages/teacher/Dashboard.tsx` | Teacher analytics dashboard with risk alerts |
+| `src/pages/teacher/CreateContent.tsx` | PDF upload and content creation |
+| `src/pages/teacher/LiteratureAnalyzer.tsx` | ML-powered PDF analysis preview |
+| `src/pages/teacher/MyContent.tsx` | Content management and publishing |
+| `src/pages/teacher/LiteratureReview.tsx` | Content review workflow |
+| `src/pages/teacher/Profile.tsx` | Teacher profile settings |
+| `src/pages/teacher/PendingApproval.tsx` | Approval queue for new accounts |
+| `src/pages/admin/Dashboard.tsx` | Admin overview |
+| `src/pages/admin/Users.tsx` | User management |
+| `src/pages/AdminSchoolSetup.tsx` | School administrator setup |
+| `src/pages/Auth.tsx` | Login / registration |
+| `src/pages/Onboarding.tsx` | New user onboarding flow |
+| `src/pages/AcceptInvite.tsx` | Magic link invitation handler |
+| `src/components/LiteratureViewer/` | Core reading components: ScriptDisplay, ScriptNavBar, DyslexiaRenderer, ADHDChunkingEngine, HighlightToUnderstand, CharacterMap, VocabularySidebar, ComprehensionGraph, DifficultyMap, VocabHelper, PoemDisplay |
+| `src/components/play/PlayDialogueUI.tsx` | Animated chat-bubble dialogue for plays |
+| `src/components/play/GamificationSystem.tsx` | XP and badge overlay |
+| `src/components/reader/` | CharacterTooltip, PoemRenderer, ComprehensionMiniPanel, VocabSidebar, ChapterNavigation, PronunciationHelper, CharacterMapPanel |
+| `src/components/teacher/AnalyticsCharts.tsx` | Recharts-based analytics visualizations |
+| `src/hooks/useSignalTracker.ts` | Real-time behavioral signal collection (mouse, scroll, attention) |
+| `src/hooks/useTranslation.ts` | i18n translation hook (EN + FR) |
+| `src/contexts/AuthContext.tsx` | Firebase authentication state provider |
+| `src/i18n/` | Localization files (en.json, fr.json) |
+| `public/sw.js` | Service worker for PWA offline support |
 
 ### Backend (`/backend`)
 
 | File / Directory | Description |
 |------------------|-------------|
-| `src/server.js` | Express application entry point |
-| `src/routes/auth.js` | Authentication routes (Firebase + JWT) |
-| `src/routes/literature.js` | PDF upload, analysis, CRUD operations |
-| `src/routes/quiz.js` | Quiz management endpoints |
-| `src/routes/progress.js` | Student progress tracking |
-| `src/routes/sessions.js` | Reading session management |
+| `src/server.js` | Express entry point |
+| `src/routes/auth.js` | Authentication (Firebase + JWT) |
+| `src/routes/literature.js` | PDF upload, ML analysis proxy, CRUD |
+| `src/routes/quiz.js` | Quiz management |
+| `src/routes/progress.js` | Student progress tracking and completion |
+| `src/routes/sessions.js` | Reading session management and telemetry |
+| `src/routes/analytics.js` | Class analytics, validation metrics, RL reward trends |
 | `src/routes/vocab.js` | Vocabulary tracking |
-| `src/routes/analytics.js` | Analytics & statistics |
+| `src/routes/schools.js` | School CRUD |
+| `src/routes/invitations.js` | Magic link invitations |
 | `src/routes/onboarding.js` | User onboarding workflow |
-| `src/routes/admin.js` | Admin management functions |
+| `src/routes/admin.js` | Admin management |
+| `src/routes/stats.js` | Statistics endpoints |
 | `src/models/User.js` | User account model |
 | `src/models/Literature.js` | Literature document model |
 | `src/models/Quiz.js` | Quiz data model |
 | `src/models/Session.js` | Reading session model |
 | `src/models/StudentProfile.js` | Extended student profile |
+| `src/models/StudentStats.js` | Student statistics model |
 | `src/models/Vocabulary.js` | Vocabulary items model |
-| `src/config/database.js` | Sequelize + PostgreSQL/SQLite setup |
-| `src/config/firebase-admin.js` | Firebase Admin SDK config |
-| `src/middleware/` | Express middleware (auth, etc.) |
-| `package.json` | Backend dependencies |
+| `src/models/VocabularyMastery.js` | Vocabulary mastery tracking |
+| `src/models/LessonProgress.js` | Lesson progress model |
+| `src/models/Invitation.js` | Invitation model |
+| `src/models/School.js` | School model |
+| `src/models/RLTrainingData.js` | RL training data collection |
+| `src/config/database.js` | Sequelize + PostgreSQL configuration |
+| `src/config/firebase-admin.js` | Firebase Admin SDK setup |
 
 ### AI Service (`/ai-service`)
 
 | File / Directory | Description |
 |------------------|-------------|
-| `main.py` | FastAPI application (20+ endpoints) |
+| `main.py` | FastAPI application with 20+ endpoints |
 | `requirements.txt` | Python dependencies |
-| `ml_pipeline/structural_segmenter.py` | Cloud-powered Chapter/Act/Scene segmentation |
-| `ml_pipeline/quiz_generator.py` | Multi-tier Pedagogical question generation |
-| `services/hf_inference_service.py` | Hugging Face InferenceClient wrapper for all cloud models |
-| `services/gemini_service.py` | Primary service for Simplification and Author's Intent |
-| `services/character_service.py` | Cloud-based character extraction and Q&A descriptions |
-| `services/pronunciation_service.py` | Phonics breakdown and pronunciation logic |
-| `services/tts_service.py` | Text-to-Speech (edge-tts) |
-| `services/rl_agent_service.py` | Reinforcement Learning agent |
-| `services/stt_service.py` | Speech-to-Text assessment |
-
-### RL Engine (`/rl-engine`)
-
-| File / Directory | Description |
-|------------------|-------------|
-| `included_env.py` | Gymnasium environment for adaptive learning |
-| `train_model.py` | RL model training script |
-| `model_versions.json` | Model version tracking |
+| **ML Pipeline** (`ml_pipeline/`) | |
+| `analyzer.py` | Main orchestrator — PDF extraction, classification, segmentation |
+| `content_classifier.py` | Heuristic document type detection (play/novel/poem/generic) |
+| `structural_segmenter.py` | Hierarchical Act/Scene/Chapter segmentation with emotion tagging |
+| `emotion_analyzer.py` | 7-class emotion detection (DistilRoBERTa → NRC lexicon → heuristics) |
+| `ner_extractor.py` | Named entity recognition (BERT → spaCy → regex) |
+| `language_detector.py` | EN/FR language classification |
+| `front_matter_detector.py` | Cover page and back matter removal |
+| `front_matter_filter.py` | Content filtering helper |
+| `quiz_generator.py` | Multi-tier quiz generation with IRT adaptive difficulty |
+| `question_generator.py` | Legacy template-based question generation |
+| `book_brain.py` | Pre-analysis: difficulty mapping, vocabulary, character graph, cultural context, struggle zones |
+| `vocab_analyzer.py` | Batch vocabulary analysis with difficulty scoring |
+| `difficulty_adapter.py` | IRT-based adaptive quiz difficulty with disability adjustments |
+| `train_model.py` | RL model training with Cohen's d and versioning |
+| **Services** (`services/`) | |
+| `rl_agent_service.py` | PPO model loading, prediction, and rule-based fallback |
+| `simplification_service.py` | 3-tier text simplification + 107-entry Kinyarwanda bridge |
+| `gemini_service.py` | Google Gemini API integration |
+| `hf_inference_service.py` | HuggingFace Inference API wrapper |
+| `teacher_intelligence.py` | Risk classification and class-level alert generation |
+| `teacher_recommendations.py` | Per-student actionable recommendation engine |
+| `learner_embedding.py` | Student reading level tracking |
+| `comprehension_tracker.py` | Comprehension progress tracking |
+| `tts_service.py` | Text-to-Speech via edge-tts |
+| `stt_service.py` | Speech-to-Text reading assessment |
+| `pronunciation_service.py` | Phonics breakdown and pronunciation logic |
+| `character_service.py` | Character extraction and description |
+| `word_difficulty_service.py` | Word-level difficulty scoring |
+| `accessibility_adapter.py` | Accessibility adaptation utilities |
+| `content_analyzer.py` | Content analysis utilities |
 
 ### Root / Infrastructure
 
@@ -296,10 +277,20 @@ Navigate to **http://localhost:8080** in your browser. You should see the Includ
 | `docker-compose.yml` | Database infrastructure (PostgreSQL, MongoDB, Redis) |
 | `.env.example` | Environment variable template |
 | `scripts/seed_rwanda_corpus.js` | Database seeding with Rwandan literature |
-| `Prompt reference.pdf` | AI prompt design documentation |
+| `docs/use_case_diagram.puml` | UML use case diagram |
+| `docs/cloud_architecture.puml` | System architecture diagram |
 
 ---
 
 ## Research Context
 
-This project serves as the technical implementation for the **ALU BSc. Software Engineering Capstone (2026)**. It focuses on making literature accessible to neurodivergent learners (Dyslexia, ADHD) in the Rwandan educational context through ML-driven adaptive reading experiences.
+This project is the technical implementation for the **ALU BSc. Software Engineering Capstone (2026)**. It addresses the challenge of making literature accessible to neurodivergent learners (Dyslexia, ADHD) in the Rwandan educational context through ML-driven adaptive reading experiences and reinforcement learning.
+
+### Thesis Metrics Targets
+| Metric | Target |
+|--------|--------|
+| Comprehension improvement | >= 25% |
+| Attention increase | >= 30% |
+| Cohen's d (effect size) | >= 0.5 |
+| RL mean reward | > 0 |
+| Policy loss | < 0.05 |
