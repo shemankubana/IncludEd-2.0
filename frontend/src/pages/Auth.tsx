@@ -448,9 +448,15 @@ const Auth = () => {
           </Button>
         </div>
 
-        <p className="text-xs text-muted-foreground text-center mt-6">
-          Adaptive learning for students with learning disabilities in Rwanda
-        </p>
+        <div className="flex flex-col gap-2 items-center mt-6">
+          <p className="text-xs text-muted-foreground text-center">
+            Adaptive learning for students with learning disabilities in Rwanda
+          </p>
+          <div className="flex gap-4 text-[10px] text-muted-foreground">
+            <Link to="/eula" className="hover:text-primary transition-colors">EULA</Link>
+            <Link to="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+          </div>
+        </div>
       </motion.div>
     </div>
   );

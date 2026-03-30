@@ -27,6 +27,8 @@ import AdminProfile from "./pages/admin/Profile";
 import Onboarding from "./pages/Onboarding";
 import AcceptInvite from "./pages/AcceptInvite";
 import AdminSchoolSetup from "./pages/AdminSchoolSetup";
+import EULA from "./pages/Documents/EULA";
+import PrivacyPolicy from "./pages/Documents/PrivacyPolicy";
 import NotFound from "./pages/NotFound";
 
 // Auth & Protection
@@ -73,6 +75,8 @@ const App = () => (
               <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
               <Route path="/invite/:token" element={<AcceptInvite />} />
               <Route path="/admin-setup" element={<AdminSchoolSetup />} />
+              <Route path="/eula" element={<EULA />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

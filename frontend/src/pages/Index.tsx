@@ -25,6 +25,10 @@ const Index = () => {
           <p className="text-xs text-muted-foreground">
             © 2026 IncludEd. Adaptive learning for students with learning disabilities in Rwanda.
           </p>
+          <div className="flex gap-4 justify-center mt-2 text-[10px] text-muted-foreground">
+            <a href="/eula" className="hover:text-primary transition-colors">EULA</a>
+            <a href="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</a>
+          </div>
         </div>
       </footer>
     </div>
