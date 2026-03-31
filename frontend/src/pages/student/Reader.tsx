@@ -35,6 +35,7 @@ import CharacterTooltip from "@/components/reader/CharacterTooltip";
 import PoemRenderer from "@/components/reader/PoemRenderer";
 import CharacterMapPanel from "@/components/reader/CharacterMapPanel";
 import { useTranslation } from "@/hooks/useTranslation";
+import { useTranslation as useI18n } from "@/i18n";
 import ChapterNavigation from "@/components/reader/ChapterNavigation";
 import PronunciationHelper from "@/components/reader/PronunciationHelper";
 import { useToast } from "@/components/ui/use-toast";
@@ -180,7 +181,13 @@ const AdaptiveReader = () => {
     });
 
     const { t } = useTranslation(lesson?.language);
+    const { language: uiLang, t: tI18n } = useI18n();
     const sessionStartRef = useRef<number>(Date.now());
+
+    // Detect language mismatch between user preference and content language
+    const contentLang = lesson?.language; // 'english' | 'french' | undefined
+    const userLang = uiLang === "fr" ? "french" : "english";
+    const hasLangMismatch = !!contentLang && contentLang !== userLang;
     const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8082";
 
     const [activeWordIndex, setActiveWordIndex] = useState(-1);
@@ -491,7 +498,7 @@ const AdaptiveReader = () => {
                     setAllQuizzes(qData);
                 }
 
-                setLesson({ title: data.title, author: data.author, difficulty: data.difficulty || "Adaptive" });
+                setLesson({ title: data.title, author: data.author, difficulty: data.difficulty || "Adaptive", language: data.language || "english" });
                 if (data.introduction) {
                     setIntro(data.introduction);
                     setShowIntro(true);
@@ -863,6 +870,17 @@ const AdaptiveReader = () => {
 
     return (
         <DashboardLayout role="student">
+            {/* ── Language Mismatch Banner ── */}
+            {hasLangMismatch && (
+                <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-400 text-sm font-medium">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>
+                        {contentLang === "english"
+                            ? tI18n("language.reader_banner_en")
+                            : tI18n("language.reader_banner_fr")}
+                    </span>
+                </div>
+            )}
             {/* ── Story So Far Recap Modal ── */}
             <AnimatePresence>
                 {showRecap && recapText && (
@@ -887,7 +905,13 @@ const AdaptiveReader = () => {
                             <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-widest">
                                 Story so far...
                             </p>
-                            <p className="text-base leading-relaxed mb-6">{recapText}</p>
+                            <p className="text-base leading-relaxed mb-6">
+                                {recapText.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+                                    part.startsWith('**') && part.endsWith('**')
+                                        ? <strong key={i}>{part.slice(2, -2)}</strong>
+                                        : part
+                                )}
+                            </p>
                             <Button className="w-full" onClick={() => setShowRecap(false)}>
                                 Continue reading
                             </Button>

@@ -4,12 +4,14 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Search, Filter, BookOpen, Clock, Star, Loader2, ArrowRight, CheckCircle2, PlayCircle } from "lucide-react";
+import { Search, Filter, BookOpen, Clock, Star, Loader2, ArrowRight, CheckCircle2, PlayCircle, Globe, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE } from "@/lib/api";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "@/i18n";
+import { useContentNavigation } from "@/hooks/useContentNavigation";
 
 const difficultyColor: Record<string, string> = {
     beginner: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
@@ -73,14 +75,19 @@ const StarRating = ({ lessonId, initialRating, ratingCount, initialUserRating = 
     );
 };
 
+
+
 const LessonLibrary = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const { language, t } = useTranslation();
     const [loading, setLoading] = useState(true);
     const [lessons, setLessons] = useState<any[]>([]);
     const [progressMap, setProgressMap] = useState<Record<string, { percent: number; status: string; userRating: number }>>({});
     const [selectedCategory, setSelectedCategory] = useState("All");
+    const [selectedLang, setSelectedLang] = useState<"all" | "en" | "fr">("all");
     const [searchQuery, setSearchQuery] = useState("");
+    const { openContent, mismatchModal, isChecking } = useContentNavigation();
     const categories = ["All", "In Progress", "Literature", "Math", "Science", "History", "General"];
 
     useEffect(() => {
@@ -110,6 +117,7 @@ const LessonLibrary = () => {
                             image: item.imageUrl ? `${baseUrl}${item.imageUrl}` : null,
                             xp: 500,
                             totalSections: item.sections?.length || 1,
+                            language: item.language || "english", // 'english' | 'french'
                         })));
                     }
                 }
@@ -138,13 +146,19 @@ const LessonLibrary = () => {
         fetchLessons();
     }, [user]);
 
+
+
     const filteredLessons = lessons.filter(l => {
         const matchesCategory =
             selectedCategory === "All" ? true :
             selectedCategory === "In Progress" ? !!progressMap[l.id] :
             l.subject === selectedCategory;
         const matchesSearch = !searchQuery || l.title.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesCategory && matchesSearch;
+        const matchesLang =
+            selectedLang === "all" ? true :
+            selectedLang === "en" ? l.language === "english" :
+            l.language === "french";
+        return matchesCategory && matchesSearch && matchesLang;
     });
 
     if (loading) {
@@ -161,14 +175,17 @@ const LessonLibrary = () => {
         <DashboardLayout role="student">
             <div className="max-w-6xl mx-auto space-y-8 pb-20">
 
+                {/* Language Mismatch Modal */}
+                {mismatchModal}
+
                 {/* Header & Search */}
                 <section className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-secondary/30 p-8 rounded-[40px] border border-border/50">
                     <div className="space-y-2">
-                        <h1 className="text-3xl font-bold tracking-tight">Lesson Library</h1>
+                        <h1 className="text-3xl font-bold tracking-tight">{t("lesson_library.title")}</h1>
                         <p className="text-muted-foreground font-medium">
                             {Object.keys(progressMap).length > 0
-                                ? `${Object.keys(progressMap).length} course${Object.keys(progressMap).length > 1 ? "s" : ""} in progress`
-                                : "Explore interactive and adaptive lessons."}
+                                ? t(Object.keys(progressMap).length === 1 ? "lesson_library.subtitle_in_progress" : "lesson_library.subtitle_in_progress_plural", { count: Object.keys(progressMap).length })
+                                : t("lesson_library.subtitle_default")}
                         </p>
                     </div>
 
@@ -177,27 +194,46 @@ const LessonLibrary = () => {
                         <Input
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search for lessons, subjects..."
+                            placeholder={t("lesson_library.search_placeholder")}
                             className="pl-12 h-14 rounded-2xl border-2 border-border focus:border-primary transition-all shadow-sm"
                         />
                     </div>
                 </section>
 
                 {/* Filters */}
-                <section className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none">
-                    <div className="flex items-center gap-2 mr-4 text-muted-foreground font-bold text-xs uppercase tracking-widest leading-none">
-                        <Filter className="w-4 h-4" /> Filters
+                <section className="flex flex-col gap-3">
+                    <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
+                        <div className="flex items-center gap-2 mr-2 text-muted-foreground font-bold text-xs uppercase tracking-widest leading-none shrink-0">
+                            <Filter className="w-4 h-4" /> {language === "fr" ? "Filtres" : "Filters"}
+                        </div>
+                        {categories.map((cat) => (
+                            <Button
+                                key={cat}
+                                variant={selectedCategory === cat ? "default" : "secondary"}
+                                onClick={() => setSelectedCategory(cat)}
+                                className={`rounded-xl h-10 px-6 font-bold text-xs transition-all shrink-0 ${selectedCategory === cat ? "shadow-lg" : "bg-background border border-border"}`}
+                            >
+                                {t(`categories.${cat}`)}
+                            </Button>
+                        ))}
                     </div>
-                    {categories.map((cat) => (
-                        <Button
-                            key={cat}
-                            variant={selectedCategory === cat ? "default" : "secondary"}
-                            onClick={() => setSelectedCategory(cat)}
-                            className={`rounded-xl h-10 px-6 font-bold text-xs transition-all ${selectedCategory === cat ? "shadow-lg glow-lime" : "bg-background border border-border"}`}
-                        >
-                            {cat}
-                        </Button>
-                    ))}
+                    {/* Language filter */}
+                    <div className="flex items-center gap-2">
+                        <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
+                        {(["all", "en", "fr"] as const).map(lang => (
+                            <button
+                                key={lang}
+                                onClick={() => setSelectedLang(lang)}
+                                className={`text-xs font-black px-3 py-1.5 rounded-lg transition-all border ${
+                                    selectedLang === lang
+                                        ? "bg-primary text-primary-foreground border-primary"
+                                        : "border-border text-muted-foreground hover:text-foreground bg-background"
+                                }`}
+                            >
+                                {lang === "all" ? t("language.filter_all") : lang === "en" ? t("language.filter_en") : t("language.filter_fr")}
+                            </button>
+                        ))}
+                    </div>
                 </section>
 
                 {/* Lesson Grid */}
@@ -205,7 +241,7 @@ const LessonLibrary = () => {
                     {filteredLessons.length === 0 && (
                         <div className="col-span-full flex flex-col items-center justify-center py-20 gap-4 text-muted-foreground">
                             <BookOpen className="w-12 h-12 opacity-30" />
-                            <p className="font-bold">No lessons found</p>
+                            <p className="font-bold">{t("lesson_library.no_lessons_found")}</p>
                         </div>
                     )}
                     {filteredLessons.map((lesson, idx) => {
@@ -231,24 +267,34 @@ const LessonLibrary = () => {
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-5">
                                             <span className="text-white font-black text-xs uppercase tracking-widest flex items-center gap-1.5">
                                                 {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <PlayCircle className="w-3.5 h-3.5" />}
-                                                {isCompleted ? "Review" : isStarted ? "Continue" : "Start Reading"}
+                                                {isCompleted ? t("lesson_library.status_review") : isStarted ? t("lesson_library.status_continue") : t("lesson_library.status_start")}
                                             </span>
                                         </div>
                                         {/* Difficulty badge */}
                                         <div className="absolute top-3 left-3">
                                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${difficultyColor[lesson.difficulty] || difficultyColor.beginner}`}>
-                                                {lesson.difficulty}
+                                                {t(`difficulty.${lesson.difficulty}`)}
+                                            </span>
+                                        </div>
+                                        {/* Language badge */}
+                                        <div className="absolute bottom-3 left-3">
+                                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${
+                                                lesson.language === "french"
+                                                    ? "bg-blue-500/20 text-blue-200 border-blue-500/30"
+                                                    : "bg-violet-500/20 text-violet-200 border-violet-500/30"
+                                            }`}>
+                                                {lesson.language === "french" ? "FR" : "EN"}
                                             </span>
                                         </div>
                                         {/* In-progress indicator */}
                                         {isStarted && !isCompleted && (
                                             <div className="absolute top-3 right-3 bg-primary text-primary-foreground text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                                In Progress
+                                                {t("lesson_library.status_in_progress")}
                                             </div>
                                         )}
                                         {isCompleted && (
                                             <div className="absolute top-3 right-3 bg-emerald-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                                                <CheckCircle2 className="w-2.5 h-2.5" /> Done
+                                                <CheckCircle2 className="w-2.5 h-2.5" /> {t("lesson_library.status_done")}
                                             </div>
                                         )}
                                     </div>
@@ -256,7 +302,7 @@ const LessonLibrary = () => {
                                     <CardHeader className="flex-1 pb-2">
                                         <div className="flex items-center justify-between mb-2">
                                             <Badge variant="secondary" className="rounded-lg font-black text-[10px] uppercase tracking-wider px-2.5 py-1">
-                                                {lesson.subject}
+                                                {t(`categories.${lesson.subject}`)}
                                             </Badge>
                                             <div className="flex items-center gap-1 text-xs font-bold text-muted-foreground">
                                                 <Clock className="w-3.5 h-3.5" /> {lesson.duration}
@@ -272,7 +318,7 @@ const LessonLibrary = () => {
                                         {isStarted && (
                                             <div className="space-y-1.5">
                                                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                                                    <span>{isCompleted ? "Completed" : "Progress"}</span>
+                                                    <span>{isCompleted ? t("lesson_library.status_completed") : t("lesson_library.status_progress")}</span>
                                                     <span className={isCompleted ? "text-emerald-600" : "text-primary"}>{prog.percent}%</span>
                                                 </div>
                                                 <Progress
@@ -289,16 +335,17 @@ const LessonLibrary = () => {
 
                                         {/* CTA button */}
                                         <Button
-                                            onClick={() => navigate(`/student/reader/${lesson.id}`)}
+                                            onClick={() => openContent(lesson)}
+                                            disabled={isChecking}
                                             variant={isStarted && !isCompleted ? "default" : "secondary"}
                                             className="w-full rounded-2xl gap-2 font-black uppercase text-xs h-10 tracking-widest"
                                         >
                                             {isCompleted ? (
-                                                <><CheckCircle2 className="w-4 h-4" /> Review</>
+                                                <><CheckCircle2 className="w-4 h-4" /> {t("lesson_library.status_review")}</>
                                             ) : isStarted ? (
-                                                <>Continue <ArrowRight className="w-4 h-4" /></>
+                                                <>{t("lesson_library.status_continue")} <ArrowRight className="w-4 h-4" /></>
                                             ) : (
-                                                <>Start Reading <ArrowRight className="w-4 h-4" /></>
+                                                <>{t("lesson_library.status_start")} <ArrowRight className="w-4 h-4" /></>
                                             )}
                                         </Button>
                                     </CardContent>

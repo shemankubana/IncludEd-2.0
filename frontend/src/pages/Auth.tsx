@@ -18,6 +18,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
 import { API_BASE } from "@/lib/api";
+import { useTranslation, LanguageSelector } from "@/i18n";
 
 const roles: { value: string; label: string; description: string; icon: string }[] = [
   { value: "student", label: "Student", description: "Access adaptive lessons & track progress", icon: "📚" },
@@ -28,6 +29,7 @@ const roles: { value: string; label: string; description: string; icon: string }
 
 const Auth = () => {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -304,7 +306,8 @@ const Auth = () => {
           </Button>
         </Link>
       </div>
-      <div className="absolute top-4 right-4">
+      <div className="absolute top-4 right-4 flex items-center gap-3">
+        <LanguageSelector />
         <ThemeToggle />
       </div>
 
@@ -321,8 +324,8 @@ const Auth = () => {
         <div className="bg-card rounded-2xl border border-border p-8 shadow-lg overflow-y-auto max-h-[85vh] scrollbar-hide">
           {/* Tab switcher — login only now; signup happens via invitations */}
           <div className="text-center mb-6">
-            <h2 className="text-xl font-black tracking-tight">Welcome back</h2>
-            <p className="text-sm text-muted-foreground mt-1">Students and teachers sign up via email invitation.</p>
+            <h2 className="text-xl font-black tracking-tight">{t("auth.welcome_back")}</h2>
+            <p className="text-sm text-muted-foreground mt-1">{t("auth.students_teachers_info")}</p>
           </div>
 
           <AnimatePresence mode="wait">
@@ -343,28 +346,28 @@ const Auth = () => {
                       onClick={() => setLoginRole(r)}
                       className={`py-1.5 text-[10px] uppercase tracking-widest font-black rounded-md transition-all ${loginRole === r ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-secondary/80"}`}
                     >
-                      {r}
+                      {t(`auth.${r}`)}
                     </button>
                   ))}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
+                  <Label htmlFor="login-email">{t("auth.email")}</Label>
                   <Input
                     id="login-email"
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder={t("auth.email_placeholder")}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="login-password">Password</Label>
+                  <Label htmlFor="login-password">{t("auth.password")}</Label>
                   <Input
                     id="login-password"
                     type="password"
-                    placeholder="••••••••"
+                    placeholder={t("auth.password_placeholder")}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -376,16 +379,16 @@ const Auth = () => {
                     onClick={() => setMode("forgot")}
                     className="text-xs text-primary font-medium hover:underline"
                   >
-                    Forgot password?
+                    {t("auth.forgot_password")}
                   </button>
                 </div>
                 <Button type="submit" className="w-full rounded-lg font-semibold" disabled={loading}>
-                  {loading ? "Signing in..." : `Sign In as ${loginRole}`}
+                  {loading ? t("auth.signing_in") : t("auth.sign_in_as", { role: t(`auth.${loginRole}`) })}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
-                  Are you a school administrator?{" "}
+                  {t("auth.are_you_admin")}{" "}
                   <a href="/admin-setup" className="text-primary font-medium hover:underline">
-                    Register your school
+                    {t("auth.register_school")}
                   </a>
                 </p>
               </motion.form>
@@ -402,20 +405,20 @@ const Auth = () => {
                   <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
                     <BookOpen className="w-6 h-6 text-primary" />
                   </div>
-                  <h2 className="text-lg font-black">Reset Password</h2>
-                  <p className="text-xs text-muted-foreground">We'll send you a reset link.</p>
+                  <h2 className="text-lg font-black">{t("auth.reset_password")}</h2>
+                  <p className="text-xs text-muted-foreground">{t("auth.send_reset")}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="forgot-email">Email Address</Label>
-                  <Input id="forgot-email" type="email" placeholder="you@example.com" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} required />
+                  <Label htmlFor="forgot-email">{t("auth.email")}</Label>
+                  <Input id="forgot-email" type="email" placeholder={t("auth.email_placeholder")} value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} required />
                 </div>
                 <Button type="submit" className="w-full rounded-lg font-semibold" disabled={loading}>
-                  {loading ? "Sending..." : "Send Reset Link"}
+                  {loading ? t("auth.sending") : t("auth.send_link")}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
-                  Remember your password?{" "}
+                  {t("auth.remember_password")}{" "}
                   <button type="button" onClick={() => setMode("login")} className="text-primary font-medium hover:underline">
-                    Back to Log In
+                    {t("auth.back_to_login")}
                   </button>
                 </p>
               </motion.form>
@@ -427,7 +430,7 @@ const Auth = () => {
               <span className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest bg-card px-2 text-muted-foreground">
-              Or
+              {t("auth.or")}
             </div>
           </div>
 
@@ -444,13 +447,13 @@ const Auth = () => {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
             </svg>
-            Sign in with Google
+            {t("auth.signin_google")}
           </Button>
         </div>
 
         <div className="flex flex-col gap-2 items-center mt-6">
           <p className="text-xs text-muted-foreground text-center">
-            Adaptive learning for students with learning disabilities in Rwanda
+            {t("auth.adaptive_learning_footer")}
           </p>
           <div className="flex gap-4 text-[10px] text-muted-foreground">
             <Link to="/eula" className="hover:text-primary transition-colors">EULA</Link>

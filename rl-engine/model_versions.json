@@ -1,0 +1,15 @@
+{
+  "versions": [
+    {
+      "version": "v2.1",
+      "trained_at": "2026-03-31T13:29:34.801825",
+      "timesteps": 500000,
+      "state_dim": 9,
+      "actions": 6,
+      "algorithm": "PPO",
+      "path": "/Users/yvanshema/Documents/SHEMA/IncludEd-2.0/rl-engine/models/ppo_included_v2.zip",
+      "notes": "Simulated pre-training"
+    }
+  ],
+  "latest": "v2.1"
+}

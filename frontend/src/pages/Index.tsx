@@ -4,8 +4,10 @@ import FeaturesSection from "@/components/FeaturesSection";
 import DemoLessonSection from "@/components/DemoLessonSection";
 import ComparisonSection from "@/components/ComparisonSection";
 import CTASection from "@/components/CTASection";
+import { useTranslation } from "@/i18n";
 
 const Index = () => {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -23,11 +25,11 @@ const Index = () => {
       <footer className="border-t border-border py-8">
         <div className="container mx-auto px-6 text-center">
           <p className="text-xs text-muted-foreground">
-            © 2026 IncludEd. Adaptive learning for students with learning disabilities in Rwanda.
+            {t("landing.footer.copyright")}
           </p>
           <div className="flex gap-4 justify-center mt-2 text-[10px] text-muted-foreground">
-            <a href="/eula" className="hover:text-primary transition-colors">EULA</a>
-            <a href="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</a>
+            <a href="/eula" className="hover:text-primary transition-colors">{t("landing.footer.eula")}</a>
+            <a href="/privacy-policy" className="hover:text-primary transition-colors">{t("landing.footer.privacy")}</a>
           </div>
         </div>
       </footer>

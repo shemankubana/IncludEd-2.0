@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE } from "@/lib/api";
+import { useTranslation } from "@/i18n";
 
 // All possible badges. `key` must match what the backend stores in StudentStats.badges[]
 const ALL_BADGES = [
@@ -72,6 +73,7 @@ const ALL_BADGES = [
 
 const AchievementHall = () => {
     const { user } = useAuth();
+    const { t } = useTranslation();
     const [stats,   setStats]   = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -117,9 +119,9 @@ const AchievementHall = () => {
                     >
                         <Award className="w-12 h-12 text-primary" />
                     </motion.div>
-                    <h1 className="text-4xl font-black tracking-tight">Achievement Hall</h1>
+                    <h1 className="text-4xl font-black tracking-tight">{t("achievement_hall.title")}</h1>
                     <p className="text-muted-foreground font-medium max-w-xl mx-auto">
-                        Celebrate your progress! Every lesson you complete brings you closer to becoming a Master Reader.
+                        {t("achievement_hall.subtitle")}
                     </p>
                 </section>
 
@@ -137,12 +139,12 @@ const AchievementHall = () => {
                             <div className="flex-1 w-full space-y-4 text-center md:text-left">
                                 <div className="flex justify-between items-end">
                                     <div>
-                                        <h3 className="text-xl font-bold">Level {level} Explorer</h3>
+                                        <h3 className="text-xl font-bold">{t("achievement_hall.level", { level: level })}</h3>
                                         <p className="text-sm text-muted-foreground font-medium">
-                                            {xp} XP earned · {xpToNextLevel - xp} XP to Level {level + 1}
+                                            {t("achievement_hall.xp_details", { xp: xp, needed: xpToNextLevel - xp, next_level: level + 1 })}
                                         </p>
                                     </div>
-                                    <span className="text-sm font-black text-primary">{levelPct}% to Level {level + 1}</span>
+                                    <span className="text-sm font-black text-primary">{t("achievement_hall.pct_to_next", { pct: levelPct, next_level: level + 1 })}</span>
                                 </div>
                                 <Progress value={levelPct} className="h-4 rounded-full bg-white dark:bg-black/20" />
                             </div>
@@ -170,7 +172,7 @@ const AchievementHall = () => {
                                             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110 ${badge.color}`}>
                                                 {badge.unlocked ? badge.icon : <Lock className="w-8 h-8 opacity-40" />}
                                             </div>
-                                            <h4 className="font-bold text-sm text-center">{badge.title}</h4>
+                                            <h4 className="font-bold text-sm text-center">{t(`achievement_hall.badges.${badge.key}_title`)}</h4>
 
                                             {badge.unlocked && (
                                                 <div className="absolute top-3 right-3">
@@ -180,7 +182,7 @@ const AchievementHall = () => {
                                         </Card>
                                     </TooltipTrigger>
                                     <TooltipContent side="bottom" className="rounded-xl p-3 font-medium text-xs">
-                                        {badge.description}
+                                        {t(`achievement_hall.badges.${badge.key}_desc`)}
                                     </TooltipContent>
                                 </Tooltip>
                             </motion.div>
@@ -191,9 +193,9 @@ const AchievementHall = () => {
                 {/* Statistics Row */}
                 <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {[
-                        { label: "Badges Earned",    value: `${unlockedCount} / ${badges.length}`, color: "text-primary" },
-                        { label: "Lessons Completed", value: String(completedCount),               color: "text-cyan-500" },
-                        { label: "Total XP",          value: `${xp} XP`,                          color: "text-amber-500" },
+                        { label: t("achievement_hall.badges_earned"),    value: `${unlockedCount} / ${badges.length}`, color: "text-primary" },
+                        { label: t("achievement_hall.lessons_completed"), value: String(completedCount),               color: "text-cyan-500" },
+                        { label: t("achievement_hall.total_xp"),          value: `${xp} XP`,                          color: "text-amber-500" },
                     ].map((stat, i) => (
                         <div key={i} className="p-8 rounded-[32px] bg-secondary/20 border border-border text-center">
                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">{stat.label}</p>

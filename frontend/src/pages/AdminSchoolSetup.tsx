@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Building2, Loader2, Mail, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Building2, Loader2, Mail, ArrowRight, CheckCircle2, Brain } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -104,17 +104,22 @@ export default function AdminSchoolSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+    <div className="h-screen bg-background flex items-center justify-center p-4 overflow-hidden">
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md space-y-8"
+        className="w-full max-w-md space-y-5"
       >
         {/* Header */}
-        <div className="text-center space-y-2">
-          <img src="/logo.png" alt="IncludEd Logo" className="w-[70%] mx-auto" />
-          <h1 className="text-3xl font-black tracking-tight">Register Your School</h1>
-          <p className="text-muted-foreground">Set up your school admin account to get started.</p>
+        <div className="text-center space-y-1">
+          <div className="flex items-center justify-center gap-4 mb-6">
+            <Brain className="w-10 h-10 text-primary shrink-0" />
+            <div className="bg-white rounded-2xl px-3 py-1.5">
+              <img src="/logo.png" alt="IncludEd" className="h-14 w-auto" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-black tracking-tight">Register Your School</h1>
+          <p className="text-sm text-muted-foreground">Set up your school admin account to get started.</p>
         </div>
 
         {/* Step indicators */}
@@ -134,8 +139,8 @@ export default function AdminSchoolSetup() {
 
         {/* Step 1: Identity */}
         {step === "identity" && (
-          <form onSubmit={handleIdentitySubmit} className="space-y-4">
-            <div className="p-4 rounded-xl bg-secondary/50 border text-sm font-medium text-muted-foreground">
+          <form onSubmit={handleIdentitySubmit} className="space-y-3">
+            <div className="p-3 rounded-xl bg-secondary/50 border text-sm text-muted-foreground">
               Only school administrators can sign up directly. Teachers and students receive email invitations from their admin or teacher.
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -156,7 +161,7 @@ export default function AdminSchoolSetup() {
               <Label>Password</Label>
               <Input type="password" required placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" className="w-full h-12 font-black rounded-full gap-2">
+            <Button type="submit" className="w-full h-11 font-black rounded-full gap-2">
               Continue <ArrowRight className="w-4 h-4" />
             </Button>
             <p className="text-center text-sm text-muted-foreground">
@@ -167,7 +172,7 @@ export default function AdminSchoolSetup() {
 
         {/* Step 2: School */}
         {step === "school" && (
-          <form onSubmit={handleSchoolSubmit} className="space-y-4">
+          <form onSubmit={handleSchoolSubmit} className="space-y-3">
             <div className="space-y-1.5">
               <Label><Building2 className="inline w-4 h-4 mr-1" />School Name</Label>
               <Input required placeholder="e.g. Kigali Primary School" value={schoolName} onChange={e => setSchoolName(e.target.value)} />
@@ -183,10 +188,10 @@ export default function AdminSchoolSetup() {
               </div>
             </div>
             <div className="flex gap-3">
-              <Button type="button" variant="outline" className="flex-1 h-12 font-bold rounded-full" onClick={() => setStep("identity")}>
+              <Button type="button" variant="outline" className="flex-1 h-11 font-bold rounded-full" onClick={() => setStep("identity")}>
                 Back
               </Button>
-              <Button type="submit" className="flex-1 h-12 font-black rounded-full gap-2" disabled={loading}>
+              <Button type="submit" className="flex-1 h-11 font-black rounded-full gap-2" disabled={loading}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> Create School</>}
               </Button>
             </div>

@@ -8,12 +8,16 @@ import { BookOpen, Trophy, Zap, Clock, ArrowRight, Loader2, Star } from "lucide-
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE } from "@/lib/api";
 import { useNavigate } from "react-router-dom"; // Added for navigate function
+import { useTranslation } from "@/i18n";
+import { useContentNavigation } from "@/hooks/useContentNavigation";
 
-const Leaderboard = ({ users }: { users: any[] }) => (
+const Leaderboard = ({ users }: { users: any[] }) => {
+    const { t } = useTranslation();
+    return (
     <Card className="rounded-[32px] border border-border overflow-hidden bg-card/50 shadow-none">
         <CardHeader className="pb-2">
             <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-amber" /> School Leaderboard
+                <Trophy className="w-5 h-5 text-amber" /> {t("student_dashboard.leaderboard")}
             </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -36,7 +40,8 @@ const Leaderboard = ({ users }: { users: any[] }) => (
             </div>
         </CardContent>
     </Card>
-);
+    );
+};
 
 const StudentDashboard = () => {
     const { user, profile } = useAuth();
@@ -45,6 +50,8 @@ const StudentDashboard = () => {
     const [leaderboard, setLeaderboard] = useState<any[]>([]);
     const [myStats, setMyStats] = useState<any>(null);
     const navigate = useNavigate();
+    const { t } = useTranslation();
+    const { openContent, mismatchModal, isChecking } = useContentNavigation();
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -127,7 +134,8 @@ const StudentDashboard = () => {
     return (
         <DashboardLayout role="student">
             <div className="max-w-6xl mx-auto space-y-10 pb-20">
-
+                {mismatchModal}
+                
                 {/* Welcome Section */}
                 <section>
                     <motion.div
@@ -136,8 +144,8 @@ const StudentDashboard = () => {
                         className="flex flex-col md:flex-row md:items-end justify-between gap-6"
                     >
                         <div>
-                            <h1 className="text-4xl font-bold tracking-tight mb-2">Hello, {student.name}! 👋</h1>
-                            <p className="text-muted-foreground font-medium">Ready to continue your learning journey today?</p>
+                            <h1 className="text-4xl font-bold tracking-tight mb-2">{t("student_dashboard.hello", { name: student.name })}</h1>
+                            <p className="text-muted-foreground font-medium">{t("student_dashboard.ready_message")}</p>
                         </div>
 
                         <div className="flex gap-4">
@@ -146,8 +154,8 @@ const StudentDashboard = () => {
                                     <Zap className="w-5 h-5 fill-current" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-tighter">Current Streak</p>
-                                    <p className="text-xl font-bold">{student.streak} Days</p>
+                                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-tighter">{t("student_dashboard.current_streak")}</p>
+                                    <p className="text-xl font-bold">{student.streak} {t("student_dashboard.days")}</p>
                                 </div>
                             </div>
                             <div className="p-4 rounded-3xl bg-secondary/50 border border-border flex items-center gap-3">
@@ -155,8 +163,8 @@ const StudentDashboard = () => {
                                     <Trophy className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-tighter">Level {student.level}</p>
-                                    <p className="text-xl font-bold">Explorer</p>
+                                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-tighter">{t("student_dashboard.level", { level: student.level })}</p>
+                                    <p className="text-xl font-bold">{t("student_dashboard.explorer")}</p>
                                 </div>
                             </div>
                         </div>
@@ -173,9 +181,9 @@ const StudentDashboard = () => {
                             <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-primary/10 transition-colors" />
                             <CardHeader className="pb-2 relative z-10">
                                 <CardTitle className="text-xl font-bold flex items-center gap-2">
-                                    Next Level Progress
+                                    {t("student_dashboard.next_level_progress")}
                                 </CardTitle>
-                                <CardDescription>You are only {student.nextLevelXp - student.xp} XP away from Level {student.level + 1}!</CardDescription>
+                                <CardDescription>{t("student_dashboard.xp_away", { xp: student.nextLevelXp - student.xp, next_level: student.level + 1 })}</CardDescription>
                             </CardHeader>
                             <CardContent className="relative z-10">
                                 <div className="space-y-4">
@@ -191,7 +199,7 @@ const StudentDashboard = () => {
                         {/* Continue Reading */}
                         <div className="space-y-4">
                             <h3 className="text-xs font-black uppercase tracking-[0.3em] text-primary/60 px-1">
-                                Continue Learning
+                                {t("student_dashboard.continue_learning")}
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {recentLessons.length > 0 ? (
@@ -206,15 +214,16 @@ const StudentDashboard = () => {
                                             <CardContent>
                                                 <div className="space-y-4">
                                                     <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
-                                                        <div className="flex items-center gap-1.5 font-black uppercase tracking-widest"><Clock className="w-3.5 h-3.5" /> In progress</div>
+                                                        <div className="flex items-center gap-1.5 font-black uppercase tracking-widest"><Clock className="w-3.5 h-3.5" /> {t("student_dashboard.in_progress")}</div>
                                                         <div className="font-black">{lesson.progress}%</div>
                                                     </div>
                                                     <Progress value={lesson.progress} className="h-2 rounded-full bg-secondary" />
                                                     <Button
-                                                        onClick={() => navigate(`/student/reader/${lesson.id}`)}
+                                                        onClick={() => openContent(lesson)}
+                                                        disabled={isChecking}
                                                         className="w-full rounded-2xl gap-2 font-black uppercase text-xs h-10 tracking-widest"
                                                     >
-                                                        {lesson.status === 'completed' ? 'Review' : 'Resume'} <ArrowRight className="w-4 h-4" />
+                                                        {lesson.status === 'completed' ? t("student_dashboard.review") : t("student_dashboard.resume")} <ArrowRight className="w-4 h-4" />
                                                     </Button>
                                                 </div>
                                             </CardContent>
@@ -223,9 +232,9 @@ const StudentDashboard = () => {
                                 ) : (
                                     <div className="md:col-span-2 flex flex-col items-center justify-center py-12 text-center gap-3 text-muted-foreground border-2 border-dashed border-border rounded-3xl">
                                         <BookOpen className="w-10 h-10 opacity-30" />
-                                        <p className="font-bold text-sm">No lessons started yet</p>
-                                        <p className="text-xs">Head to the Lesson Library and start reading to see your progress here.</p>
-                                        <Button variant="outline" className="mt-2 rounded-xl font-bold" onClick={() => navigate('/student/lessons')}>Browse Lessons</Button>
+                                        <p className="font-bold text-sm">{t("student_dashboard.no_lessons_title")}</p>
+                                        <p className="text-xs">{t("student_dashboard.no_lessons_desc")}</p>
+                                        <Button variant="outline" className="mt-2 rounded-xl font-bold" onClick={() => navigate('/student/lessons')}>{t("student_dashboard.browse_lessons")}</Button>
                                     </div>
                                 )}
                             </div>
@@ -239,7 +248,7 @@ const StudentDashboard = () => {
                         {/* Session Stats */}
                         <Card className="rounded-[32px] border border-border overflow-hidden bg-secondary/20 shadow-none border-dashed p-2">
                             <CardHeader>
-                                <CardTitle className="text-lg font-bold">Quick Stats</CardTitle>
+                                <CardTitle className="text-lg font-bold">{t("student_dashboard.quick_stats")}</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="flex items-center justify-between p-4 rounded-2xl bg-card border border-border">
@@ -247,7 +256,7 @@ const StudentDashboard = () => {
                                         <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-600">
                                             <BookOpen className="w-4 h-4" />
                                         </div>
-                                        <span className="text-sm font-bold">Lessons</span>
+                                        <span className="text-sm font-bold">{t("student_dashboard.lessons_count")}</span>
                                     </div>
                                     <span className="text-lg font-black">{student.lessonsCompleted}</span>
                                 </div>
@@ -256,7 +265,7 @@ const StudentDashboard = () => {
                                         <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-600">
                                             <Clock className="w-4 h-4" />
                                         </div>
-                                        <span className="text-sm font-bold">Time</span>
+                                        <span className="text-sm font-bold">{t("student_dashboard.time_spent")}</span>
                                     </div>
                                     <span className="text-lg font-black">{student.timeSpent}</span>
                                 </div>
@@ -267,7 +276,7 @@ const StudentDashboard = () => {
                         <Card className="rounded-[32px] border border-border overflow-hidden bg-card/50 shadow-none">
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-lg font-bold flex items-center gap-2">
-                                    <Trophy className="w-5 h-5 text-primary" /> Your Badges
+                                    <Trophy className="w-5 h-5 text-primary" /> {t("student_dashboard.your_badges")}
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
@@ -279,7 +288,7 @@ const StudentDashboard = () => {
                                             </div>
                                         ))
                                     ) : (
-                                        <p className="text-xs text-muted-foreground italic">No badges earned yet. Keep reading!</p>
+                                        <p className="text-xs text-muted-foreground italic">{t("student_dashboard.no_badges")}</p>
                                     )}
                                 </div>
                             </CardContent>

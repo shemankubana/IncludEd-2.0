@@ -20,6 +20,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE } from "@/lib/api";
+import { LanguageSelector, useTranslation } from "@/i18n";
 
 interface NavItem {
     title: string;
@@ -36,6 +37,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
     const location = useLocation();
     const navigate = useNavigate();
     const { user, profile, logout, previewMode, setPreviewMode, dyslexicMode, setDyslexicMode } = useAuth();
+    const { t } = useTranslation();
     const effectiveRole = previewMode ? "student" : role;
 
     const handleLogout = async () => {
@@ -48,22 +50,22 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
     };
 
     const studentNav: NavItem[] = [
-        { title: "Home", url: "/student/dashboard", icon: <Home className="w-5 h-5" /> },
-        { title: "My Lessons", url: "/student/lessons", icon: <BookOpen className="w-5 h-5" /> },
-        { title: "Achievements", url: "/student/achievements", icon: <BookHeadphones className="w-5 h-5" /> },
+        { title: t("sidebar.home"), url: "/student/dashboard", icon: <Home className="w-5 h-5" /> },
+        { title: t("sidebar.my_lessons"), url: "/student/lessons", icon: <BookOpen className="w-5 h-5" /> },
+        { title: t("sidebar.achievements"), url: "/student/achievements", icon: <BookHeadphones className="w-5 h-5" /> },
     ];
 
     const teacherNav: NavItem[] = [
-        { title: "Overview", url: "/teacher/dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
-        { title: "Upload Content", url: "/teacher/create", icon: <Settings className="w-5 h-5" /> },
-        { title: "My Content", url: "/teacher/my-content", icon: <BookOpen className="w-5 h-5" /> },
-        { title: "Profile", url: "/teacher/profile", icon: <User className="w-5 h-5" /> },
+        { title: t("sidebar.overview"), url: "/teacher/dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
+        { title: t("sidebar.upload_content"), url: "/teacher/create", icon: <Settings className="w-5 h-5" /> },
+        { title: t("sidebar.my_content"), url: "/teacher/my-content", icon: <BookOpen className="w-5 h-5" /> },
+        { title: t("sidebar.profile"), url: "/teacher/profile", icon: <User className="w-5 h-5" /> },
     ];
 
     const adminNav: NavItem[] = [
-        { title: "Dashboard", url: "/admin/dashboard", icon: <ShieldCheck className="w-5 h-5" /> },
-        { title: "User Roster", url: "/admin/users", icon: <Users className="w-5 h-5" /> },
-        { title: "School Profile", url: "/admin/profile", icon: <GraduationCap className="w-5 h-5" /> },
+        { title: t("sidebar.dashboard"), url: "/admin/dashboard", icon: <ShieldCheck className="w-5 h-5" /> },
+        { title: t("sidebar.user_roster"), url: "/admin/users", icon: <Users className="w-5 h-5" /> },
+        { title: t("sidebar.school_profile"), url: "/admin/profile", icon: <GraduationCap className="w-5 h-5" /> },
     ];
 
     const navItems = effectiveRole === "student" ? studentNav : effectiveRole === "admin" ? adminNav : teacherNav;
@@ -96,7 +98,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                     <SidebarContent className="px-3">
                         <SidebarGroup>
                             <SidebarGroupLabel className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
-                                Menu
+                                {t("sidebar.menu")}
                             </SidebarGroupLabel>
                             <SidebarGroupContent>
                                 <SidebarMenu>
@@ -128,7 +130,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                                 <div className="flex-1 overflow-hidden">
                                     <p className="text-xs font-bold truncate">{profile?.firstName || user?.displayName || "User"}</p>
                                     <p className="text-[10px] text-muted-foreground truncate capitalize">
-                                        {effectiveRole} {previewMode && "(Preview)"}
+                                        {t(`sidebar.${effectiveRole}`)} {previewMode && t("sidebar.preview")}
                                     </p>
                                 </div>
                             </div>
@@ -141,7 +143,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                                     onClick={() => setPreviewMode(!previewMode)}
                                 >
                                     <User className="w-3.5 h-3.5" />
-                                    {previewMode ? "Back to Teacher" : "Preview as Student"}
+                                    {previewMode ? t("sidebar.back_to_teacher") : t("sidebar.preview_as_student")}
                                 </Button>
                             )}
 
@@ -153,9 +155,14 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                                     onClick={() => setDyslexicMode(!dyslexicMode)}
                                 >
                                     <Type className="w-3.5 h-3.5" />
-                                    {dyslexicMode ? "Standard Font" : "Dyslexia Friendly"}
+                                    {dyslexicMode ? t("sidebar.standard_font") : t("sidebar.dyslexia_friendly")}
                                 </Button>
                             )}
+
+                            <div className="flex items-center justify-between px-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{t("sidebar.language")}</span>
+                                <LanguageSelector />
+                            </div>
 
                             <Button
                                 variant="ghost"
@@ -163,7 +170,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                                 className="w-full justify-start gap-2 h-8 text-xs font-semibold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
                                 onClick={handleLogout}
                             >
-                                <LogOut className="w-3.5 h-3.5" /> Log Out
+                                <LogOut className="w-3.5 h-3.5" /> {t("sidebar.log_out")}
                             </Button>
                         </div>
                     </SidebarFooter>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, Star, ArrowRight, RotateCcw, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/i18n";
 
 const words = [
   { word: "Amahoro", meaning: "Peace", phonics: "A · ma · ho · ro" },
@@ -11,6 +12,7 @@ const words = [
 ];
 
 const DemoLessonSection = () => {
+  const { t } = useTranslation();
   const [currentWord, setCurrentWord] = useState(0);
   const [showMeaning, setShowMeaning] = useState(false);
   const [score, setScore] = useState(0);
@@ -44,23 +46,22 @@ const DemoLessonSection = () => {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <div className="text-xs font-semibold text-accent uppercase tracking-widest mb-3">Interactive Demo</div>
+            <div className="text-xs font-semibold text-accent uppercase tracking-widest mb-3">{t("landing.demo.tag")}</div>
             <h2 className="text-4xl lg:text-5xl font-bold text-foreground font-space tracking-tight mb-6">
-              Try an{" "}
-              <span className="text-gradient-cyan">adaptive lesson</span>
+              {t("landing.demo.title_1")}
+              <span className="text-gradient-cyan">{t("landing.demo.title_2")}</span>
             </h2>
             <p className="text-muted-foreground text-lg leading-relaxed mb-8 max-w-md">
-              Experience our Kinyarwanda phonics breakdown with syllable highlighting — a key feature for dyslexic learners.
-              The full platform uses RL to adapt difficulty in real-time.
+              {t("landing.demo.subtitle")}
             </p>
             <div className="space-y-4">
               {[
-                "Syllable-by-syllable breakdown for dyslexia",
-                "RL-powered adaptive difficulty scaling",
-                "Attention monitoring & micro-break triggers",
-                "Gamified progress rewards for engagement",
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-3">
+                t("landing.demo.bullet_1"),
+                t("landing.demo.bullet_2"),
+                t("landing.demo.bullet_3"),
+                t("landing.demo.bullet_4"),
+              ].map((item, idx) => (
+                <div key={idx} className="flex items-center gap-3">
                   <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                   <span className="text-sm text-secondary-foreground">{item}</span>
                 </div>
@@ -107,7 +108,7 @@ const DemoLessonSection = () => {
                     className="space-y-6"
                   >
                     <div className="bg-secondary rounded-xl p-8 text-center">
-                      <p className="text-xs text-muted-foreground mb-3 uppercase tracking-widest">Read this word</p>
+                      <p className="text-xs text-muted-foreground mb-3 uppercase tracking-widest">{t("landing.demo.instruction")}</p>
                       <h3 className="text-5xl font-bold text-foreground font-space mb-3">
                         {words[currentWord].word}
                       </h3>
@@ -123,7 +124,7 @@ const DemoLessonSection = () => {
                         onClick={() => setShowMeaning(true)}
                       >
                         <Volume2 className="w-4 h-4" />
-                        Reveal Meaning
+                        {t("landing.demo.reveal")}
                       </Button>
                     </div>
 
@@ -136,11 +137,11 @@ const DemoLessonSection = () => {
                           className="overflow-hidden space-y-4"
                         >
                           <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-                            <span className="text-muted-foreground text-sm">English: </span>
+                            <span className="text-muted-foreground text-sm">{t("landing.demo.english")}</span>
                             <span className="font-bold text-foreground text-lg">{words[currentWord].meaning}</span>
                           </div>
                           <Button className="w-full rounded-lg gap-2 font-semibold" onClick={handleNext}>
-                            Got It <ArrowRight className="w-4 h-4" />
+                            {t("landing.demo.got_it")} <ArrowRight className="w-4 h-4" />
                           </Button>
                         </motion.div>
                       )}
@@ -155,13 +156,12 @@ const DemoLessonSection = () => {
                     <div className="w-16 h-16 bg-amber/10 rounded-2xl flex items-center justify-center mx-auto">
                       <Trophy className="w-8 h-8 text-amber" />
                     </div>
-                    <h3 className="text-2xl font-bold text-foreground font-space">Mwiza! 🎉</h3>
+                    <h3 className="text-2xl font-bold text-foreground font-space">{t("landing.demo.success_title")}</h3>
                     <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-                      All {words.length} words complete. The RL engine would now adapt
-                      the next lesson based on your performance patterns.
+                      {t("landing.demo.success_desc", { count: words.length })}
                     </p>
                     <Button variant="outline" className="rounded-lg gap-2 border-border" onClick={handleReset}>
-                      <RotateCcw className="w-4 h-4" /> Replay
+                      <RotateCcw className="w-4 h-4" /> {t("landing.demo.replay")}
                     </Button>
                   </motion.div>
                 )}

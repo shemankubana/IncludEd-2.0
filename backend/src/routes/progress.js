@@ -114,9 +114,12 @@ router.post('/:literatureId/complete', authenticateToken, async (req, res) => {
             defaults: { status: 'in_progress', currentSection: 0 }
         });
 
+        // Capture before the update mutates the object
+        const alreadyAwarded = progress.xpAwarded;
+
         // Calculate XP: base per lesson + quiz bonus
         const quizBonus = (score && total) ? Math.round((score / total) * 200) : 0;
-        const xpGain = progress.xpAwarded ? quizBonus : XP_PER_LESSON + quizBonus;
+        const xpGain = alreadyAwarded ? quizBonus : XP_PER_LESSON + quizBonus;
 
         await progress.update({ status: 'completed', completedAt: new Date(), xpAwarded: true });
 
@@ -124,7 +127,7 @@ router.post('/:literatureId/complete', authenticateToken, async (req, res) => {
         const stats = await getOrCreateStats(req.user.userId, req.body.schoolId);
         const newXp       = stats.xp + xpGain;
         const newLevel    = calcLevel(newXp);
-        const newCompleted = progress.xpAwarded ? stats.completedLessons : stats.completedLessons + 1;
+        const newCompleted = alreadyAwarded ? stats.completedLessons : stats.completedLessons + 1;
 
         // Merge quiz badge into the badges array
         let baseBadges = calcBadges({ ...stats.toJSON(), xp: newXp, completedLessons: newCompleted });

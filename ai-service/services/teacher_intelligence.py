@@ -433,14 +433,18 @@ class TeacherIntelligence:
                         f"Écris un bref résumé (3-4 phrases) de ce que l'élève a lu "
                         f'dans "{book_title}". Chapitres lus: {chapter_list}. '
                         f"Personnages principaux: {char_list}. "
-                        f"Ton simple et engageant pour un élève du primaire (9-12 ans)."
+                        f"Ton simple et engageant pour un élève du primaire (9-12 ans). "
+                        f"Utilise le vrai titre et les vrais noms — pas de crochets ni de texte générique. "
+                        f"N'utilise pas de formatage markdown."
                     )
                 else:
                     prompt = (
                         f'Write a brief "Story So Far" recap (3-4 sentences) for a student '
                         f'reading "{book_title}". Chapters completed: {chapter_list}. '
                         f"Main characters: {char_list}. "
-                        f"Keep it simple, engaging, and suitable for a primary school student (ages 9-12)."
+                        f"Keep it simple, engaging, and suitable for a primary school student (ages 9-12). "
+                        f"Use the actual title and character names given — do not use placeholders like [Insert Title Here]. "
+                        f"Do not use markdown formatting."
                     )
                 result = self.gemini.generate(prompt)
                 if result and len(result.strip()) > 30:

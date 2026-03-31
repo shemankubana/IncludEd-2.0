@@ -3,8 +3,10 @@ import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import heroChild from "@/assets/hero-child.jpg";
+import { useTranslation } from "@/i18n";
 
 const HeroSection = () => {
+  const { t } = useTranslation();
   return (
     <section className="relative min-h-screen bg-background bg-grid overflow-hidden pt-16">
       <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px]" />
@@ -20,38 +22,37 @@ const HeroSection = () => {
           >
             <div className="inline-flex items-center gap-2 border border-primary/30 bg-primary/5 px-4 py-1.5 rounded-full">
               <Sparkles className="w-3.5 h-3.5 text-primary" />
-              <span className="text-xs font-semibold text-primary tracking-wide uppercase">RL-Powered Adaptive Learning</span>
+              <span className="text-xs font-semibold text-primary tracking-wide uppercase">{t("landing.hero.tag")}</span>
             </div>
 
             <h1 className="text-5xl lg:text-7xl font-bold leading-[0.95] tracking-tight">
-              <span className="text-foreground">Inclusive</span>
+              <span className="text-foreground">{t("landing.hero.title_1")}</span>
               <br />
-              <span className="text-gradient-lime">education</span>
+              <span className="text-gradient-lime">{t("landing.hero.title_2")}</span>
               <br />
-              <span className="text-foreground">for every learner</span>
+              <span className="text-foreground">{t("landing.hero.title_3")}</span>
             </h1>
 
             <p className="text-lg text-muted-foreground max-w-md leading-relaxed">
-              An AI-powered adaptive platform for students with dyslexia & ADHD in Rwanda.
-              Offline-first, multilingual, and built for classrooms that need it most.
+              {t("landing.hero.subtitle")}
             </p>
 
             <div className="flex flex-wrap gap-3">
               <Link to="/auth">
                 <Button size="lg" className="rounded-lg text-base px-7 gap-2 font-semibold">
-                  Get Started <ArrowRight className="w-4 h-4" />
+                  {t("landing.hero.get_started")} <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
               <Button variant="outline" size="lg" className="rounded-lg text-base px-7 border-border hover:bg-secondary">
-                Watch Demo
+                {t("landing.hero.watch_demo")}
               </Button>
             </div>
 
             <div className="flex gap-10 pt-4">
               {[
-                { value: "< $5", label: "per student/year", color: "text-primary" },
-                { value: "100%", label: "offline capable", color: "text-accent" },
-                { value: "P3–P6", label: "grade levels", color: "text-amber" },
+                { value: t("landing.hero.stat_1_val"), label: t("landing.hero.stat_1_lbl"), color: "text-primary" },
+                { value: t("landing.hero.stat_2_val"), label: t("landing.hero.stat_2_lbl"), color: "text-accent" },
+                { value: t("landing.hero.stat_3_val"), label: t("landing.hero.stat_3_lbl"), color: "text-amber" },
               ].map((stat) => (
                 <div key={stat.label}>
                   <div className={`text-3xl font-bold font-space ${stat.color}`}>{stat.value}</div>
@@ -76,12 +77,12 @@ const HeroSection = () => {
               <div className="absolute bottom-6 left-6 right-6 bg-card/80 backdrop-blur-md rounded-xl p-4 border border-border">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs text-muted-foreground">Adaptive Session</div>
-                    <div className="text-sm font-semibold text-foreground">Kinyarwanda Phonics — Level 3</div>
+                    <div className="text-xs text-muted-foreground">{t("landing.hero.session_lbl")}</div>
+                    <div className="text-sm font-semibold text-foreground">{t("landing.hero.session_sub")}</div>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                    <span className="text-xs text-primary font-medium">Live</span>
+                    <span className="text-xs text-primary font-medium">{t("landing.hero.live")}</span>
                   </div>
                 </div>
                 <div className="mt-3 h-1.5 bg-secondary rounded-full overflow-hidden">

@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { WifiOff, Brain, DollarSign, BarChart3, Globe, Cpu } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useTranslation } from "@/i18n";
 
 interface FeatureCardProps {
   icon: LucideIcon;
@@ -21,11 +22,10 @@ const FeatureCard = ({ icon: Icon, title, description, accentColor, iconBg, span
   </div>
 );
 
-const features: (FeatureCardProps & { delay: number })[] = [
+const features = [
   {
     icon: Cpu,
-    title: "Reinforcement Learning Engine",
-    description: "PPO/DQN algorithms continuously learn from student interactions, optimising content delivery and pacing for each learner in real-time.",
+    key: "f1",
     accentColor: "text-primary",
     iconBg: "bg-primary/10",
     span: "md:col-span-2",
@@ -33,32 +33,28 @@ const features: (FeatureCardProps & { delay: number })[] = [
   },
   {
     icon: Brain,
-    title: "Dyslexia & ADHD Support",
-    description: "Adaptive micro-breaks, syllable highlighting, attention monitoring via mouse/keyboard telemetry — no cameras needed.",
+    key: "f2",
     accentColor: "text-accent",
     iconBg: "bg-accent/10",
     delay: 0.1,
   },
   {
     icon: WifiOff,
-    title: "Offline-First PWA",
-    description: "Full lessons cached locally with Service Workers. Auto-syncs progress when connectivity returns. Zero internet dependency.",
+    key: "f3",
     accentColor: "text-amber",
     iconBg: "bg-amber/10",
     delay: 0.2,
   },
   {
     icon: BarChart3,
-    title: "Teacher & Parent Dashboards",
-    description: "Real-time analytics per student. Identify struggles early, track class-wide progress, and share reports with parents.",
+    key: "f4",
     accentColor: "text-primary",
     iconBg: "bg-primary/10",
     delay: 0.3,
   },
   {
     icon: Globe,
-    title: "Multilingual: Kinyarwanda, French & English",
-    description: "Content aligned with Rwanda's Competence-Based Curriculum. Culturally relevant stories for P3–P6 students.",
+    key: "f5",
     accentColor: "text-accent",
     iconBg: "bg-accent/10",
     span: "md:col-span-2",
@@ -67,6 +63,8 @@ const features: (FeatureCardProps & { delay: number })[] = [
 ];
 
 const FeaturesSection = () => {
+  const { t } = useTranslation();
+
   return (
     <section className="py-28 bg-background relative">
       <div className="container mx-auto px-6">
@@ -76,24 +74,31 @@ const FeaturesSection = () => {
           viewport={{ once: true }}
           className="mb-16"
         >
-          <div className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Why IncludEd</div>
+          <div className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">{t("landing.features.tag")}</div>
           <h2 className="text-4xl lg:text-5xl font-bold text-foreground font-space tracking-tight max-w-xl">
-            Built for inclusion.{" "}
-            <span className="text-gradient-cyan">Built for Rwanda.</span>
+            {t("landing.features.title_1")}
+            <span className="text-gradient-cyan">{t("landing.features.title_2")}</span>
           </h2>
         </motion.div>
 
         <div className="grid md:grid-cols-3 gap-4">
           {features.map((feature) => (
             <motion.div
-              key={feature.title}
+              key={feature.key}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: feature.delay }}
               className={feature.span || ""}
             >
-              <FeatureCard {...feature} />
+              <FeatureCard 
+                icon={feature.icon}
+                accentColor={feature.accentColor}
+                iconBg={feature.iconBg}
+                span={feature.span}
+                title={t(`landing.features.items.${feature.key}_title`)}
+                description={t(`landing.features.items.${feature.key}_desc`)}
+              />
             </motion.div>
           ))}
         </div>
