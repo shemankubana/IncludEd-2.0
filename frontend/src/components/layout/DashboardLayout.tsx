@@ -85,7 +85,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                                     />
                                 </div>
                             ) : (
-                                <img src="/logo.png" alt="IncludEd Logo" className="h-12 w-auto transition-transform hover:scale-105" />
+                                <img src="/logo.png" alt="IncludEd Logo" className="h-[70px] w-auto transition-transform hover:scale-105" />
                             )}
                             {profile?.school && (
                                 <p className="text-[10px] font-black uppercase text-primary tracking-widest text-center px-4 leading-tight">
