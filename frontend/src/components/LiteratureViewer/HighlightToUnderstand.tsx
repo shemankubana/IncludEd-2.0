@@ -101,7 +101,7 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
     const [loading, setLoading] = useState(false);
     const [selectedText, setSelectedText] = useState("");
     const [result, setResult] = useState<SimplificationResult | null>(null);
-    const [position, setPosition] = useState({ top: 0, left: 0 });
+    const [position, setPosition] = useState<{ top: number; left: number; transform?: string }>({ top: 0, left: 0 });
     const [showDetails, setShowDetails] = useState(false);
     const popupRef = useRef<HTMLDivElement>(null);
 
@@ -126,9 +126,18 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
         const rect = range.getBoundingClientRect();
 
         setSelectedText(text);
+        
+        // Smarter positioning: flip above if near bottom of screen
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const estimatedHeight = 450; // Max height we usually see
+        const shouldFlip = spaceBelow < estimatedHeight && rect.top > estimatedHeight;
+
         setPosition({
-            top: rect.bottom + window.scrollY + 8,
+            top: shouldFlip 
+                ? rect.top + window.scrollY - 10 // Position above
+                : rect.bottom + window.scrollY + 8, // Position below
             left: Math.max(16, Math.min(rect.left + window.scrollX, window.innerWidth - 380)),
+            transform: shouldFlip ? "translateY(-100%)" : "none"
         });
         setVisible(true);
         setShowDetails(false);
@@ -272,6 +281,7 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
                 position: "absolute",
                 top: position.top,
                 left: position.left,
+                transform: position.transform || "none",
                 zIndex: 9999,
             }}
             role="dialog"
@@ -289,136 +299,139 @@ const HighlightToUnderstand: React.FC<HighlightToUnderstandProps> = ({
                 </div>
             ) : result ? (
                 <>
-                    {/* Simple version — always first */}
-                    <div className="highlight-popup__content-main">
-                        <div className="highlight-popup__simple p-4 bg-primary/10 rounded-xl border border-primary/20 mb-3 shadow-inner">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Sparkles size={16} className="text-primary animate-pulse" />
-                                <span className="text-[10px] font-bold text-primary tracking-widest uppercase">Simple Meaning</span>
+                    {/* Scrollable Content Container */}
+                    <div className="highlight-popup__scroll-container">
+                        {/* Simple version — always first */}
+                        <div className="highlight-popup__content-main">
+                            <div className="highlight-popup__simple p-4 bg-primary/10 rounded-xl border border-primary/20 mb-3 shadow-inner">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Sparkles size={16} className="text-primary animate-pulse" />
+                                    <span className="text-[10px] font-bold text-primary tracking-widest uppercase">Simple Meaning</span>
+                                </div>
+                                <p className="text-sm font-semibold leading-relaxed text-blue-900">
+                                    {result.simple_version}
+                                </p>
                             </div>
-                            <p className="text-sm font-semibold leading-relaxed text-blue-900">
-                                {result.simple_version}
-                            </p>
+
+                            {/* Vocabulary — pulled out for instant visibility */}
+                            {result.vocabulary && result.vocabulary.length > 0 && (
+                                <div className="highlight-popup__vocab-inline px-4 pb-2">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <BookOpen size={14} className="text-blue-600" />
+                                        <span className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">Key Words</span>
+                                    </div>
+                                    {result.vocabulary.slice(0, 2).map((v, i) => (
+                                        <div key={i} className="mb-3 last:mb-0 p-3 bg-secondary/30 rounded-lg border border-border/50">
+                                            <div className={`text-[10px] font-bold uppercase tracking-tighter mb-1 ${(v.category?.toLowerCase() === 'archaic' || v.type === 'archaic') ? 'text-purple-700' : 'text-blue-700'
+                                                }`}>
+                                                {v.category || (v.type === 'archaic' ? 'Archaic' : 'Word help')}: <span className="text-sm">{v.word}</span>
+                                            </div>
+                                            <div className="text-xs text-blue-800 leading-normal">
+                                                <strong>{v.meaning}</strong>
+                                                {v.analogy && (
+                                                    <div className="mt-1.5 pt-1 border-t border-blue-200/50">
+                                                        <span className="text-[10px] opacity-80 italic block">
+                                                            <Lightbulb size={10} className="inline mr-1" />
+                                                            {v.analogy}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
-                        {/* Vocabulary — pulled out for instant visibility */}
-                        {result.vocabulary && result.vocabulary.length > 0 && (
-                            <div className="highlight-popup__vocab-inline px-4 pb-2">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <BookOpen size={14} className="text-blue-600" />
-                                    <span className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">Key Words</span>
-                                </div>
-                                {result.vocabulary.slice(0, 2).map((v, i) => (
-                                    <div key={i} className="mb-3 last:mb-0 p-3 bg-secondary/30 rounded-lg border border-border/50">
-                                        <div className={`text-[10px] font-bold uppercase tracking-tighter mb-1 ${(v.category?.toLowerCase() === 'archaic' || v.type === 'archaic') ? 'text-purple-700' : 'text-blue-700'
-                                            }`}>
-                                            {v.category || (v.type === 'archaic' ? 'Archaic' : 'Word help')}: <span className="text-sm">{v.word}</span>
-                                        </div>
-                                        <div className="text-xs text-blue-800 leading-normal">
-                                            <strong>{v.meaning}</strong>
-                                            {v.analogy && (
-                                                <div className="mt-1.5 pt-1 border-t border-blue-200/50">
-                                                    <span className="text-[10px] opacity-80 italic block">
-                                                        <Lightbulb size={10} className="inline mr-1" />
-                                                        {v.analogy}
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </div>
+                        {/* Phonics Breakdown (Project Revamp) */}
+                        {result.phonics && (
+                            <div className="highlight-popup__phonics px-4 py-3 bg-blue-50/50 border border-blue-100 rounded-xl mb-3">
+                                <div className="flex items-center justify-between mb-1">
+                                    <div className="flex flex-col">
+                                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">How to say it</span>
+                                        <span className="text-sm font-black text-blue-900">{result.phonics.display}</span>
                                     </div>
-                                ))}
+                                    <div className="text-right">
+                                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Sounds like</span>
+                                        <span className="text-sm font-black text-primary block">{result.phonics.pronunciation}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Toggle for more details (intent, devices, culture) */}
+                        <button
+                            className="highlight-popup__toggle"
+                            onClick={() => setShowDetails(!showDetails)}
+                        >
+                            {showDetails ? "Show less" : "Tell me more"} ▾
+                        </button>
+
+                        {showDetails && (
+                            <div className="highlight-popup__details">
+                                {/* Author's intent */}
+                                {result.author_intent && (
+                                    <div className="highlight-popup__intent">
+                                        <BookOpen size={14} />
+                                        <p><strong>Why it's written this way:</strong> {result.author_intent}</p>
+                                    </div>
+                                )}
+
+                                {/* Remaining Vocabulary (if > 2) */}
+                                {result.vocabulary.length > 2 && (
+                                    <div className="highlight-popup__vocab mt-2">
+                                        <p className="highlight-popup__section-title">More words:</p>
+                                        {result.vocabulary.slice(2).map((v, i) => (
+                                            <div key={i} className="highlight-popup__vocab-item">
+                                                <strong>{v.word}</strong> — {v.meaning}
+                                                {v.analogy && (
+                                                    <span className="highlight-popup__analogy">{v.analogy}</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Literary devices */}
+                                {result.literary_devices.length > 0 && (
+                                    <div className="highlight-popup__devices">
+                                        <p className="highlight-popup__section-title">Literary techniques:</p>
+                                        {result.literary_devices.map((d, i) => (
+                                            <span key={i} className="highlight-popup__device-badge">
+                                                {d.device}: {d.explanation}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Cultural context */}
+                                {result.cultural_context && (
+                                    <div className="highlight-popup__cultural">
+                                        <p><strong>Cultural note:</strong> {result.cultural_context}</p>
+                                    </div>
+                                )}
+
+                                {/* Kinyarwanda bridge */}
+                                {result.kinyarwanda_bridge && (
+                                    <div className="highlight-popup__cultural" style={{ borderLeft: "3px solid #16a34a" }}>
+                                        <p><strong>Rwanda connection:</strong> {result.kinyarwanda_bridge}</p>
+                                    </div>
+                                )}
+
+                                {/* Phase 6: "See it used again" — other occurrences in the book */}
+                                {seeItAgain.length > 0 && (
+                                    <div className="highlight-popup__see-again" style={{ marginTop: "10px" }}>
+                                        <p className="highlight-popup__section-title">See it used again:</p>
+                                        {seeItAgain.map((ctx, i) => (
+                                            <p key={i} style={{ fontSize: "11px", fontStyle: "italic", color: "#64748b", margin: "4px 0", paddingLeft: "8px", borderLeft: "2px solid #e2e8f0" }}>
+                                                "{ctx}"
+                                            </p>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
-
-                    {/* Phonics Breakdown (Project Revamp) */}
-                    {result.phonics && (
-                        <div className="highlight-popup__phonics px-4 py-3 bg-blue-50/50 border border-blue-100 rounded-xl mb-3">
-                            <div className="flex items-center justify-between mb-1">
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">How to say it</span>
-                                    <span className="text-sm font-black text-blue-900">{result.phonics.display}</span>
-                                </div>
-                                <div className="text-right">
-                                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Sounds like</span>
-                                    <span className="text-sm font-black text-primary block">{result.phonics.pronunciation}</span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Toggle for more details (intent, devices, culture) */}
-                    <button
-                        className="highlight-popup__toggle"
-                        onClick={() => setShowDetails(!showDetails)}
-                    >
-                        {showDetails ? "Show less" : "Tell me more"} ▾
-                    </button>
-
-                    {showDetails && (
-                        <div className="highlight-popup__details">
-                            {/* Author's intent */}
-                            {result.author_intent && (
-                                <div className="highlight-popup__intent">
-                                    <BookOpen size={14} />
-                                    <p><strong>Why it's written this way:</strong> {result.author_intent}</p>
-                                </div>
-                            )}
-
-                            {/* Remaining Vocabulary (if > 2) */}
-                            {result.vocabulary.length > 2 && (
-                                <div className="highlight-popup__vocab mt-2">
-                                    <p className="highlight-popup__section-title">More words:</p>
-                                    {result.vocabulary.slice(2).map((v, i) => (
-                                        <div key={i} className="highlight-popup__vocab-item">
-                                            <strong>{v.word}</strong> — {v.meaning}
-                                            {v.analogy && (
-                                                <span className="highlight-popup__analogy">{v.analogy}</span>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Literary devices */}
-                            {result.literary_devices.length > 0 && (
-                                <div className="highlight-popup__devices">
-                                    <p className="highlight-popup__section-title">Literary techniques:</p>
-                                    {result.literary_devices.map((d, i) => (
-                                        <span key={i} className="highlight-popup__device-badge">
-                                            {d.device}: {d.explanation}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Cultural context */}
-                            {result.cultural_context && (
-                                <div className="highlight-popup__cultural">
-                                    <p><strong>Cultural note:</strong> {result.cultural_context}</p>
-                                </div>
-                            )}
-
-                            {/* Kinyarwanda bridge */}
-                            {result.kinyarwanda_bridge && (
-                                <div className="highlight-popup__cultural" style={{ borderLeft: "3px solid #16a34a" }}>
-                                    <p><strong>Rwanda connection:</strong> {result.kinyarwanda_bridge}</p>
-                                </div>
-                            )}
-
-                            {/* Phase 6: "See it used again" — other occurrences in the book */}
-                            {seeItAgain.length > 0 && (
-                                <div className="highlight-popup__see-again" style={{ marginTop: "10px" }}>
-                                    <p className="highlight-popup__section-title">See it used again:</p>
-                                    {seeItAgain.map((ctx, i) => (
-                                        <p key={i} style={{ fontSize: "11px", fontStyle: "italic", color: "#64748b", margin: "4px 0", paddingLeft: "8px", borderLeft: "2px solid #e2e8f0" }}>
-                                            "{ctx}"
-                                        </p>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
 
                     {/* Action buttons */}
                     <div className="highlight-popup__actions">

@@ -2,8 +2,9 @@ import requests
 import os
 import json
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Tuple, Optional
 from huggingface_hub import InferenceClient
+from .xai_service import XAIService
 
 class HFInferenceService:
     """
@@ -20,8 +21,11 @@ class HFInferenceService:
             "structural_analysis": "Qwen/Qwen2.5-72B-Instruct",
             "quiz_generation": "Qwen/Qwen2.5-72B-Instruct",
             "character_ner": "dbmdz/bert-large-cased-finetuned-conll03-english",
-            "character_qa": "deepset/deberta-v3-base-squad2"
+            "character_qa": "deepset/deberta-v3-base-squad2",
+            "teacher_insight": "Qwen/Qwen2.5-72B-Instruct" # Primary choice
         }
+        
+        self.xai = XAIService()
 
     def _query(self, model_id: str, payload: Dict[str, Any], wait_for_model: bool = True) -> Any:
         """Fallback low-level request handler if specific client methods don't fit."""
@@ -145,3 +149,53 @@ class HFInferenceService:
         except Exception as e:
             print(f"❌ QA failed: {e}")
             return {}
+    def generate_pedagogical_insight(
+        self,
+        student_name: str,
+        rl_history: List[Dict[str, Any]],
+        context: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Generates a teacher-facing insight based on RL history.
+        Uses HF Cloud (Qwen) with a fallback to xAI (Grok).
+        """
+        if not self.api_token and not self.xai.is_available():
+            return None
+
+        # Format RL History for the prompt
+        history_summary = "\n".join([
+            f"- Action: {h['action']}, Reasoning: {h['reason']}"
+            for h in rl_history[-10:] if 'action' in h and 'reason' in h
+        ])
+
+        prompt = (
+            f"As a pedagogical expert, analyze the recent reading session for {student_name}.\n"
+            f"The AI reading assistant took the following actions based on the student's telemetry:\n"
+            f"{history_summary}\n\n"
+            f"Write a 2-3 sentence insight for the teacher. Focus on *why* the student is "
+            f"struggling and what teaching strategy to use next (e.g. phonics, 1-on-1, "
+            f"pre-teaching vocabulary). Keep it actionable and warm. "
+            f"Do not use markdown formatting."
+        )
+
+        # ── Attempt 1: Hugging Face (Cloud) ─────────────────────────
+        if self.api_token:
+            try:
+                print(f"📡 Requesting Teacher Insight from HF Cloud ({self.models['teacher_insight']})...")
+                response = self.client.chat_completion(
+                    messages=[{"role": "user", "content": prompt}],
+                    model=self.models["teacher_insight"],
+                    max_tokens=250,
+                )
+                result = response.choices[0].message.content.strip()
+                if result and len(result) > 20:
+                    return result
+            except Exception as e:
+                print(f"⚠️ HF Insight generation failed: {e}. Falling back...")
+
+        # ── Attempt 2: xAI (Grok) Fallback ──────────────────────────
+        if self.xai.is_available():
+            print(f"📡 Falling back to xAI (Grok) for Teacher Insight...")
+            return self.xai.generate_insight(prompt)
+
+        return None

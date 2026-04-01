@@ -22,6 +22,7 @@ from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional
 
 from .gemini_service import GeminiService
+from .hf_inference_service import HFInferenceService
 
 
 class TeacherIntelligence:
@@ -37,12 +38,14 @@ class TeacherIntelligence:
 
     def __init__(self):
         self.gemini = GeminiService()
+        self.hf     = HFInferenceService()
 
     def student_summary(
         self,
         student_name: str,
         comprehension_data: Dict[str, Any],
         learner_profile: Dict[str, Any],
+        rl_action_history: List[Dict[str, Any]] = [],
         class_average_chapter: int = 0,
     ) -> Dict[str, Any]:
         """
@@ -151,11 +154,16 @@ class TeacherIntelligence:
             preferred_adaptations, best_time,
         )
 
-        # Build summary
-        summary = self._build_summary(
-            student_name, chapters_read, avg_comp, vocab_progress,
-            strengths, areas, chapters_behind, total_time,
+        # Build summary using MultiCloud Fallback (HF -> Grok -> Gemini)
+        summary = self.hf.generate_pedagogical_insight(
+            student_name, rl_action_history
         )
+
+        if not summary or len(summary) < 20:
+            summary = self._build_gemini_summary(
+                student_name, chapters_read, avg_comp, vocab_progress,
+                strengths, areas, chapters_behind, total_time,
+            )
 
         return {
             "student_name": student_name,
@@ -175,7 +183,7 @@ class TeacherIntelligence:
             }
         }
 
-    def _build_summary(
+    def _build_gemini_summary(
         self,
         name: str,
         chapters: int,
@@ -186,29 +194,21 @@ class TeacherIntelligence:
         behind: int,
         total_time: float,
     ) -> str:
+        """
+        Premium Gemini fallback for summary generation.
+        """
         parts = []
-
-        # Progress
         comp_desc = "excellent" if avg_comp >= 0.8 else "good" if avg_comp >= 0.6 else "developing" if avg_comp >= 0.4 else "needs support"
-        parts.append(
-            f"{name} has read {chapters} chapter{'s' if chapters != 1 else ''} "
-            f"and is showing {comp_desc} progress in their comprehension ({int(avg_comp * 100)}%)."
-        )
-
-        if behind > 0:
-            parts.append(f"Currently {behind} chapter{'s' if behind != 1 else ''} behind the class average.")
-
-        # Strengths
-        if strengths:
-            parts.append(f"Strengths: {', '.join(strengths[:3])}.")
-
-        # Areas
-        if areas:
-            parts.append(f"Areas for growth: {', '.join(areas[:3])}.")
-
-        # Time
-        if total_time > 0:
-            parts.append(f"Total reading time: {int(total_time)} minutes.")
+        parts.append(f"{name} has read {chapters} chapters with {comp_desc} comprehension ({int(avg_comp * 100)}%).")
+        if behind > 0: parts.append(f"Currently {behind} chapters behind pace.")
+        
+        if self.gemini.is_available():
+            prompt = (
+                f"Convert these student stats into a warm 2-sentence teacher summary for {name}:\n"
+                f"Stats: {' '.join(parts)}. Strengths: {', '.join(strengths)}. Areas: {', '.join(areas)}."
+            )
+            res = self.gemini.generate(prompt)
+            if res: return res
 
         return " ".join(parts)
 

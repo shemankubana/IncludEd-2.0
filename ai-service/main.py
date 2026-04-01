@@ -180,6 +180,9 @@ class SessionUpdateRequest(BaseModel):
 class RLPredictRequest(BaseModel):
     state_vector: List[float]
     content_type: float = 0.5  # 0.0=generic, 0.5=novel, 1.0=play
+    student_id: Optional[str] = None
+    book_id: Optional[str] = None
+    section_id: Optional[str] = "unknown"
 
 
 class StudentSummaryRequest(BaseModel):
@@ -671,8 +674,12 @@ async def teacher_student_summary(req: StudentSummaryRequest):
     """Generate natural language summary for a student."""
     comp_data = comprehension_tracker.get_summary(req.student_id, req.book_id)
     profile = learner_embedding.get_profile_summary(req.student_id)
+    
+    # RL History from comprehension tracker
+    rl_history = comp_data.get("rl_action_history", [])
+    
     return teacher_intelligence.student_summary(
-        req.student_name, comp_data, profile, req.class_average_chapter,
+        req.student_name, comp_data, profile, rl_history, req.class_average_chapter,
     )
 
 
@@ -912,12 +919,21 @@ async def adapt_text(req: Dict[str, Any]):
 @app.post("/rl/predict", tags=["rl"])
 async def rl_predict(req: RLPredictRequest):
     """Get pedagogical action recommendation from RL agent."""
-    action_id, action_label = rl_agent.predict_from_state_vector(
+    action_id, action_label, reasoning = rl_agent.predict_from_state_vector(
         req.state_vector, req.content_type
     )
+    
+    # Record action in comprehension tracker if context provided
+    if req.student_id and req.book_id:
+        comprehension_tracker.record_rl_action(
+            req.student_id, req.book_id, req.section_id,
+            action_id, action_label, reasoning
+        )
+
     return {
         "action_id": action_id,
         "action_label": action_label,
+        "reasoning": reasoning,
         "fallback": not rl_agent.model_ready
     }
 

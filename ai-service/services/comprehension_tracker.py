@@ -100,6 +100,9 @@ class ComprehensionGraph:
     # Predicted struggle zones
     struggle_predictions: List[Dict[str, Any]] = field(default_factory=list)
 
+    # RL Pedagogical Actions (D6)
+    rl_actions: List[Dict[str, Any]] = field(default_factory=list) # {timestamp, section_id, action_id, label, reason}
+
     # STT Reading Fluency
     stt_readings: List[Dict[str, Any]] = field(default_factory=list) # {timestamp, section_id, accuracy, wpm, feedback}
 
@@ -163,6 +166,7 @@ class ComprehensionTracker:
                     vocab_mastered=data.get("vocab_mastered", []),
                     highlights=data.get("highlights", []),
                     struggle_predictions=data.get("struggle_predictions", []),
+                    rl_actions=data.get("rl_actions", []),
                     stt_readings=data.get("stt_readings", []),
                     first_session=data.get("first_session", 0),
                     last_session=data.get("last_session", 0),
@@ -224,6 +228,7 @@ class ComprehensionTracker:
             ],
             "highlights": graph.highlights[-100:],  # Keep last 100
             "struggle_predictions": graph.struggle_predictions,
+            "rl_actions": graph.rl_actions[-100:], # Keep last 100 pedagogical interventions
             "stt_readings": graph.stt_readings[-50:], # Keep last 50
             "first_session": graph.first_session,
             "last_session": graph.last_session,
@@ -366,6 +371,26 @@ class ComprehensionTracker:
         graph.devices_recognized[device] = graph.devices_recognized.get(device, 0) + 1
         self._save(student_id, book_id)
 
+    def record_rl_action(
+        self,
+        student_id: str,
+        book_id: str,
+        section_id: str,
+        action_id: int,
+        label: str,
+        reason: str
+    ):
+        """Record a pedagogical action triggered by the RL agent."""
+        graph = self.get_or_create(student_id, book_id)
+        graph.rl_actions.append({
+            "timestamp": time.time(),
+            "section_id": section_id,
+            "action_id": action_id,
+            "action": label,
+            "reason": reason
+        })
+        self._save(student_id, book_id)
+
     def record_stt_assessment(
         self,
         student_id: str,
@@ -463,6 +488,7 @@ class ComprehensionTracker:
             "vocabulary_progress": round(vocab_progress, 2),
             "total_highlights": len(graph.highlights),
             "recent_highlights": graph.highlights[-20:],  # last 20 for teacher common-pattern detection
+            "rl_action_history": graph.rl_actions[-30:], # last 30 pedagogical interventions
             "struggle_predictions": graph.struggle_predictions,
             "stt_history": graph.stt_readings,
             "last_session": graph.last_session,

@@ -23,6 +23,16 @@ ACTION_LABELS = {
     5: "Attention Break",
 }
 
+# State vector indices for easier reference
+IDX_SPEED      = 0
+IDX_DWELL      = 1
+IDX_HESITATION = 2
+IDX_BACKTRACK  = 3
+IDX_ATTENTION  = 4
+IDX_DISABILITY = 5
+IDX_DIFFICULTY = 6
+IDX_FATIGUE    = 7
+
 # Disability encoding
 DISABILITY_NONE     = 0.0
 DISABILITY_DYSLEXIA = 0.5
@@ -143,7 +153,7 @@ class RLAgentService:
         self,
         state_vector:  List[float],
         content_type:  float = 0.5,  # 0.0=generic, 0.5=novel, 1.0=play (v2 only)
-    ) -> Tuple[int, str]:
+    ) -> Tuple[int, str, str]:
         """
         Predict the best pedagogical action from a state vector.
 
@@ -155,7 +165,7 @@ class RLAgentService:
             content_type: content type encoding for v2 models (appended if needed)
 
         Returns:
-            (action_id, action_label)
+            (action_id, action_label, reasoning)
         """
         if len(state_vector) not in (8, 9):
             raise ValueError(
@@ -177,7 +187,10 @@ class RLAgentService:
         else:
             action_id = self._rule_based_fallback(state_vector[:8])
 
-        return action_id, ACTION_LABELS.get(action_id, "Unknown")
+        label = ACTION_LABELS.get(action_id, "Unknown")
+        reason = self._get_pedagogical_reasoning(state_vector[:8], action_id)
+
+        return action_id, label, reason
 
     def predict_action(
         self,
@@ -190,7 +203,7 @@ class RLAgentService:
         scroll_hesitation: float = 0.0,
         backtrack_freq: float    = 0.0,
         session_fatigue: float   = 0.0,
-    ) -> Tuple[int, str]:
+    ) -> Tuple[int, str, str]:
         """
         Backwards-compatible prediction method (also used by /adapt-text).
         Constructs the full 8-dim state from available parameters.
@@ -244,6 +257,49 @@ class RLAgentService:
         if attention_score < 0.3:
             return 1       # Light Simplification
         return 0           # Keep Original
+
+    def _get_pedagogical_reasoning(self, state: List[float], action_id: int) -> str:
+        """
+        Derives a human-readable explanation for the chosen RL action.
+        """
+        if action_id == 0:
+            return "Student is in a flow state with optimal comprehension."
+        
+        # High-level triggers based on the state vector
+        speed       = state[IDX_SPEED]
+        dwell       = state[IDX_DWELL]
+        backtrack   = state[IDX_BACKTRACK]
+        attention   = state[IDX_ATTENTION]
+        difficulty  = state[IDX_DIFFICULTY]
+        fatigue     = state[IDX_FATIGUE]
+
+        reasons = []
+        if action_id == 1: # Light Simplification
+            if attention < 0.5: reasons.append("Subtle drop in focus detected.")
+            if difficulty > 0.6: reasons.append("Text complexity is slightly elevated for current pace.")
+            return " ".join(reasons) or "Lightening the cognitive load for easier flow."
+
+        if action_id == 2: # Heavy Simplification
+            if difficulty > 0.8: reasons.append("Extremely high text difficulty detected.")
+            if backtrack > 0.4: reasons.append("Frequent re-reading suggest comprehension breakdown.")
+            return " ".join(reasons) or "Switching to simplified version to bridge major comprehension gaps."
+
+        if action_id == 3: # TTS + Highlights
+            if backtrack > 0.3: reasons.append("Visual decoding strain identified through backtracking.")
+            if difficulty > 0.5: reasons.append("Multi-modal support requested to aid word recognition.")
+            return " ".join(reasons) or "Enabling audio-visual support to assist with decoding."
+
+        if action_id == 4: # Syllable Break
+            if dwell > 0.5: reasons.append("High dwell time indicates struggle with multi-syllabic words.")
+            if backtrack > 0.3: reasons.append("Phonemic decoding error suspected.")
+            return " ".join(reasons) or "Breaking down words into sounds to support decoding."
+
+        if action_id == 5: # Attention Break
+            if attention < 0.3: reasons.append("Critical dip in attention score.")
+            if fatigue > 0.7: reasons.append("High session fatigue detected.")
+            return " ".join(reasons) or "Suggesting a focus refresh to recover from cognitive fatigue."
+
+        return "Pedagogical intervention triggered by reading telemetry patterns."
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

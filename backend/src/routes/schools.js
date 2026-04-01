@@ -4,6 +4,7 @@ import { School } from '../models/School.js';
 import { User } from '../models/User.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { upload } from '../config/upload.js';
+import { uploadLocalFileToStorage } from '../services/storageService.js';
 
 const router = express.Router();
 
@@ -68,7 +69,12 @@ router.put('/mine', authenticateToken, upload.single('logo'), async (req, res) =
 
         const updates = { name, city, country, emailDomain };
         if (req.file) {
-            updates.logoUrl = `/uploads/${req.file.filename}`;
+            try {
+                updates.logoUrl = await uploadLocalFileToStorage(req.file.path, req.file.originalname, req.file.mimetype, 'logos');
+            } catch (storageErr) {
+                console.warn(`⚠️  Firebase Storage upload failed, falling back to local path: ${storageErr.message}`);
+                updates.logoUrl = `/uploads/${req.file.filename}`;
+            }
         }
 
         await school.update(updates);

@@ -5,6 +5,7 @@ import { Literature } from '../models/Literature.js';
 import { processPDF } from '../services/pdfProcessor.js';
 import { splitIntoChapters } from '../services/chapterSplitter.js';
 import { generateQuestions } from '../services/questionGenerator.js';
+import { uploadLocalFileToStorage } from '../services/storageService.js';
 import { sequelize } from '../config/database.js';
 import { Op } from 'sequelize';
 import axios from 'axios';
@@ -65,8 +66,19 @@ router.post('/upload', authenticateToken, upload.fields([
     const files = req.files;
     const pdfFile = files?.file?.[0];
     const imageFile = files?.image?.[0];
-    
+
     if (pdfFile) console.log(`   - PDF File: ${pdfFile.originalname} (${pdfFile.size} bytes)`);
+
+    // Upload cover image to Firebase Storage immediately so the path is cloud-persisted
+    let imageUrl = null;
+    if (imageFile) {
+      try {
+        imageUrl = await uploadLocalFileToStorage(imageFile.path, imageFile.originalname, imageFile.mimetype, 'covers');
+      } catch (storageErr) {
+        console.warn(`⚠️  Firebase Storage upload failed, falling back to local path: ${storageErr.message}`);
+        imageUrl = `/uploads/${imageFile.filename}`;
+      }
+    }
 
     const isSimplifyEnabled = simplifyText === 'true';
     const isAudioEnabled = generateAudio === 'true';
@@ -114,7 +126,7 @@ router.post('/upload', authenticateToken, upload.fields([
       author: author || 'Unknown',
       language: aiDetectedLanguage,
       subject: subject || 'General',
-      imageUrl: imageFile ? `/uploads/${imageFile.filename}` : null,
+      imageUrl,
       originalContent,
       adaptedContent,
       wordCount,

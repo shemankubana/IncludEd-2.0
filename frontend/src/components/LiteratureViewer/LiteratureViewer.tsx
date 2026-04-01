@@ -348,7 +348,13 @@ const LiteratureViewer: React.FC<LiteratureViewerProps> = ({
         fetch(`${AI_URL}/rl/predict`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ state_vector: stateVector, content_type: contentTypeVal }),
+            body: JSON.stringify({
+                state_vector: stateVector,
+                content_type: contentTypeVal,
+                student_id: studentId,
+                book_id: bookId,
+                section_id: activeScene?.id ?? "unknown"
+            }),
         })
             .then(r => r.json())
             .then(data => {

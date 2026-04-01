@@ -665,11 +665,29 @@
   border: 1.5px solid hsl(var(--border));
   border-radius: 1.25rem;
   box-shadow: 0 12px 48px hsl(var(--foreground) / 0.15);
-  padding: 1rem;
+  padding: 1.25rem 1rem 1rem;
   animation: fadeSlideIn 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Use internal scroll container instead */
+}
+
+.highlight-popup__scroll-container {
+  flex: 1;
   overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 0.25rem;
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--primary) / 0.2) transparent;
+}
+
+.highlight-popup__scroll-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.highlight-popup__scroll-container::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.2);
+  border-radius: 999px;
 }
 
 .highlight-popup__close {

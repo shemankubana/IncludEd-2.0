@@ -268,23 +268,33 @@ class SimplificationService:
         speaker_ctx = f' spoken by the character "{speaker}"' if speaker else ""
         book_ctx = f' from "{book_title}" by {author}' if book_title else ""
 
-        system_instruction = f"You are an expert pedagogical AI specializing in simplifying literature for {level_desc}. You focus on clarity, cultural relevance (Rwanda), and preserving the author's emotional resonance. You provide extremely simple, visual explanations for difficult words, often using metaphors a child can understand."
+        # Determine prompt format based on input length
+        word_count = len(text.split())
+        is_single_word = word_count <= 3
+
+        system_instruction = (
+            f"You are an expert pedagogical AI specializing in simplifying literature for {level_desc}. "
+            f"You focus on clarity, cultural relevance (Rwanda), and preserving the author's emotional resonance. "
+            f"CRITICAL: Your 'simple_version' must focus EXCLUSIVELY on the highlighted text provided. "
+            f"Do not summarize the whole chapter or provide irrelevant context unless it's necessary to explain the highlight."
+        )
 
         if language == "fr":
+            simple_req = "D\u00e9finition concise (max 12 mots)" if is_single_word else "Version simplifi\u00e9e (1-2 phrases)"
             prompt = f"""Analyse ce passage{book_ctx}{speaker_ctx}:
 
 "{text}"
 
-Contexte du chapitre: {chapter_context[:500] if chapter_context else 'Non fourni'}
+Contexte du chapitre (pour r\u00e9f\u00e9rence uniquement): {chapter_context[:500] if chapter_context else 'Non fourni'}
 
-Réponds en JSON avec exactement ces clés:
+R\u00e9ponds en JSON avec exactement ces cl\u00e9s:
 {{
-  "simple_version": "Version simplifiée (2-3 phrases)",
-  "author_intent": "Pourquoi l'auteur a écrit cela ainsi",
+  "simple_version": "{simple_req}",
+  "author_intent": "Pourquoi l'auteur a \u00e9crit cela ainsi",
   "cultural_context": "Contexte culturel si pertinent, sinon null",
-  "kinyarwanda_bridge": "Analogie culturelle rwandaise — compare avec un concept rwandais (imigabane, umuganda, icyubahiro, etc.)",
+  "kinyarwanda_bridge": "Analogie culturelle rwandaise \u2014 compare avec un concept rwandais (imigabane, umuganda, icyubahiro, etc.)",
   "vocabulary": [
-    {{"word": "string", "meaning": "définition simple pour un enfant", "analogy": "comparaison simple", "category": "ex: Archaïque, Vocabulaire, Métaphore"}}
+    {{"word": "string", "meaning": "d\u00e9finition simple pour un enfant", "analogy": "comparaison simple", "category": "ex: Archa\u00efque, Vocabulaire, M\u00e9taphore"}}
   ],
   "phonics_guide": {{
     "syllables": ["syl", "la", "be"],
@@ -292,18 +302,19 @@ Réponds en JSON avec exactement ces clés:
   }}
 }} (phonics_guide uniquement pour un seul mot, sinon null)"""
         else:
+            simple_req = "Concise definition (max 10 words)" if is_single_word else "Simplified version (1-2 sentences)"
             prompt = f"""Analyze this passage{book_ctx}{speaker_ctx}:
 
 "{text}"
 
-Chapter context: {chapter_context[:500] if chapter_context else 'Not provided'}
+Chapter context (for reference only): {chapter_context[:500] if chapter_context else 'Not provided'}
 
 Respond in JSON with exactly these keys:
 {{
-  "simple_version": "Simplified version (2-3 sentences)",
+  "simple_version": "{simple_req}",
   "author_intent": "Why the author wrote it this way",
   "cultural_context": "Cultural context if relevant, otherwise null",
-  "kinyarwanda_bridge": "Rwanda cultural connection — compare to umuganda, gacaca, icyubahiro, or another Rwandan concept",
+  "kinyarwanda_bridge": "Rwanda cultural connection \u2014 compare to umuganda, gacaca, icyubahiro, or another Rwandan concept",
   "vocabulary": [
     {{"word": "string", "meaning": "simple child-friendly definition", "analogy": "simple comparison for a 10-year-old", "category": "e.g. Archaic, Vocabulary, Idiom"}}
   ],

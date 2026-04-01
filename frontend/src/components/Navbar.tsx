@@ -13,7 +13,7 @@ const Navbar = () => {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/70 backdrop-blur-xl border-b border-border">
       <div className="container mx-auto px-6 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center">
-          <img src="/logo.png" alt="IncludEd Logo" className="w-1/5 h-1/5 max-w-[120px]" />
+          <img src="/logo.png" alt="IncludEd Logo" className="h-9 w-auto md:h-11 transition-all" />
         </Link>
 
         <div className="hidden md:flex items-center gap-8">
