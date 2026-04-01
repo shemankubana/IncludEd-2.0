@@ -13,7 +13,7 @@ const Navbar = () => {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/70 backdrop-blur-xl border-b border-border shadow-sm">
       <div className="container mx-auto px-6 h-24 flex items-center justify-between">
         <Link to="/" className="flex items-center">
-          <img src="/logo.png" alt="IncludEd Logo" className="h-[70px] w-auto transition-all hover:scale-105" />
+          <img src="/logo.png" alt="IncludEd Logo" className="h-[130px] w-auto transition-all hover:scale-105" />
         </Link>
 
         <div className="hidden md:flex items-center gap-8">
@@ -21,8 +21,8 @@ const Navbar = () => {
           <a href="#demo" className="text-sm text-muted-foreground hover:text-foreground transition-colors">{t("landing.navbar.demo")}</a>
           <a href="#compare" className="text-sm text-muted-foreground hover:text-foreground transition-colors">{t("landing.navbar.compare")}</a>
           <div className="flex items-center gap-3">
-             <LanguageSelector />
-             <ThemeToggle />
+            <LanguageSelector />
+            <ThemeToggle />
           </div>
           <Link to="/auth">
             <Button size="sm" className="rounded-lg font-semibold">{t("landing.navbar.get_started")}</Button>
