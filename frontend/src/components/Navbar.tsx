@@ -10,8 +10,8 @@ const Navbar = () => {
   const { t } = useTranslation();
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-background/70 backdrop-blur-xl border-b border-border shadow-sm">
-      <div className="container mx-auto px-6 h-24 flex items-center justify-between">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border shadow-md">
+      <div className="container mx-auto px-6 h-40 flex items-center justify-between">
         <Link to="/" className="flex items-center">
           <img src="/logo.png" alt="IncludEd Logo" className="h-[130px] w-auto transition-all hover:scale-105" />
         </Link>

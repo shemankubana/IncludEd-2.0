@@ -19,7 +19,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, getFileUrl } from "@/lib/api";
 import { LanguageSelector, useTranslation } from "@/i18n";
 
 interface NavItem {
@@ -79,7 +79,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role }) => 
                             {profile?.school?.logoUrl ? (
                                 <div className="w-20 h-20 rounded-2xl bg-white border border-border shadow-sm flex items-center justify-center overflow-hidden">
                                     <img
-                                        src={`${API_BASE}${profile.school.logoUrl}`}
+                                        src={getFileUrl(profile.school.logoUrl)}
                                         alt={profile.school.name}
                                         className="w-full h-full object-cover"
                                     />

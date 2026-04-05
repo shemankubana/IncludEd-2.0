@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, getFileUrl } from "@/lib/api";
 import { motion } from "framer-motion";
 import AnalyticsCharts from "@/components/teacher/AnalyticsCharts";
 
@@ -839,7 +839,7 @@ const TeacherDashboard = () => {
                                         <div className="h-32 bg-secondary/50 relative overflow-hidden">
                                             {item.imageUrl && (
                                                 <img
-                                                    src={`${API_BASE}${item.imageUrl}`}
+                                                    src={getFileUrl(item.imageUrl)}
                                                     className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all"
                                                     alt={item.title}
                                                 />

@@ -22,7 +22,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, getFileUrl } from "@/lib/api";
 
 const subjectColors: Record<string, string> = {
     Literature: "bg-violet-500/10 text-violet-600 border-violet-200 dark:border-violet-800",
@@ -276,7 +276,7 @@ const MyContent = () => {
                                         <div className="relative h-40 bg-gradient-to-br from-secondary/80 to-secondary/30 overflow-hidden">
                                             {item.imageUrl ? (
                                                 <img
-                                                    src={`${API}${item.imageUrl}`}
+                                                    src={getFileUrl(item.imageUrl)}
                                                     alt={item.title}
                                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                                 />

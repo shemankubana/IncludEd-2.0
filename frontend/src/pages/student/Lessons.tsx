@@ -8,7 +8,7 @@ import { Search, Filter, BookOpen, Clock, Star, Loader2, ArrowRight, CheckCircle
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, getFileUrl } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/i18n";
 import { useContentNavigation } from "@/hooks/useContentNavigation";
@@ -114,7 +114,7 @@ const LessonLibrary = () => {
                             difficulty: item.difficulty || "beginner",
                             rating: item.averageRating || 0,
                             ratingCount: item.ratingCount || 0,
-                            image: item.imageUrl ? `${baseUrl}${item.imageUrl}` : null,
+                            image: item.imageUrl ? getFileUrl(item.imageUrl) : null,
                             xp: 500,
                             totalSections: item.sections?.length || 1,
                             language: item.language || "english", // 'english' | 'french'
